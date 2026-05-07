@@ -1,0 +1,30 @@
+import { Router } from 'express';
+import { adminRouter } from './modules/admin/admin.routes';
+import { assistantRouter } from './modules/assistant/assistant.routes';
+import { authRouter } from './modules/auth/auth.routes';
+import { deliveriesRouter } from './modules/deliveries/deliveries.routes';
+import { dispatchRouter } from './modules/dispatch/dispatch.routes';
+import { geofencesRouter } from './modules/geofences/geofences.routes';
+import { mediaRouter } from './modules/media/media.routes';
+import { notificationsRouter } from './modules/notifications/notifications.routes';
+import { paymentsRouter } from './modules/payments/payments.routes';
+import { ridersRouter } from './modules/riders/riders.routes';
+import { supportRouter } from './modules/support/support.routes';
+import { trackingRouter } from './modules/tracking/tracking.routes';
+import { usersRouter } from './modules/users/users.routes';
+
+export const apiRouter = Router();
+
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/users', usersRouter);
+apiRouter.use('/riders', ridersRouter);
+apiRouter.use('/deliveries', deliveriesRouter);
+apiRouter.use('/dispatch', dispatchRouter);
+apiRouter.use('/tracking', trackingRouter);
+apiRouter.use('/payments', paymentsRouter);
+apiRouter.use('/notifications', notificationsRouter);
+apiRouter.use('/support', supportRouter);
+apiRouter.use('/geofences', geofencesRouter);
+apiRouter.use('/assistant', assistantRouter);
+apiRouter.use('/media', mediaRouter);
+apiRouter.use('/admin', adminRouter);

@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Benbax",
+    "slug": "benbax-customer",
+    "scheme": "benbax",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.benbax.customer",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Benbax uses your location to set pickup points and track deliveries."
+      }
+    },
+    "android": {
+      "package": "com.benbax.customer",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "POST_NOTIFICATIONS"],
+      "adaptiveIcon": {
+        "backgroundColor": "#0E7C66"
+      }
+    },
+    "plugins": [
+      "expo-location",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
+    ],
+    "extra": {
+      "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",
+      "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
+    }
+  }
+}

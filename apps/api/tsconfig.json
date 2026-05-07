@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist",
+    "rootDir": ".",
+    "types": ["node", "express"],
+    "noEmit": false
+  },
+  "include": ["src/**/*.ts", "prisma/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

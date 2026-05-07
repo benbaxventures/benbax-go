@@ -1,0 +1,29 @@
+{
+  "name": "benbax-go",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Benbax delivery, logistics, rider dispatch, and admin operations platform.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:customer\" \"npm run dev:admin\"",
+    "dev:api": "npm run dev --workspace apps/api",
+    "dev:customer": "npm run start --workspace apps/mobile-customer",
+    "dev:rider": "npm run start --workspace apps/mobile-rider",
+    "dev:admin": "npm run dev --workspace apps/admin",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run db:migrate --workspace apps/api",
+    "db:studio": "npm run db:studio --workspace apps/api"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.8.3"
+  }
+}
