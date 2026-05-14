@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "227842274371",
+    "project_id": "benbax-go",
+    "storage_bucket": "benbax-go.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:227842274371:android:24ca21e0f2c4abd42b90f6",
+        "android_client_info": {
+          "package_name": "com.benbax.customer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "227842274371-n0cvmj1u88nrp82kbfhsoqaf3qmgsbv4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.benbax.customer",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBtqOZr9EptptoFif0PSd7Mdb8RAkR09Lc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

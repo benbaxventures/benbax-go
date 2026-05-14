@@ -358,6 +358,50 @@ th {
   font-weight: 900;
 }
 
+.ops-map {
+  position: relative;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(14, 124, 102, 0.08) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(14, 124, 102, 0.08) 1px, transparent 1px),
+    #fff;
+  background-size: 36px 36px;
+}
+
+.ops-map .muted {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+.map-pin {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.18);
+}
+
+.map-pin.pickup {
+  background: #2563eb;
+}
+
+.map-pin.dropoff {
+  background: #d92d20;
+}
+
+.map-pin.rider {
+  width: 18px;
+  height: 18px;
+  background: #0e7c66;
+}
+
 @media (max-width: 960px) {
   .shell {
     grid-template-columns: 1fr;

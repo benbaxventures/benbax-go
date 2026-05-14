@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { Prisma, UserRole } from '@prisma/client';
-import { realtimeEvents } from '@benbax/shared';
 import { prisma } from '../../config/prisma';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
+import { realtimeEvents } from '../../realtime/events';
+import { evaluateTrackingSafety } from './routeSafety';
 import { z } from 'zod';
 
 export const trackingRouter = Router();
@@ -32,17 +33,26 @@ trackingRouter.post(
   asyncHandler(async (req, res) => {
     const rider = await prisma.riderProfile.findUnique({ where: { userId: req.user!.id } });
     if (!rider) throw notFound('Rider profile not found');
+    const deliveryId = req.params.deliveryId;
+    if (!deliveryId) throw notFound('Delivery not found');
+    const delivery = await prisma.delivery.findFirst({
+      where: {
+        id: deliveryId,
+        assignments: { some: { riderProfileId: rider.id } }
+      }
+    });
+    if (!delivery) throw notFound('Delivery not found');
 
     const point = await prisma.deliveryTrackingPoint.create({
       data: {
-        deliveryId: req.params.deliveryId,
+        deliveryId,
         riderProfileId: rider.id,
         latitude: new Prisma.Decimal(req.body.latitude),
         longitude: new Prisma.Decimal(req.body.longitude),
-        heading: req.body.heading ? new Prisma.Decimal(req.body.heading) : undefined,
-        speedKph: req.body.speedKph ? new Prisma.Decimal(req.body.speedKph) : undefined,
-        batteryLevel: req.body.batteryLevel,
-        source: req.body.source
+        ...(typeof req.body.heading === 'number' ? { heading: new Prisma.Decimal(req.body.heading) } : {}),
+        ...(typeof req.body.speedKph === 'number' ? { speedKph: new Prisma.Decimal(req.body.speedKph) } : {}),
+        ...(typeof req.body.batteryLevel === 'number' ? { batteryLevel: req.body.batteryLevel } : {}),
+        source: req.body.source ?? 'GPS'
       }
     });
 
@@ -55,7 +65,14 @@ trackingRouter.post(
       }
     });
 
-    req.app.get('io')?.to(`delivery:${req.params.deliveryId}`).emit(realtimeEvents.trackingPoint, point);
+    req.app.get('io')?.to(`delivery:${deliveryId}`).emit(realtimeEvents.trackingPoint, point);
+    req.app.get('io')?.to('admins').emit(realtimeEvents.trackingPoint, { ...point, deliveryId });
+    await evaluateTrackingSafety({
+      delivery,
+      rider,
+      point,
+      io: req.app.get('io')
+    });
     return ok(res, point);
   })
 );
@@ -63,8 +80,11 @@ trackingRouter.post(
 trackingRouter.get(
   '/deliveries/:deliveryId/points',
   asyncHandler(async (req, res) => {
+    const deliveryId = req.params.deliveryId;
+    if (!deliveryId) throw notFound('Delivery not found');
+
     const points = await prisma.deliveryTrackingPoint.findMany({
-      where: { deliveryId: req.params.deliveryId },
+      where: { deliveryId },
       orderBy: { capturedAt: 'desc' },
       take: 100
     });

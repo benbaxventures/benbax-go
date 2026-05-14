@@ -43,4 +43,4 @@ Password: BenbaxDemo123!
 
 ## Notes
 
-Expo SDK 55 is used for the mobile apps. It targets React Native 0.83 and React 19.2 according to the current Expo SDK reference.
+Expo SDK 55 is used for the mobile apps. It targets React Native 0.83 and React 19.2 according to the current Expo SDK reference, with SDK 55 bundled versions for maps, location, status bar, screens, gesture handler, and Reanimated.

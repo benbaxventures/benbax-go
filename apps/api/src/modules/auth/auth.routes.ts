@@ -26,6 +26,16 @@ const loginSchema = z.object({
   })
 });
 
+const googleLoginSchema = z.object({
+  body: z.object({
+    accessToken: z.string().optional(),
+    idToken: z.string().optional(),
+    role: z.nativeEnum(UserRole).optional()
+  }).refine((body) => body.accessToken || body.idToken, {
+    message: 'Google access token or ID token is required'
+  })
+});
+
 authRouter.post(
   '/register',
   validate(registerSchema),
@@ -36,6 +46,18 @@ authRouter.post(
   '/login',
   validate(loginSchema),
   asyncHandler(async (req, res) => ok(res, await service.login(req.body.phone, req.body.password)))
+);
+
+authRouter.post(
+  '/google',
+  validate(googleLoginSchema),
+  asyncHandler(async (req, res) =>
+    ok(res, await service.googleLogin({
+      accessToken: req.body.accessToken,
+      idToken: req.body.idToken,
+      role: req.body.role
+    }))
+  )
 );
 
 authRouter.get(

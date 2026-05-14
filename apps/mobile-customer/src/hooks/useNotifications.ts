@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import messaging from '@react-native-firebase/messaging';
 import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { apiRequest } from '../services/api';
 
 export function useNotifications(enabled: boolean) {
@@ -10,17 +10,17 @@ export function useNotifications(enabled: boolean) {
     let mounted = true;
 
     async function registerToken() {
-      const permission = await messaging().requestPermission();
-      const allowed =
-        permission === messaging.AuthorizationStatus.AUTHORIZED ||
-        permission === messaging.AuthorizationStatus.PROVISIONAL;
+      const permission = await Notifications.requestPermissionsAsync();
+      if (!permission.granted || !mounted) return;
 
-      if (!allowed || !mounted) return;
+      const token = await Notifications.getExpoPushTokenAsync();
 
-      const token = await messaging().getToken();
       await apiRequest('/notifications/device-tokens', {
         method: 'POST',
-        body: JSON.stringify({ token, platform: Platform.OS })
+        body: JSON.stringify({
+          token: token.data,
+          platform: Platform.OS
+        })
       });
     }
 

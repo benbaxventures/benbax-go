@@ -27,9 +27,11 @@ assistantRouter.post(
       OPTIMIZE_DELIVERY: 'Batch nearby stops, avoid peak traffic corridors, and prefer riders with fresh GPS signals.'
     };
 
+    const intent = req.body.intent as keyof typeof messageByIntent;
+
     return ok(res, {
       intent: req.body.intent,
-      suggestion: messageByIntent[req.body.intent],
+      suggestion: messageByIntent[intent],
       confidence: 0.82
     });
   })

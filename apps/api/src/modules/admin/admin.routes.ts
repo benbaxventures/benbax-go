@@ -44,6 +44,14 @@ adminRouter.get(
           orderBy: { offeredAt: 'desc' },
           take: 1
         },
+        trackingPoints: {
+          orderBy: { capturedAt: 'desc' },
+          take: 1
+        },
+        suspiciousEvents: {
+          orderBy: { createdAt: 'desc' },
+          take: 5
+        },
         payment: true
       }
     });

@@ -74,12 +74,12 @@ deliveriesRouter.get(
 
 deliveriesRouter.get(
   '/:id',
-  asyncHandler(async (req, res) => ok(res, await service.getDelivery(req.params.id, req.user!.id)))
+  asyncHandler(async (req, res) => ok(res, await service.getDelivery(req.params.id!, req.user!.id)))
 );
 
 deliveriesRouter.patch(
   '/:id/status',
   requireRoles(UserRole.RIDER, UserRole.ADMIN, UserRole.OPERATIONS),
   validate(statusSchema),
-  asyncHandler(async (req, res) => ok(res, await service.updateDeliveryStatus(req.params.id, req.body.status)))
+  asyncHandler(async (req, res) => ok(res, await service.updateDeliveryStatus(req.params.id!, req.body.status)))
 );

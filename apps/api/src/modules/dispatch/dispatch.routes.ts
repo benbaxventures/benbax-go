@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { Prisma, UserRole } from '@prisma/client';
-import { realtimeEvents } from '@benbax/shared';
 import { prisma } from '../../config/prisma';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { badRequest, notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
+import { realtimeEvents } from '../../realtime/events';
 import { rankRiders } from './dispatch.engine';
 
 export const dispatchRouter = Router();
@@ -16,7 +16,10 @@ dispatchRouter.post(
   '/deliveries/:id/assign',
   requireRoles(UserRole.ADMIN, UserRole.OPERATIONS),
   asyncHandler(async (req, res) => {
-    const delivery = await prisma.delivery.findUnique({ where: { id: req.params.id } });
+    const deliveryId = req.params.id;
+    if (!deliveryId) throw badRequest('Delivery id is required');
+
+    const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId } });
     if (!delivery) throw notFound('Delivery not found');
 
     const riders = await prisma.riderProfile.findMany({
@@ -82,9 +85,11 @@ dispatchRouter.post(
   asyncHandler(async (req, res) => {
     const rider = await prisma.riderProfile.findUnique({ where: { userId: req.user!.id } });
     if (!rider) throw notFound('Rider profile not found');
+    const assignmentId = req.params.id;
+    if (!assignmentId) throw badRequest('Assignment id is required');
 
     const assignment = await prisma.deliveryAssignment.update({
-      where: { id: req.params.id },
+      where: { id: assignmentId },
       data: {
         status: 'ACCEPTED',
         respondedAt: new Date(),
@@ -103,8 +108,11 @@ dispatchRouter.post(
   '/assignments/:id/reject',
   requireRoles(UserRole.RIDER),
   asyncHandler(async (req, res) => {
+    const assignmentId = req.params.id;
+    if (!assignmentId) throw badRequest('Assignment id is required');
+
     const assignment = await prisma.deliveryAssignment.update({
-      where: { id: req.params.id },
+      where: { id: assignmentId },
       data: { status: 'REJECTED', respondedAt: new Date() }
     });
     return ok(res, assignment);

@@ -6,6 +6,7 @@ type User = {
   id: string;
   name: string;
   phone: string;
+  email?: string | null;
   role: string;
 };
 
@@ -13,6 +14,7 @@ type AuthState = {
   user: User | null;
   isHydrating: boolean;
   login: (phone: string, password: string) => Promise<void>;
+  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string }) => Promise<void>;
   register: (input: { name: string; phone: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
@@ -27,6 +29,22 @@ export const useAuthStore = create<AuthState>((set) => ({
       {
         method: 'POST',
         body: JSON.stringify({ phone, password }),
+        skipAuth: true
+      }
+    );
+    await AsyncStorage.multiSet([
+      ['benbax.accessToken', data.tokens.accessToken],
+      ['benbax.refreshToken', data.tokens.refreshToken],
+      ['benbax.user', JSON.stringify(data.user)]
+    ]);
+    set({ user: data.user });
+  },
+  async loginWithGoogle(tokens) {
+    const data = await apiRequest<{ user: User; tokens: { accessToken: string; refreshToken: string } }>(
+      '/auth/google',
+      {
+        method: 'POST',
+        body: JSON.stringify({ ...tokens, role: 'CUSTOMER' }),
         skipAuth: true
       }
     );

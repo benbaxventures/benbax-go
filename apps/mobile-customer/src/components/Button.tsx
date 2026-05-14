@@ -7,18 +7,20 @@ type Props = {
   onPress: () => void;
   icon?: ReactNode;
   loading?: boolean;
+  disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'quiet';
 };
 
-export function Button({ label, onPress, icon, loading, variant = 'primary' }: Props) {
+export function Button({ label, onPress, icon, loading, disabled, variant = 'primary' }: Props) {
   const isPrimary = variant === 'primary';
   const backgroundColor = isPrimary ? theme.colors.primary : variant === 'secondary' ? theme.colors.surface : 'transparent';
+  const isDisabled = loading || disabled;
 
   return (
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      disabled={loading}
+      disabled={isDisabled}
       style={{
         minHeight: 52,
         borderRadius: theme.radius.md,
@@ -29,7 +31,7 @@ export function Button({ label, onPress, icon, loading, variant = 'primary' }: P
         justifyContent: 'center',
         flexDirection: 'row',
         gap: 8,
-        opacity: loading ? 0.72 : 1
+        opacity: isDisabled ? 0.72 : 1
       }}
     >
       {loading ? <ActivityIndicator color={isPrimary ? '#fff' : theme.colors.primary} /> : icon}

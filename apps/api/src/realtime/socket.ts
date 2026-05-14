@@ -1,7 +1,7 @@
 import type { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
-import { realtimeEvents } from '@benbax/shared';
 import { env } from '../config/env';
+import { realtimeEvents } from './events';
 
 type SocketAuth = {
   sub: string;

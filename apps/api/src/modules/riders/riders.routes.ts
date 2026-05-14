@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { Prisma, UserRole } from '@prisma/client';
 import { z } from 'zod';
-import { realtimeEvents } from '@benbax/shared';
 import { prisma } from '../../config/prisma';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
+import { realtimeEvents } from '../../realtime/events';
 
 export const ridersRouter = Router();
 
@@ -48,14 +48,21 @@ ridersRouter.patch(
   requireRoles(UserRole.RIDER),
   validate(availabilitySchema),
   asyncHandler(async (req, res) => {
+    const locationUpdate =
+      typeof req.body.latitude === 'number' && typeof req.body.longitude === 'number'
+        ? {
+            currentLatitude: new Prisma.Decimal(req.body.latitude),
+            currentLongitude: new Prisma.Decimal(req.body.longitude),
+            lastLocationAt: new Date()
+          }
+        : {};
+
     const rider = await prisma.riderProfile.update({
       where: { userId: req.user!.id },
       data: {
         isOnline: req.body.isOnline,
         status: req.body.isOnline ? 'ACTIVE' : 'OFFLINE',
-        currentLatitude: req.body.latitude ? new Prisma.Decimal(req.body.latitude) : undefined,
-        currentLongitude: req.body.longitude ? new Prisma.Decimal(req.body.longitude) : undefined,
-        lastLocationAt: req.body.latitude && req.body.longitude ? new Date() : undefined
+        ...locationUpdate
       }
     });
 
@@ -69,6 +76,23 @@ ridersRouter.post(
   requireRoles(UserRole.RIDER),
   validate(kycSchema),
   asyncHandler(async (req, res) => {
+    const vehicleUpdate = req.body.vehicleType
+      ? {
+          vehicle: {
+            upsert: {
+              create: {
+                type: req.body.vehicleType,
+                plateNumber: req.body.plateNumber ?? null
+              },
+              update: {
+                type: req.body.vehicleType,
+                plateNumber: req.body.plateNumber ?? null
+              }
+            }
+          }
+        }
+      : {};
+
     const rider = await prisma.riderProfile.update({
       where: { userId: req.user!.id },
       data: {
@@ -79,20 +103,7 @@ ridersRouter.post(
             fileUrl: req.body.fileUrl
           }
         },
-        vehicle: req.body.vehicleType
-          ? {
-              upsert: {
-                create: {
-                  type: req.body.vehicleType,
-                  plateNumber: req.body.plateNumber
-                },
-                update: {
-                  type: req.body.vehicleType,
-                  plateNumber: req.body.plateNumber
-                }
-              }
-            }
-          : undefined
+        ...vehicleUpdate
       },
       include: { kycDocuments: true, vehicle: true }
     });

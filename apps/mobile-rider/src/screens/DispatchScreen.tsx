@@ -17,11 +17,13 @@ export function DispatchScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let cleanup = () => undefined;
+    let cleanup: () => void = () => undefined;
 
     createRealtimeClient().then((socket) => {
       socket.on(realtimeEvents.riderOffer, (offer) => setCurrentOffer(offer));
-      cleanup = () => socket.disconnect();
+      cleanup = () => {
+        socket.disconnect();
+      };
     });
 
     return () => cleanup();

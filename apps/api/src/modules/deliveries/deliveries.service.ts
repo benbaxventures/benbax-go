@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { notFound } from '../../utils/http';
 import { estimateDelivery } from '../dispatch/dispatch.engine';
+import { buildExpectedRoute } from '../tracking/routeSafety';
 
 type CoordinateInput = {
   label: string;
@@ -38,6 +39,10 @@ export async function quoteDelivery(input: Pick<CreateDeliveryInput, 'category' 
 
 export async function createDelivery(input: CreateDeliveryInput) {
   const quote = await quoteDelivery(input);
+  const expectedRoute = await buildExpectedRoute(
+    { latitude: input.pickup.latitude, longitude: input.pickup.longitude },
+    { latitude: input.dropoff.latitude, longitude: input.dropoff.longitude }
+  );
 
   return prisma.delivery.create({
     data: {
@@ -46,38 +51,41 @@ export async function createDelivery(input: CreateDeliveryInput) {
       category: input.category,
       status: DeliveryStatus.REQUESTED,
       pickupLabel: input.pickup.label,
-      pickupAddress: input.pickup.address,
+      pickupAddress: input.pickup.address ?? null,
       pickupLatitude: new Prisma.Decimal(input.pickup.latitude),
       pickupLongitude: new Prisma.Decimal(input.pickup.longitude),
-      pickupLandmark: input.pickup.landmark,
-      pickupVoiceNoteUrl: input.pickup.voiceNoteUrl,
-      pickupWhatsappUrl: input.pickup.whatsappLocationUrl,
+      pickupLandmark: input.pickup.landmark ?? null,
+      pickupVoiceNoteUrl: input.pickup.voiceNoteUrl ?? null,
+      pickupWhatsappUrl: input.pickup.whatsappLocationUrl ?? null,
       dropoffLabel: input.dropoff.label,
-      dropoffAddress: input.dropoff.address,
+      dropoffAddress: input.dropoff.address ?? null,
       dropoffLatitude: new Prisma.Decimal(input.dropoff.latitude),
       dropoffLongitude: new Prisma.Decimal(input.dropoff.longitude),
-      dropoffLandmark: input.dropoff.landmark,
-      dropoffVoiceNoteUrl: input.dropoff.voiceNoteUrl,
-      dropoffWhatsappUrl: input.dropoff.whatsappLocationUrl,
-      recipientName: input.recipientName ?? input.dropoff.contactName,
-      recipientPhone: input.recipientPhone ?? input.dropoff.contactPhone,
-      scheduledFor: input.scheduledFor ? new Date(input.scheduledFor) : undefined,
+      dropoffLandmark: input.dropoff.landmark ?? null,
+      dropoffVoiceNoteUrl: input.dropoff.voiceNoteUrl ?? null,
+      dropoffWhatsappUrl: input.dropoff.whatsappLocationUrl ?? null,
+      recipientName: input.recipientName ?? input.dropoff.contactName ?? null,
+      recipientPhone: input.recipientPhone ?? input.dropoff.contactPhone ?? null,
+      ...(input.scheduledFor ? { scheduledFor: new Date(input.scheduledFor) } : {}),
       distanceKm: quote.distanceKm,
       etaMinutes: quote.estimatedMinutes,
       baseFare: quote.baseFare,
       serviceFee: quote.serviceFee,
       surgeMultiplier: quote.surgeMultiplier,
       totalFare: quote.total,
-      notes: input.notes,
-      payment: input.paymentMethod
+      notes: input.notes ?? null,
+      metadata: { expectedRoute },
+      ...(input.paymentMethod
         ? {
-            create: {
-              method: input.paymentMethod,
-              amount: quote.total,
-              currency: 'GHS'
+            payment: {
+              create: {
+                method: input.paymentMethod,
+                amount: quote.total,
+                currency: 'GHS'
+              }
             }
           }
-        : undefined,
+        : {}),
       chatThread: { create: {} }
     },
     include: {

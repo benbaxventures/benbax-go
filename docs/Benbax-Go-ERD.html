@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Benbax Go ERD</title>
+    <style>
+      @page {
+        size: A4 landscape;
+        margin: 10mm;
+      }
+
+      :root {
+        --ink: #111827;
+        --muted: #5b6472;
+        --canvas: #f7f8fa;
+        --surface: #ffffff;
+        --primary: #0e7c66;
+        --primary-dark: #075e4d;
+        --accent: #ffb020;
+        --blue: #2563eb;
+        --red: #d92d20;
+        --border: #d8dee8;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        font-size: 12px;
+      }
+
+      .page {
+        min-height: 190mm;
+        display: grid;
+        gap: 14px;
+        padding: 0;
+        page-break-after: always;
+      }
+
+      .page:last-child {
+        page-break-after: auto;
+      }
+
+      .header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 16px 18px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 28px;
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        font-size: 18px;
+      }
+
+      h3 {
+        font-size: 13px;
+      }
+
+      .subtitle {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 13px;
+        max-width: 720px;
+      }
+
+      .meta {
+        display: grid;
+        gap: 6px;
+        min-width: 220px;
+        color: var(--muted);
+        text-align: right;
+      }
+
+      .meta strong {
+        color: var(--ink);
+      }
+
+      .diagram-wrap,
+      .panel {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+
+      .diagram-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .swatch {
+        width: 14px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--primary);
+      }
+
+      .swatch.blue {
+        background: var(--blue);
+      }
+
+      .swatch.gold {
+        background: var(--accent);
+      }
+
+      .swatch.red {
+        background: var(--red);
+      }
+
+      svg {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .entity {
+        filter: drop-shadow(0 6px 10px rgba(17, 24, 39, 0.08));
+      }
+
+      .entity rect.box {
+        fill: #ffffff;
+        stroke: #c8d0dc;
+        stroke-width: 1.2;
+      }
+
+      .entity rect.head {
+        fill: var(--primary);
+      }
+
+      .entity.rider rect.head {
+        fill: var(--blue);
+      }
+
+      .entity.money rect.head {
+        fill: var(--accent);
+      }
+
+      .entity.risk rect.head {
+        fill: var(--red);
+      }
+
+      .entity.admin rect.head {
+        fill: #4b5563;
+      }
+
+      .entity text.title {
+        fill: #ffffff;
+        font-size: 14px;
+        font-weight: 800;
+      }
+
+      .entity text.field {
+        fill: var(--ink);
+        font-size: 11px;
+      }
+
+      .entity text.key {
+        fill: var(--primary-dark);
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .relationship {
+        fill: none;
+        stroke: #6b7280;
+        stroke-width: 1.4;
+      }
+
+      .relationship.primary {
+        stroke: var(--primary);
+        stroke-width: 2;
+      }
+
+      .relationship.blue {
+        stroke: var(--blue);
+      }
+
+      .relationship.gold {
+        stroke: #c77800;
+      }
+
+      .relationship.red {
+        stroke: var(--red);
+      }
+
+      .rel-label {
+        fill: #374151;
+        font-size: 10px;
+        font-weight: 800;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+
+      .card {
+        min-height: 118px;
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+      }
+
+      .card h3 {
+        margin-bottom: 6px;
+      }
+
+      .card p {
+        color: var(--muted);
+        line-height: 1.45;
+      }
+
+      .matrix {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .matrix th,
+      .matrix td {
+        padding: 8px 9px;
+        border-bottom: 1px solid #eef2f6;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .matrix th {
+        color: var(--muted);
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+
+      .matrix td {
+        color: var(--ink);
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #e8f5f1;
+        color: var(--primary-dark);
+        font-weight: 800;
+        font-size: 10px;
+      }
+
+      .footer-note {
+        padding: 10px 14px;
+        color: var(--muted);
+        border-top: 1px solid var(--border);
+      }
+    </style>
+  </head>
+  <body>
+    <section class="page">
+      <header class="header">
+        <div>
+          <h1>Benbax Go Entity Relationship Diagram</h1>
+          <p class="subtitle">
+            Production database design for customer delivery, rider dispatch, real-time tracking,
+            payments, wallet, support, geofencing, fraud detection, and admin operations.
+          </p>
+        </div>
+        <div class="meta">
+          <span><strong>Source</strong> apps/api/prisma/schema.prisma</span>
+          <span><strong>Database</strong> PostgreSQL via Prisma ORM</span>
+          <span><strong>Prepared</strong> May 7, 2026</span>
+        </div>
+      </header>
+
+      <div class="diagram-wrap">
+        <div class="diagram-title">
+          <h2>Logical ERD</h2>
+          <div class="legend">
+            <span><i class="swatch"></i>Customer/Core</span>
+            <span><i class="swatch blue"></i>Rider/Dispatch</span>
+            <span><i class="swatch gold"></i>Payments</span>
+            <span><i class="swatch red"></i>Risk/Safety</span>
+          </div>
+        </div>
+
+        <svg viewBox="0 0 1500 900" role="img" aria-label="Benbax Go logical ERD">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"></path>
+            </marker>
+            <marker id="arrowPrimary" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#0e7c66"></path>
+            </marker>
+            <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"></path>
+            </marker>
+            <marker id="arrowGold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#c77800"></path>
+            </marker>
+            <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#d92d20"></path>
+            </marker>
+          </defs>
+
+          <path class="relationship primary" marker-end="url(#arrowPrimary)" d="M 705 180 C 690 235, 655 260, 650 300"></path>
+          <text class="rel-label" x="655" y="245">customer requests 1:N</text>
+
+          <path class="relationship blue" marker-end="url(#arrowBlue)" d="M 860 120 C 935 125, 965 145, 1010 185"></path>
+          <text class="rel-label" x="908" y="132">1:0..1 rider profile</text>
+
+          <path class="relationship gold" marker-end="url(#arrowGold)" d="M 610 180 C 460 245, 300 260, 250 245"></path>
+          <text class="rel-label" x="370" y="235">1:0..1 wallet</text>
+
+          <path class="relationship" marker-end="url(#arrow)" d="M 610 135 C 420 120, 295 105, 250 100"></path>
+          <text class="rel-label" x="365" y="112">1:N refresh tokens</text>
+
+          <path class="relationship" marker-end="url(#arrow)" d="M 610 155 C 430 205, 295 350, 250 395"></path>
+          <text class="rel-label" x="360" y="338">1:N saved places</text>
+
+          <path class="relationship" marker-end="url(#arrow)" d="M 610 175 C 430 265, 310 520, 250 545"></path>
+          <text class="rel-label" x="332" y="502">1:N device tokens</text>
+
+          <path class="relationship blue" marker-end="url(#arrowBlue)" d="M 850 410 C 920 405, 955 430, 1010 445"></path>
+          <text class="rel-label" x="892" y="405">1:N offers</text>
+
+          <path class="relationship blue" marker-end="url(#arrowBlue)" d="M 1160 280 C 1140 330, 1130 360, 1130 390"></path>
+          <text class="rel-label" x="1148" y="338">rider receives</text>
+
+          <path class="relationship blue" marker-end="url(#arrowBlue)" d="M 850 450 C 925 535, 970 600, 1010 620"></path>
+          <text class="rel-label" x="894" y="545">1:N GPS points</text>
+
+          <path class="relationship blue" marker-end="url(#arrowBlue)" d="M 1160 280 C 1215 380, 1160 570, 1155 590"></path>
+          <text class="rel-label" x="1188" y="515">rider streams</text>
+
+          <path class="relationship blue" marker-end="url(#arrowBlue)" d="M 1210 205 C 1245 200, 1260 190, 1280 180"></path>
+          <text class="rel-label" x="1232" y="190">1:0..1</text>
+
+          <path class="relationship blue" marker-end="url(#arrowBlue)" d="M 1210 230 C 1250 265, 1265 300, 1280 340"></path>
+          <text class="rel-label" x="1225" y="295">1:N KYC</text>
+
+          <path class="relationship primary" marker-end="url(#arrowPrimary)" d="M 500 440 C 420 455, 350 475, 290 500"></path>
+          <text class="rel-label" x="350" y="465">1:N stops</text>
+
+          <path class="relationship" marker-end="url(#arrow)" d="M 850 500 C 890 515, 890 545, 850 565"></path>
+          <text class="rel-label" x="865" y="535">1:0..1 chat</text>
+
+          <path class="relationship" marker-end="url(#arrow)" d="M 850 570 C 890 600, 900 645, 850 680"></path>
+          <text class="rel-label" x="870" y="628">1:N messages</text>
+
+          <path class="relationship gold" marker-end="url(#arrowGold)" d="M 650 570 C 640 625, 630 665, 620 690"></path>
+          <text class="rel-label" x="630" y="640">1:0..1 payment</text>
+
+          <path class="relationship gold" marker-end="url(#arrowGold)" d="M 250 245 C 315 645, 420 760, 470 790"></path>
+          <text class="rel-label" x="248" y="680">wallet 1:N txns</text>
+
+          <path class="relationship gold" marker-end="url(#arrowGold)" d="M 720 570 C 740 625, 755 660, 765 690"></path>
+          <text class="rel-label" x="745" y="638">1:0..1 proof</text>
+
+          <path class="relationship red" marker-end="url(#arrowRed)" d="M 500 535 C 345 570, 255 665, 250 730"></path>
+          <text class="rel-label" x="325" y="625">delivery support</text>
+
+          <path class="relationship red" marker-end="url(#arrowRed)" d="M 610 180 C 430 365, 250 640, 250 730"></path>
+          <text class="rel-label" x="282" y="603">requester</text>
+
+          <path class="relationship red" marker-end="url(#arrowRed)" d="M 850 535 C 925 700, 1000 760, 1040 775"></path>
+          <text class="rel-label" x="900" y="730">risk flags</text>
+
+          <path class="relationship red" marker-end="url(#arrowRed)" d="M 1160 280 C 1225 570, 1190 720, 1185 760"></path>
+          <text class="rel-label" x="1215" y="690">rider risk</text>
+
+          <g class="entity" transform="translate(610 60)">
+            <rect class="box" width="250" height="120" rx="8"></rect>
+            <rect class="head" width="250" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">User</text>
+            <text class="key" x="14" y="50">PK id</text>
+            <text class="field" x="14" y="68">role, status, name</text>
+            <text class="field" x="14" y="86">email?, phone unique</text>
+            <text class="field" x="14" y="104">createdAt, updatedAt</text>
+          </g>
+
+          <g class="entity rider" transform="translate(1010 150)">
+            <rect class="box" width="200" height="130" rx="8"></rect>
+            <rect class="head" width="200" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">RiderProfile</text>
+            <text class="key" x="14" y="50">PK id, FK userId unique</text>
+            <text class="field" x="14" y="68">status, kycStatus</text>
+            <text class="field" x="14" y="86">rating, isOnline</text>
+            <text class="field" x="14" y="104">currentLatitude/Longitude</text>
+            <text class="field" x="14" y="122">faceTemplateHash?</text>
+          </g>
+
+          <g class="entity" transform="translate(500 300)">
+            <rect class="box" width="350" height="270" rx="8"></rect>
+            <rect class="head" width="350" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">Delivery</text>
+            <text class="key" x="14" y="52">PK id, trackingCode unique, FK customerId</text>
+            <text class="field" x="14" y="72">category, status, scheduledFor?</text>
+            <text class="field" x="14" y="92">pickup/dropoff labels, addresses, coordinates</text>
+            <text class="field" x="14" y="112">landmarks, voice notes, WhatsApp pins</text>
+            <text class="field" x="14" y="132">recipientName?, recipientPhone?</text>
+            <text class="field" x="14" y="152">distanceKm, etaMinutes</text>
+            <text class="field" x="14" y="172">baseFare, serviceFee, surgeMultiplier, totalFare</text>
+            <text class="field" x="14" y="192">metadata?, notes?</text>
+            <text class="field" x="14" y="214">Indexes: customerId+createdAt, status</text>
+            <text class="field" x="14" y="234">Indexes: pickupLatitude+pickupLongitude</text>
+          </g>
+
+          <g class="entity" transform="translate(50 40)">
+            <rect class="box" width="200" height="100" rx="8"></rect>
+            <rect class="head" width="200" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">RefreshToken</text>
+            <text class="key" x="14" y="52">PK id, FK userId</text>
+            <text class="field" x="14" y="72">tokenHash, expiresAt</text>
+            <text class="field" x="14" y="90">revokedAt?, ipAddress?</text>
+          </g>
+
+          <g class="entity money" transform="translate(50 185)">
+            <rect class="box" width="200" height="120" rx="8"></rect>
+            <rect class="head" width="200" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">Wallet</text>
+            <text class="key" x="14" y="52">PK id, FK userId unique</text>
+            <text class="field" x="14" y="72">balance, currency</text>
+            <text class="field" x="14" y="92">updatedAt</text>
+          </g>
+
+          <g class="entity" transform="translate(50 350)">
+            <rect class="box" width="200" height="120" rx="8"></rect>
+            <rect class="head" width="200" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">SavedLocation</text>
+            <text class="key" x="14" y="52">PK id, FK userId</text>
+            <text class="field" x="14" y="72">label, address?</text>
+            <text class="field" x="14" y="92">lat/lng, landmark?</text>
+            <text class="field" x="14" y="110">voiceNoteUrl?, WhatsApp?</text>
+          </g>
+
+          <g class="entity" transform="translate(50 505)">
+            <rect class="box" width="200" height="115" rx="8"></rect>
+            <rect class="head" width="200" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">DeviceToken / Notification</text>
+            <text class="key" x="14" y="52">FK userId</text>
+            <text class="field" x="14" y="72">FCM token, platform</text>
+            <text class="field" x="14" y="92">title, body, data, readAt?</text>
+          </g>
+
+          <g class="entity" transform="translate(90 705)">
+            <rect class="box" width="220" height="115" rx="8"></rect>
+            <rect class="head" width="220" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">SupportTicket</text>
+            <text class="key" x="14" y="52">PK id, FK requesterId</text>
+            <text class="field" x="14" y="72">FK deliveryId?</text>
+            <text class="field" x="14" y="92">status, priority, subject</text>
+          </g>
+
+          <g class="entity money" transform="translate(470 760)">
+            <rect class="box" width="210" height="110" rx="8"></rect>
+            <rect class="head" width="210" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">WalletTransaction</text>
+            <text class="key" x="14" y="52">PK id, FK walletId</text>
+            <text class="field" x="14" y="72">type, amount, reference?</text>
+            <text class="field" x="14" y="92">metadata?, createdAt</text>
+          </g>
+
+          <g class="entity" transform="translate(90 490)">
+            <rect class="box" width="200" height="95" rx="8" opacity="0"></rect>
+          </g>
+
+          <g class="entity" transform="translate(275 480)">
+            <rect class="box" width="190" height="110" rx="8"></rect>
+            <rect class="head" width="190" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">DeliveryStop</text>
+            <text class="key" x="14" y="52">PK id, FK deliveryId</text>
+            <text class="field" x="14" y="72">sequence, label</text>
+            <text class="field" x="14" y="92">lat/lng, contact?</text>
+          </g>
+
+          <g class="entity money" transform="translate(545 690)">
+            <rect class="box" width="190" height="120" rx="8"></rect>
+            <rect class="head" width="190" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">Payment</text>
+            <text class="key" x="14" y="52">PK id, FK deliveryId unique</text>
+            <text class="field" x="14" y="72">method, status, amount</text>
+            <text class="field" x="14" y="92">providerRef?, mobileNumber?</text>
+          </g>
+
+          <g class="entity money" transform="translate(755 690)">
+            <rect class="box" width="190" height="120" rx="8"></rect>
+            <rect class="head" width="190" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">DeliveryProof</text>
+            <text class="key" x="14" y="52">PK id, FK deliveryId unique</text>
+            <text class="field" x="14" y="72">otpCodeHash?</text>
+            <text class="field" x="14" y="92">photoUrl?, signatureUrl?</text>
+            <text class="field" x="14" y="112">verifiedAt?</text>
+          </g>
+
+          <g class="entity" transform="translate(720 475)">
+            <rect class="box" width="170" height="95" rx="8"></rect>
+            <rect class="head" width="170" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">ChatThread</text>
+            <text class="key" x="14" y="52">PK id</text>
+            <text class="field" x="14" y="72">FK deliveryId unique</text>
+          </g>
+
+          <g class="entity" transform="translate(720 590)">
+            <rect class="box" width="170" height="95" rx="8"></rect>
+            <rect class="head" width="170" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">ChatMessage</text>
+            <text class="key" x="14" y="52">PK id, FK threadId</text>
+            <text class="field" x="14" y="72">FK senderId, body</text>
+          </g>
+
+          <g class="entity rider" transform="translate(1010 410)">
+            <rect class="box" width="230" height="125" rx="8"></rect>
+            <rect class="head" width="230" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">DeliveryAssignment</text>
+            <text class="key" x="14" y="52">PK id, FK deliveryId</text>
+            <text class="field" x="14" y="72">FK riderProfileId</text>
+            <text class="field" x="14" y="92">status, score, expiresAt</text>
+            <text class="field" x="14" y="112">Indexes: delivery/status, rider/status</text>
+          </g>
+
+          <g class="entity rider" transform="translate(1010 590)">
+            <rect class="box" width="230" height="130" rx="8"></rect>
+            <rect class="head" width="230" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">DeliveryTrackingPoint</text>
+            <text class="key" x="14" y="52">PK id, FK deliveryId</text>
+            <text class="field" x="14" y="72">FK riderProfileId</text>
+            <text class="field" x="14" y="92">lat/lng, heading?, speedKph?</text>
+            <text class="field" x="14" y="112">Index: deliveryId+capturedAt</text>
+          </g>
+
+          <g class="entity risk" transform="translate(1040 760)">
+            <rect class="box" width="230" height="110" rx="8"></rect>
+            <rect class="head" width="230" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">SuspiciousActivity</text>
+            <text class="key" x="14" y="52">PK id</text>
+            <text class="field" x="14" y="72">FK riderProfileId?, deliveryId?</text>
+            <text class="field" x="14" y="92">type, severity, details</text>
+          </g>
+
+          <g class="entity rider" transform="translate(1280 135)">
+            <rect class="box" width="170" height="105" rx="8"></rect>
+            <rect class="head" width="170" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">Vehicle</text>
+            <text class="key" x="14" y="52">PK id, FK riderProfileId</text>
+            <text class="field" x="14" y="72">type, plateNumber?</text>
+            <text class="field" x="14" y="92">make?, model?, color?</text>
+          </g>
+
+          <g class="entity rider" transform="translate(1280 310)">
+            <rect class="box" width="170" height="105" rx="8"></rect>
+            <rect class="head" width="170" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">KycDocument</text>
+            <text class="key" x="14" y="52">PK id, FK riderProfileId</text>
+            <text class="field" x="14" y="72">type, fileUrl, status</text>
+            <text class="field" x="14" y="92">reviewedAt?</text>
+          </g>
+
+          <g class="entity admin" transform="translate(1265 515)">
+            <rect class="box" width="190" height="120" rx="8"></rect>
+            <rect class="head" width="190" height="30" rx="8"></rect>
+            <text class="title" x="14" y="20">Operations Tables</text>
+            <text class="field" x="14" y="52">Geofence polygon</text>
+            <text class="field" x="14" y="72">PricingRule category fares</text>
+            <text class="field" x="14" y="92">Coupon promotions</text>
+            <text class="field" x="14" y="112">AuditLog admin actions</text>
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <section class="page">
+      <header class="header">
+        <div>
+          <h1>Entity Catalog And Relationship Matrix</h1>
+          <p class="subtitle">
+            The schema is optimized around fast delivery creation, rider matching, live GPS,
+            payment reconciliation, customer support, and operational control.
+          </p>
+        </div>
+        <div class="meta">
+          <span><strong>Cardinality</strong> 1:1, 1:0..1, 1:N</span>
+          <span><strong>Delete model</strong> Mostly cascade on dependent records</span>
+          <span><strong>Scale path</strong> PostGIS and tracking partitions</span>
+        </div>
+      </header>
+
+      <div class="grid">
+        <article class="card">
+          <h3>Identity and access</h3>
+          <p>User, RefreshToken, DeviceToken, Notification, and AuditLog support customer,
+            rider, admin, operations, and support roles.</p>
+        </article>
+        <article class="card">
+          <h3>Delivery lifecycle</h3>
+          <p>Delivery owns stops, assignments, tracking points, payment, proof, chat,
+            support links, emergency incidents, and risk flags.</p>
+        </article>
+        <article class="card">
+          <h3>Rider operations</h3>
+          <p>RiderProfile links a user to vehicle, KYC documents, availability, location,
+            assignments, tracking points, and suspicious activity.</p>
+        </article>
+        <article class="card">
+          <h3>Money movement</h3>
+          <p>Payment captures delivery charges. Wallet and WalletTransaction handle customer
+            balances, refunds, rider payouts, and incentive accounting.</p>
+        </article>
+      </div>
+
+      <div class="panel">
+        <div class="diagram-title">
+          <h2>Primary Relationships</h2>
+        </div>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Parent</th>
+              <th>Child</th>
+              <th>Cardinality</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>User</td>
+              <td>Delivery</td>
+              <td><span class="tag">1:N</span></td>
+              <td>A customer can request many deliveries. Each delivery has one customer.</td>
+            </tr>
+            <tr>
+              <td>User</td>
+              <td>RiderProfile</td>
+              <td><span class="tag">1:0..1</span></td>
+              <td>A rider account extends the base user profile with KYC, location, and dispatch data.</td>
+            </tr>
+            <tr>
+              <td>RiderProfile</td>
+              <td>DeliveryAssignment</td>
+              <td><span class="tag">1:N</span></td>
+              <td>Riders receive dispatch offers with score, response state, and expiry.</td>
+            </tr>
+            <tr>
+              <td>Delivery</td>
+              <td>DeliveryAssignment</td>
+              <td><span class="tag">1:N</span></td>
+              <td>A delivery can have multiple offers over time until one is accepted.</td>
+            </tr>
+            <tr>
+              <td>Delivery</td>
+              <td>DeliveryTrackingPoint</td>
+              <td><span class="tag">1:N</span></td>
+              <td>Live GPS stream and historical route replay.</td>
+            </tr>
+            <tr>
+              <td>RiderProfile</td>
+              <td>DeliveryTrackingPoint</td>
+              <td><span class="tag">1:N</span></td>
+              <td>Each tracking point belongs to the rider who produced it.</td>
+            </tr>
+            <tr>
+              <td>Delivery</td>
+              <td>Payment</td>
+              <td><span class="tag">1:0..1</span></td>
+              <td>One active charge record per delivery for MoMo, Paystack, wallet, or COD.</td>
+            </tr>
+            <tr>
+              <td>Delivery</td>
+              <td>DeliveryProof</td>
+              <td><span class="tag">1:0..1</span></td>
+              <td>OTP, proof photo, signature, and final verification metadata.</td>
+            </tr>
+            <tr>
+              <td>User</td>
+              <td>SavedLocation</td>
+              <td><span class="tag">1:N</span></td>
+              <td>Localized Ghana addresses with landmarks, voice notes, and WhatsApp pins.</td>
+            </tr>
+            <tr>
+              <td>Delivery</td>
+              <td>SupportTicket / EmergencyIncident / SuspiciousActivity</td>
+              <td><span class="tag">1:N</span></td>
+              <td>Operational controls for complaints, emergencies, and fraud investigation.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="footer-note">
+          Production recommendation: enable PostGIS for geospatial matching and geofence containment,
+          then partition DeliveryTrackingPoint by time as tracking volume grows.
+        </p>
+      </div>
+    </section>
+  </body>
+</html>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Phone, ShieldCheck } from 'lucide-react-native';
 import { Text, View } from 'react-native';
@@ -7,31 +8,84 @@ import { realtimeEvents } from '@benbax/shared';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { StatusPill } from '../components/StatusPill';
+import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Tracking'>;
 
-const pickup = { latitude: 5.6508, longitude: -0.1668 };
-const dropoff = { latitude: 5.556, longitude: -0.1824 };
+type Coordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+type DeliveryDetail = {
+  id: string;
+  pickupLatitude: string;
+  pickupLongitude: string;
+  dropoffLatitude: string;
+  dropoffLongitude: string;
+  metadata?: {
+    expectedRoute?: {
+      polyline?: Coordinate[];
+    };
+  };
+  trackingPoints?: Array<{
+    latitude: string;
+    longitude: string;
+  }>;
+  assignments?: Array<{
+    riderProfile?: {
+      user?: { fullName?: string };
+      vehicle?: { type?: string; plateNumber?: string | null };
+    };
+  }>;
+};
 
 export function TrackingScreen({ route }: Props) {
-  const [riderPoint, setRiderPoint] = useState({ latitude: 5.612, longitude: -0.173 });
+  const [riderPoint, setRiderPoint] = useState<Coordinate | null>(null);
+  const { data: delivery } = useQuery({
+    queryKey: ['delivery', route.params.deliveryId],
+    queryFn: () => apiRequest<DeliveryDetail>(`/deliveries/${route.params.deliveryId}`)
+  });
 
   useEffect(() => {
-    let cleanup = () => undefined;
+    let cleanup: () => void = () => undefined;
 
     createRealtimeClient().then((socket) => {
       socket.emit('delivery:join', route.params.deliveryId);
       socket.on(realtimeEvents.trackingPoint, (point) => {
         setRiderPoint({ latitude: Number(point.latitude), longitude: Number(point.longitude) });
       });
-      cleanup = () => socket.disconnect();
+      cleanup = () => {
+        socket.disconnect();
+      };
     });
 
     return () => cleanup();
   }, [route.params.deliveryId]);
+
+  const pickup = {
+    latitude: Number(delivery?.pickupLatitude ?? 5.6508),
+    longitude: Number(delivery?.pickupLongitude ?? -0.1668)
+  };
+  const dropoff = {
+    latitude: Number(delivery?.dropoffLatitude ?? 5.556),
+    longitude: Number(delivery?.dropoffLongitude ?? -0.1824)
+  };
+  const latestPoint = riderPoint ?? delivery?.trackingPoints?.[0]
+    ? {
+        latitude: Number((riderPoint ?? delivery?.trackingPoints?.[0])?.latitude),
+        longitude: Number((riderPoint ?? delivery?.trackingPoints?.[0])?.longitude)
+      }
+    : null;
+  const routePoints = delivery?.metadata?.expectedRoute?.polyline?.length
+    ? delivery.metadata.expectedRoute.polyline
+    : latestPoint
+      ? [pickup, latestPoint, dropoff]
+      : [pickup, dropoff];
+  const rider = delivery?.assignments?.[0]?.riderProfile;
 
   return (
     <Screen scroll={false}>
@@ -53,13 +107,15 @@ export function TrackingScreen({ route }: Props) {
         >
           <Marker coordinate={pickup} title="Pickup" />
           <Marker coordinate={dropoff} title="Drop-off" />
-          <Marker coordinate={riderPoint} title="Rider" pinColor={theme.colors.primary} />
-          <Polyline coordinates={[pickup, riderPoint, dropoff]} strokeColor={theme.colors.primary} strokeWidth={4} />
+          {latestPoint ? <Marker coordinate={latestPoint} title="Rider" pinColor={theme.colors.primary} /> : null}
+          <Polyline coordinates={routePoints} strokeColor={theme.colors.primary} strokeWidth={4} />
         </MapView>
 
         <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 14, gap: 10 }}>
-          <Text style={{ fontWeight: '900', color: theme.colors.ink }}>Kofi is 8 mins away</Text>
-          <Text style={{ color: theme.colors.muted }}>Bike AA-4521-26. Delivery OTP: 4821</Text>
+          <Text style={{ fontWeight: '900', color: theme.colors.ink }}>{rider?.user?.fullName ?? 'Rider'} is on the way</Text>
+          <Text style={{ color: theme.colors.muted }}>
+            {[rider?.vehicle?.type, rider?.vehicle?.plateNumber].filter(Boolean).join(' ') || 'Vehicle details pending'}. Delivery OTP: 4821
+          </Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
               <Button label="Call" icon={<Phone size={18} color="#fff" />} onPress={() => undefined} />

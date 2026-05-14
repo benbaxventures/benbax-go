@@ -16,6 +16,7 @@
     "dev:customer": "npm run start --workspace apps/mobile-customer",
     "dev:rider": "npm run start --workspace apps/mobile-rider",
     "dev:admin": "npm run dev --workspace apps/admin",
+    "android": "npm run android --workspace apps/mobile-customer",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -25,5 +26,8 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "expo-notifications": "~55.0.22"
   }
 }
