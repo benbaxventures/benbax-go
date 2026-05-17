@@ -1,6 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { apiRequest } from '../services/api';
+import { clearAuthSession, getStoredUser, saveAuthSession } from '../services/authStorage';
 
 type User = {
   id: string;
@@ -32,11 +32,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         skipAuth: true
       }
     );
-    await AsyncStorage.multiSet([
-      ['benbax.accessToken', data.tokens.accessToken],
-      ['benbax.refreshToken', data.tokens.refreshToken],
-      ['benbax.user', JSON.stringify(data.user)]
-    ]);
+    await saveAuthSession({ ...data.tokens, user: data.user });
     set({ user: data.user });
   },
   async loginWithGoogle(tokens) {
@@ -48,11 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         skipAuth: true
       }
     );
-    await AsyncStorage.multiSet([
-      ['benbax.accessToken', data.tokens.accessToken],
-      ['benbax.refreshToken', data.tokens.refreshToken],
-      ['benbax.user', JSON.stringify(data.user)]
-    ]);
+    await saveAuthSession({ ...data.tokens, user: data.user });
     set({ user: data.user });
   },
   async register(input) {
@@ -64,19 +56,15 @@ export const useAuthStore = create<AuthState>((set) => ({
         skipAuth: true
       }
     );
-    await AsyncStorage.multiSet([
-      ['benbax.accessToken', data.tokens.accessToken],
-      ['benbax.refreshToken', data.tokens.refreshToken],
-      ['benbax.user', JSON.stringify(data.user)]
-    ]);
+    await saveAuthSession({ ...data.tokens, user: data.user });
     set({ user: data.user });
   },
   async logout() {
-    await AsyncStorage.multiRemove(['benbax.accessToken', 'benbax.refreshToken', 'benbax.user']);
+    await clearAuthSession();
     set({ user: null });
   },
   async hydrate() {
-    const raw = await AsyncStorage.getItem('benbax.user');
-    set({ user: raw ? JSON.parse(raw) : null, isHydrating: false });
+    const user = await getStoredUser();
+    set({ user, isHydrating: false });
   }
 }));

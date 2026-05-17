@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Constants from 'expo-constants';
 import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
+import { checkApiHealth, getApiBaseUrl, isApiConnectionError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -13,18 +14,42 @@ export function SignInScreen() {
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+  const [checkingApi, setCheckingApi] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuthStore();
   const googleSignInUnavailableReason = getGoogleSignInUnavailableReason();
 
+  useEffect(() => {
+    void refreshApiStatus();
+  }, []);
+
+  async function refreshApiStatus() {
+    setCheckingApi(true);
+    const isOnline = await checkApiHealth();
+    setApiOnline(isOnline);
+    setCheckingApi(false);
+  }
+
   async function submit() {
+    const validationError = validateCredentials({ mode, name, phone, password });
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       if (mode === 'login') await login(phone, password);
       else await register({ name, phone, password });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication failed');
+      if (isApiConnectionError(err)) {
+        setApiOnline(false);
+        setError(`Cannot reach the API. Start the backend and confirm your phone is on the same network. Current API: ${getApiBaseUrl()}`);
+      } else {
+        setError(err instanceof Error ? err.message : 'Authentication failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -40,6 +65,30 @@ export function SignInScreen() {
           <Text style={{ fontSize: 32, fontWeight: '900', color: theme.colors.ink }}>Benbax</Text>
           <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Fast delivery and logistics built for Ghana.</Text>
         </View>
+
+        {apiOnline === false ? (
+          <View
+            style={{
+              backgroundColor: '#FFF7E6',
+              borderColor: theme.colors.accent,
+              borderWidth: 1,
+              borderRadius: theme.radius.md,
+              padding: 12,
+              gap: 8
+            }}
+          >
+            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>API is offline</Text>
+            <Text style={{ color: theme.colors.muted, lineHeight: 20 }}>
+              Start the backend and make sure this phone can reach {getApiBaseUrl()}.
+            </Text>
+            <Button
+              label={checkingApi ? 'Checking API' : 'Retry API check'}
+              onPress={refreshApiStatus}
+              loading={checkingApi}
+              variant="secondary"
+            />
+          </View>
+        ) : null}
 
         {mode === 'register' ? (
           <TextInput
@@ -81,12 +130,34 @@ export function SignInScreen() {
         ) : null}
         <Button
           label={mode === 'login' ? 'Create a Benbax account' : 'I already have an account'}
-          onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
+          onPress={() => {
+            setError(null);
+            setMode(mode === 'login' ? 'register' : 'login');
+          }}
           variant="quiet"
         />
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+function validateCredentials(input: { mode: 'login' | 'register'; name: string; phone: string; password: string }) {
+  const phone = input.phone.trim();
+  const password = input.password.trim();
+
+  if (input.mode === 'register' && input.name.trim().length < 2) {
+    return 'Enter your full name.';
+  }
+
+  if (!phone.startsWith('+233') || phone.length < 12) {
+    return 'Enter a valid Ghana phone number starting with +233.';
+  }
+
+  if (password.length < 6) {
+    return 'Password must be at least 6 characters.';
+  }
+
+  return null;
 }
 
 function getGoogleSignInUnavailableReason() {
