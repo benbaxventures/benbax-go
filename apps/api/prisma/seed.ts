@@ -19,6 +19,30 @@ async function main() {
     }
   });
 
+  await prisma.user.upsert({
+    where: { phone: '+233200000002' },
+    update: {
+      name: 'Benbax Rider',
+      role: UserRole.RIDER,
+      passwordHash,
+      riderProfile: {
+        upsert: {
+          update: {},
+          create: {}
+        }
+      }
+    },
+    create: {
+      name: 'Benbax Rider',
+      phone: '+233200000002',
+      email: 'rider@benbax.com',
+      role: UserRole.RIDER,
+      passwordHash,
+      wallet: { create: {} },
+      riderProfile: { create: {} }
+    }
+  });
+
   await prisma.pricingRule.upsert({
     where: { id: 'default-parcel-pricing' },
     update: {},

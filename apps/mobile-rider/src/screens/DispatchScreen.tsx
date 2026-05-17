@@ -15,6 +15,7 @@ export function DispatchScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { isOnline, setOnline, currentOffer, setCurrentOffer } = useRiderStore();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cleanup: () => void = () => undefined;
@@ -32,12 +33,15 @@ export function DispatchScreen() {
   async function toggleOnline() {
     setLoading(true);
     const next = !isOnline;
+    setError(null);
     try {
       await apiRequest('/riders/me/availability', {
         method: 'PATCH',
         body: JSON.stringify({ isOnline: next, latitude: 5.6508, longitude: -0.1668 })
       });
       setOnline(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update availability.');
     } finally {
       setLoading(false);
     }
@@ -45,15 +49,25 @@ export function DispatchScreen() {
 
   async function acceptOffer() {
     if (!currentOffer) return;
-    await apiRequest(`/dispatch/assignments/${currentOffer.id}/accept`, { method: 'POST' });
-    navigation.navigate('ActiveDelivery', { deliveryId: currentOffer.deliveryId });
-    setCurrentOffer(null);
+    setError(null);
+    try {
+      await apiRequest(`/dispatch/assignments/${currentOffer.id}/accept`, { method: 'POST' });
+      navigation.navigate('ActiveDelivery', { deliveryId: currentOffer.deliveryId });
+      setCurrentOffer(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not accept this offer.');
+    }
   }
 
   async function rejectOffer() {
     if (!currentOffer) return;
-    await apiRequest(`/dispatch/assignments/${currentOffer.id}/reject`, { method: 'POST' });
-    setCurrentOffer(null);
+    setError(null);
+    try {
+      await apiRequest(`/dispatch/assignments/${currentOffer.id}/reject`, { method: 'POST' });
+      setCurrentOffer(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reject this offer.');
+    }
   }
 
   return (
@@ -62,6 +76,8 @@ export function DispatchScreen() {
         <Text style={{ fontSize: 28, fontWeight: '900', color: theme.colors.ink }}>Dispatch</Text>
         <Text style={{ color: theme.colors.muted }}>Go online to receive the nearest best-fit Benbax jobs.</Text>
       </View>
+
+      {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
 
       <Pressable
         onPress={toggleOnline}
