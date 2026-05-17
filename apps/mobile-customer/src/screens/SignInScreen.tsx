@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import Constants from 'expo-constants';
-import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Text, TextInput, View, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { Button } from '../components/Button';
-import { checkApiHealth, getApiBaseUrl, isApiConnectionError } from '../services/api';
+import { checkApiHealth, getApiBaseUrl, isApiConnectionError, ApiResponseError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -13,12 +15,14 @@ export function SignInScreen() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
   const [checkingApi, setCheckingApi] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuthStore();
   const googleSignInUnavailableReason = getGoogleSignInUnavailableReason();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     void refreshApiStatus();
@@ -48,7 +52,18 @@ export function SignInScreen() {
         setApiOnline(false);
         setError(`Cannot reach the API. Start the backend and confirm your phone is on the same network. Current API: ${getApiBaseUrl()}`);
       } else {
-        setError(err instanceof Error ? err.message : 'Authentication failed');
+        // Provide more helpful messages for common auth failures.
+        if (err instanceof ApiResponseError) {
+          if (err.status === 401) setError('Invalid phone or password.');
+          else if (err.status === 400 && err.code === 'VALIDATION_ERROR') setError(String(err.details ?? err.message));
+          else if (err.status === 503 || err.code === 'DATABASE_UNAVAILABLE') {
+            setApiOnline(false);
+            setError('The backend database is offline. Start Postgres, then retry sign in.');
+          }
+          else setError(err.message || 'Authentication failed');
+        } else {
+          setError(err instanceof Error ? err.message : 'Authentication failed');
+        }
       }
     } finally {
       setLoading(false);
@@ -58,7 +73,14 @@ export function SignInScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: theme.colors.canvas, justifyContent: 'center', padding: 20 }}
+      style={{
+        flex: 1,
+        backgroundColor: theme.colors.canvas,
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 20 + insets.bottom
+      }}
     >
       <View style={{ gap: 18 }}>
         <View style={{ gap: 8 }}>
@@ -106,13 +128,18 @@ export function SignInScreen() {
           placeholder="+233 phone number"
           style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
         />
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          placeholder="Password"
-          style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
-        />
+        <View style={{ backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center' }}>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            placeholder="Password"
+            style={{ flex: 1, padding: 14, fontSize: 16 }}
+          />
+          <TouchableOpacity onPress={() => setShowPassword((s) => !s)} accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
+            {showPassword ? <EyeOff size={20} color={theme.colors.muted} /> : <Eye size={20} color={theme.colors.muted} />}
+          </TouchableOpacity>
+        </View>
 
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
 

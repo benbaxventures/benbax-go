@@ -27,6 +27,20 @@ export class ApiConnectionError extends Error {
   }
 }
 
+export class ApiResponseError extends Error {
+  status: number;
+  code?: string | null;
+  details?: unknown;
+
+  constructor(message: string, status: number, code?: string | null, details?: unknown) {
+    super(message);
+    this.name = 'ApiResponseError';
+    this.status = status;
+    this.code = code ?? null;
+    this.details = details;
+  }
+}
+
 export function getApiBaseUrl() {
   return API_BASE_URL;
 }
@@ -72,8 +86,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!response.ok || !body.ok) {
-    const message = body.ok ? 'Request failed' : body.error.message;
-    throw new Error(message);
+    const message = body && !body.ok && body.error && body.error.message ? body.error.message : response.statusText || 'Request failed';
+    const code = body && !body.ok && body.error && body.error.code ? body.error.code : null;
+    const details = body && !body.ok && body.error && body.error.details ? body.error.details : undefined;
+    throw new ApiResponseError(message, response.status, code, details);
   }
 
   return body.data;
