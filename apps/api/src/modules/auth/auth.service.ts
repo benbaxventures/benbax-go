@@ -112,6 +112,9 @@ export async function register(input: RegisterInput) {
   if (input.role === UserRole.RIDER) {
     createData.riderProfile = { create: {} };
   }
+  if (input.role === UserRole.DRIVER) {
+    createData.driverProfile = { create: {} };
+  }
 
   const user = await prisma.user.create({
     data: createData,
@@ -152,10 +155,10 @@ export async function googleLogin(input: GoogleLoginInput) {
   }
 
   const requestedRole = input.role ?? UserRole.CUSTOMER;
-  if (requestedRole !== UserRole.CUSTOMER && requestedRole !== UserRole.RIDER) {
-    throw badRequest('Google sign-in is only available for customers and riders');
+  if (requestedRole !== UserRole.CUSTOMER && requestedRole !== UserRole.RIDER && requestedRole !== UserRole.DRIVER) {
+    throw badRequest('Google sign-in is only available for customers, riders, and drivers');
   }
-  const role: 'CUSTOMER' | 'RIDER' = requestedRole;
+  const role: 'CUSTOMER' | 'RIDER' | 'DRIVER' = requestedRole;
 
   const existing = await prisma.user.findUnique({ where: { email: profile.email } });
   if (existing) {
@@ -178,7 +181,8 @@ export async function googleLogin(input: GoogleLoginInput) {
       avatarUrl: profile.picture ?? null,
       role,
       wallet: { create: {} },
-      ...(role === UserRole.RIDER ? { riderProfile: { create: {} } } : {})
+      ...(role === UserRole.RIDER ? { riderProfile: { create: {} } } : {}),
+      ...(role === UserRole.DRIVER ? { driverProfile: { create: {} } } : {})
     }
   });
 
@@ -196,7 +200,8 @@ export async function me(userId: string) {
       role: true,
       avatarUrl: true,
       wallet: true,
-      riderProfile: true
+      riderProfile: true,
+      driverProfile: true
     }
   });
 }

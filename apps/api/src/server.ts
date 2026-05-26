@@ -18,8 +18,8 @@ const io = new Server(server, {
 app.set('io', io);
 registerRealtimeHandlers(io);
 
-server.listen(env.API_PORT, () => {
-  console.log(`Benbax API listening on port ${env.API_PORT}`);
+server.listen(env.API_PORT, env.API_HOST, () => {
+  console.log(`Benbax API listening on ${env.API_HOST}:${env.API_PORT}`);
 });
 
 process.on('SIGTERM', async () => {

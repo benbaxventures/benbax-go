@@ -48,6 +48,31 @@ export function estimateDelivery(pickup: Point, dropoff: Point, category: Delive
   };
 }
 
+export function estimateRide(pickup: Point, dropoff: Point, vehicleType = 'ECONOMY') {
+  const distanceKm = Math.max(1, Number(haversineKm(pickup, dropoff).toFixed(2)));
+  const estimatedMinutes = Math.ceil(distanceKm * 3.2 + 6);
+  const baseFare = 20;
+  const perKmFare = 4.2;
+  const perMinuteFare = 0.45;
+  const serviceFee = 0;
+  const surgeMultiplier = 1;
+  const vehicleMultiplier = vehicleType === 'COMFORT' ? 1.25 : vehicleType === 'SUV' ? 1.45 : 1;
+  const total = Number(
+    ((baseFare + distanceKm * perKmFare + estimatedMinutes * perMinuteFare + serviceFee) * surgeMultiplier * vehicleMultiplier).toFixed(2)
+  );
+
+  return {
+    distanceKm,
+    estimatedMinutes,
+    baseFare,
+    perKmFare,
+    perMinuteFare,
+    surgeMultiplier,
+    vehicleMultiplier,
+    total
+  };
+}
+
 export function rankRiders(pickup: Point, candidates: CandidateRider[]) {
   return candidates
     .map((rider) => {

@@ -58,4 +58,13 @@ class MainActivity : ReactActivity() {
       // because it's doing more than [Activity.moveTaskToBack] in fact.
       super.invokeDefaultOnBackPressed()
   }
+
+  override fun onUserLeaveHint() {
+    try {
+      super.onUserLeaveHint()
+    } catch (e: NullPointerException) {
+      // Prevents native crashes when ReactActivityDelegate's internal delegate is null during lifecycle transitions
+    }
+  }
 }
+

@@ -1,4 +1,4 @@
-export type UserRole = 'CUSTOMER' | 'RIDER' | 'ADMIN' | 'SUPPORT' | 'OPERATIONS';
+export type UserRole = 'CUSTOMER' | 'RIDER' | 'DRIVER' | 'ADMIN' | 'SUPPORT' | 'OPERATIONS';
 
 export type DeliveryCategory =
   | 'FOOD'
@@ -21,6 +21,19 @@ export type DeliveryStatus =
   | 'FAILED';
 
 export type RiderStatus = 'PENDING_KYC' | 'ACTIVE' | 'SUSPENDED' | 'OFFLINE' | 'ON_DELIVERY';
+
+export type DriverStatus = 'PENDING_KYC' | 'ACTIVE' | 'SUSPENDED' | 'OFFLINE' | 'ON_TRIP';
+
+export type RideTripStatus =
+  | 'REQUESTED'
+  | 'ASSIGNING'
+  | 'ASSIGNED'
+  | 'DRIVER_ARRIVING'
+  | 'ARRIVED'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'FAILED';
 
 export type PaymentMethod = 'MTN_MOMO' | 'PAYSTACK_CARD' | 'WALLET' | 'CASH_ON_DELIVERY';
 

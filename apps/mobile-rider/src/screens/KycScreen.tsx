@@ -149,16 +149,20 @@ export function KycScreen() {
 
       <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 14, gap: 10 }}>
         <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>Vehicle details</Text>
+        <Text style={{ color: theme.colors.muted, fontSize: 13, fontWeight: '600' }}>Vehicle type</Text>
         <TextInput
           value={vehicleType}
           onChangeText={setVehicleType}
-          placeholder="Vehicle type"
+          placeholder="e.g. Car, Motorbike, Tricycle"
+          placeholderTextColor={theme.colors.muted}
           style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.ink }}
         />
+        <Text style={{ color: theme.colors.muted, fontSize: 13, fontWeight: '600' }}>Plate number</Text>
         <TextInput
           value={plateNumber}
           onChangeText={setPlateNumber}
-          placeholder="Plate number"
+          placeholder="e.g. GW-1234-20"
+          placeholderTextColor={theme.colors.muted}
           autoCapitalize="characters"
           style={{ borderWidth: 1, borderColor: theme.colors.border, borderRadius: 8, padding: 12, color: theme.colors.ink }}
         />

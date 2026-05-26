@@ -8,9 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActiveDeliveryScreen } from '../screens/ActiveDeliveryScreen';
 import { DispatchScreen } from '../screens/DispatchScreen';
 import { EarningsScreen } from '../screens/EarningsScreen';
+import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { KycScreen } from '../screens/KycScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SignInScreen } from '../screens/SignInScreen';
+import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
+import { WalletScreen } from '../screens/WalletScreen';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 import type { MainTabsParamList, RootStackParamList } from './types';
@@ -66,6 +69,9 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="ActiveDelivery" component={ActiveDeliveryScreen} />
+            <Stack.Screen name="WalletCheckout" component={WalletCheckoutScreen} />
+            <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="Wallet" component={WalletScreen} />
           </>
         ) : (
           <Stack.Screen name="SignIn" component={SignInScreen} />
@@ -74,3 +80,4 @@ export function RootNavigator() {
     </NavigationContainer>
   );
 }
+

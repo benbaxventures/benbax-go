@@ -1,6 +1,6 @@
 import type { PropsWithChildren } from 'react';
-import { SafeAreaView, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollView, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../theme/tokens';
 
 type Props = PropsWithChildren<{

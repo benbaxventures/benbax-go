@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   CUSTOMER
   RIDER
+  DRIVER
   ADMIN
   SUPPORT
   OPERATIONS
@@ -27,6 +28,14 @@ enum RiderStatus {
   SUSPENDED
   OFFLINE
   ON_DELIVERY
+}
+
+enum DriverStatus {
+  PENDING_KYC
+  ACTIVE
+  SUSPENDED
+  OFFLINE
+  ON_TRIP
 }
 
 enum KycStatus {
@@ -59,6 +68,26 @@ enum DeliveryStatus {
 }
 
 enum AssignmentStatus {
+  OFFERED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  COMPLETED
+}
+
+enum RideTripStatus {
+  REQUESTED
+  ASSIGNING
+  ASSIGNED
+  DRIVER_ARRIVING
+  ARRIVED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum RideAssignmentStatus {
   OFFERED
   ACCEPTED
   REJECTED
@@ -100,10 +129,13 @@ model User {
   avatarUrl     String?
   lastSeenAt    DateTime?
   riderProfile  RiderProfile?
+  driverProfile DriverProfile?
   wallet        Wallet?
   savedPlaces   SavedLocation[]
   deliveries    Delivery[]         @relation("CustomerDeliveries")
+  rideTrips      RideTrip[]         @relation("PassengerRideTrips")
   ratingsGiven  Rating[]           @relation("RatingsGiven")
+  rideRatingsGiven RideRating[]     @relation("RideRatingsGiven")
   messages      ChatMessage[]
   deviceTokens  DeviceToken[]
   refreshTokens RefreshToken[]
@@ -160,6 +192,50 @@ model Vehicle {
   make           String?
   model          String?
   riderProfile   RiderProfile @relation(fields: [riderProfileId], references: [id], onDelete: Cascade)
+}
+
+model DriverProfile {
+  id               String               @id @default(cuid())
+  userId           String               @unique
+  status           DriverStatus         @default(PENDING_KYC)
+  kycStatus        KycStatus            @default(NOT_STARTED)
+  rating           Decimal              @default(5.0) @db.Decimal(3, 2)
+  totalTrips       Int                  @default(0)
+  currentLatitude  Decimal?             @db.Decimal(10, 7)
+  currentLongitude Decimal?             @db.Decimal(10, 7)
+  lastLocationAt   DateTime?
+  isOnline         Boolean              @default(false)
+  faceTemplateHash String?
+  emergencyPhone   String?
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle          DriverVehicle?
+  kycDocuments     DriverKycDocument[]
+  assignments      RideAssignment[]
+  trackingPoints   RideTrackingPoint[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+}
+
+model DriverVehicle {
+  id              String        @id @default(cuid())
+  driverProfileId String        @unique
+  type            String
+  plateNumber     String?
+  color           String?
+  make            String?
+  model           String?
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+}
+
+model DriverKycDocument {
+  id              String        @id @default(cuid())
+  driverProfileId String
+  type            String
+  fileUrl         String
+  status          KycStatus     @default(SUBMITTED)
+  reviewedAt      DateTime?
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now())
 }
 
 model KycDocument {
@@ -221,6 +297,106 @@ model Delivery {
   @@index([customerId, createdAt])
   @@index([status])
   @@index([pickupLatitude, pickupLongitude])
+}
+
+model RideTrip {
+  id                   String                 @id @default(cuid())
+  tripCode             String                 @unique
+  passengerId          String
+  status               RideTripStatus         @default(REQUESTED)
+  pickupLabel          String
+  pickupAddress        String?
+  pickupLatitude       Decimal                @db.Decimal(10, 7)
+  pickupLongitude      Decimal                @db.Decimal(10, 7)
+  pickupLandmark       String?
+  dropoffLabel         String
+  dropoffAddress       String?
+  dropoffLatitude      Decimal                @db.Decimal(10, 7)
+  dropoffLongitude     Decimal                @db.Decimal(10, 7)
+  dropoffLandmark      String?
+  requestedVehicleType String?
+  scheduledFor         DateTime?
+  distanceKm           Decimal                @db.Decimal(8, 2)
+  etaMinutes           Int
+  baseFare             Decimal                @db.Decimal(10, 2)
+  perKmFare            Decimal                @db.Decimal(10, 2)
+  perMinuteFare        Decimal                @db.Decimal(10, 2)
+  surgeMultiplier      Decimal                @default(1.0) @db.Decimal(4, 2)
+  totalFare            Decimal                @db.Decimal(10, 2)
+  notes                String?
+  metadata             Json?
+  passenger            User                   @relation("PassengerRideTrips", fields: [passengerId], references: [id], onDelete: Restrict)
+  assignments          RideAssignment[]
+  trackingPoints       RideTrackingPoint[]
+  payment              RidePayment?
+  rating               RideRating?
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@index([passengerId, createdAt])
+  @@index([status])
+  @@index([pickupLatitude, pickupLongitude])
+}
+
+model RideAssignment {
+  id              String               @id @default(cuid())
+  tripId          String
+  driverProfileId String
+  status          RideAssignmentStatus @default(OFFERED)
+  score           Decimal              @db.Decimal(6, 2)
+  offeredAt       DateTime             @default(now())
+  respondedAt     DateTime?
+  expiresAt       DateTime
+  trip            RideTrip             @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  driverProfile   DriverProfile        @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, status])
+  @@index([driverProfileId, status])
+}
+
+model RideTrackingPoint {
+  id              String        @id @default(cuid())
+  tripId          String
+  driverProfileId String
+  latitude        Decimal       @db.Decimal(10, 7)
+  longitude       Decimal       @db.Decimal(10, 7)
+  heading         Decimal?      @db.Decimal(6, 2)
+  speedKph        Decimal?      @db.Decimal(6, 2)
+  batteryLevel    Int?
+  source          String        @default("GPS")
+  capturedAt      DateTime      @default(now())
+  trip            RideTrip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  driverProfile   DriverProfile @relation(fields: [driverProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, capturedAt])
+}
+
+model RidePayment {
+  id           String        @id @default(cuid())
+  tripId       String        @unique
+  method       PaymentMethod
+  status       PaymentStatus @default(PENDING)
+  amount       Decimal       @db.Decimal(10, 2)
+  currency     String        @default("GHS")
+  provider     String?
+  providerRef  String?
+  mobileNumber String?
+  metadata     Json?
+  trip         RideTrip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model RideRating {
+  id         String   @id @default(cuid())
+  tripId     String   @unique
+  authorId   String
+  targetType String
+  score      Int
+  comment    String?
+  trip       RideTrip @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  author     User     @relation("RideRatingsGiven", fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
 }
 
 model DeliveryStop {

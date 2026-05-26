@@ -1,21 +1,6 @@
-import Constants from 'expo-constants';
 import type { ApiResponse } from '@benbax/shared';
 import { getAccessToken } from './authStorage';
-
-function resolveApiBaseUrl() {
-  if (process.env.EXPO_PUBLIC_API_BASE_URL) return process.env.EXPO_PUBLIC_API_BASE_URL;
-
-  const legacyManifest = Constants.manifest as { debuggerHost?: string } | null;
-  const hostUri =
-    Constants.expoConfig?.hostUri ??
-    Constants.manifest2?.extra?.expoGo?.debuggerHost ??
-    legacyManifest?.debuggerHost;
-  const host = hostUri?.split(':')[0];
-
-  if (host) return `http://${host}:4000/api/v1`;
-
-  return 'http://localhost:4000/api/v1';
-}
+import { resolveApiBaseUrl } from './network';
 
 const API_BASE_URL = resolveApiBaseUrl();
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
@@ -52,9 +37,11 @@ export function isApiConnectionError(error: unknown) {
 export async function checkApiHealth() {
   try {
     const response = await fetch(`${API_ORIGIN}/health`);
-    return response.ok;
+    if (response.ok) return 'online';
+    if (response.status === 503) return 'database_offline';
+    return 'api_offline';
   } catch {
-    return false;
+    return 'api_offline';
   }
 }
 

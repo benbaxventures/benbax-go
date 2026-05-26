@@ -5,6 +5,7 @@ node_modules/
 apps/**/.env
 !apps/**/.env.example
 /.expo/
+apps/**/.expo/
 apps/mobile-customer/.expo/
 apps/mobile-rider/.expo/
 apps/api/.next/

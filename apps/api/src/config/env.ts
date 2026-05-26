@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  API_HOST: z.string().default('0.0.0.0'),
   API_PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url().optional(),
@@ -20,6 +21,7 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().optional(),
   PAYSTACK_SECRET_KEY: z.string().optional(),
   PAYSTACK_PUBLIC_KEY: z.string().optional(),
+  PAYSTACK_CALLBACK_URL: z.string().optional(),
   MTN_MOMO_BASE_URL: z.string().optional(),
   MTN_MOMO_SUBSCRIPTION_KEY: z.string().optional(),
   MTN_MOMO_API_USER: z.string().optional(),

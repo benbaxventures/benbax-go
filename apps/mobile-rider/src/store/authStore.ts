@@ -7,6 +7,7 @@ type RiderUser = {
   name: string;
   phone: string;
   role: string;
+  email?: string;
 };
 
 type AuthState = {
@@ -16,6 +17,7 @@ type AuthState = {
   register: (input: { name: string; phone: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
+  updateUser: (updated: Partial<RiderUser>) => Promise<void>;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -60,5 +62,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   async hydrate() {
     const raw = await AsyncStorage.getItem('benbax.rider.user');
     set({ user: raw ? JSON.parse(raw) : null, isHydrating: false });
+  },
+  async updateUser(updated) {
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) return;
+    const nextUser = { ...currentUser, ...updated };
+    await AsyncStorage.setItem('benbax.rider.user', JSON.stringify(nextUser));
+    set({ user: nextUser });
   }
 }));
+

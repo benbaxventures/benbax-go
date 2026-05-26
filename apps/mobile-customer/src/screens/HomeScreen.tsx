@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { Bike, CalendarClock, CreditCard, PackageCheck } from 'lucide-react-native';
-import { Pressable, Text, View } from 'react-native';
+import { Alert, Pressable, Text, View } from 'react-native';
 import type { DeliveryCategory } from '@benbax/shared';
 import { Button } from '../components/Button';
 import { LocationInput } from '../components/LocationInput';
 import { Screen } from '../components/Screen';
 import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
+import { useInitializePayment } from '../hooks/usePayments';
 import { useDeliveryStore } from '../store/deliveryStore';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
@@ -23,6 +24,7 @@ export function HomeScreen() {
   const { draft, setCategory, setPickup, setDropoff, setQuote } = useDeliveryStore();
   const quoteMutation = useDeliveryQuote();
   const createMutation = useCreateDelivery();
+  const initializePayment = useInitializePayment();
   const [pickupText, setPickupText] = useState('East Legon, Accra');
   const [dropoffText, setDropoffText] = useState('Osu Oxford Street');
   const [pickupLandmark, setPickupLandmark] = useState('Near A&C Mall');
@@ -56,13 +58,31 @@ export function HomeScreen() {
   }
 
   async function createDelivery() {
-    const delivery = await createMutation.mutateAsync({
-      category: draft.category,
-      pickup,
-      dropoff,
-      paymentMethod: 'MTN_MOMO'
-    });
-    navigation.navigate('Tracking', { deliveryId: delivery.id });
+    try {
+      const delivery = await createMutation.mutateAsync({
+        category: draft.category,
+        pickup,
+        dropoff,
+        paymentMethod: 'PAYSTACK_CARD'
+      });
+      const initialized = await initializePayment.mutateAsync({
+        deliveryId: delivery.id,
+        method: 'PAYSTACK_CARD'
+      });
+
+      if (initialized.checkout) {
+        navigation.navigate('PaymentCheckout', {
+          deliveryId: delivery.id,
+          authorizationUrl: initialized.checkout.authorizationUrl,
+          reference: initialized.checkout.reference
+        });
+        return;
+      }
+
+      navigation.navigate('Tracking', { deliveryId: delivery.id });
+    } catch (error) {
+      Alert.alert('Could not start payment', error instanceof Error ? error.message : 'Please try again.');
+    }
   }
 
   return (
@@ -137,7 +157,7 @@ export function HomeScreen() {
             label="Book"
             icon={<PackageCheck size={18} color="#fff" />}
             onPress={createDelivery}
-            loading={createMutation.isPending}
+            loading={createMutation.isPending || initializePayment.isPending}
           />
         </View>
       </View>

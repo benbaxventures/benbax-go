@@ -17,7 +17,7 @@ export function SignInScreen() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
+  const [apiStatus, setApiStatus] = useState<'online' | 'api_offline' | 'database_offline' | null>(null);
   const [checkingApi, setCheckingApi] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuthStore();
@@ -30,8 +30,8 @@ export function SignInScreen() {
 
   async function refreshApiStatus() {
     setCheckingApi(true);
-    const isOnline = await checkApiHealth();
-    setApiOnline(isOnline);
+    const status = await checkApiHealth();
+    setApiStatus(status);
     setCheckingApi(false);
   }
 
@@ -49,7 +49,7 @@ export function SignInScreen() {
       else await register({ name, phone, password });
     } catch (err) {
       if (isApiConnectionError(err)) {
-        setApiOnline(false);
+        setApiStatus('api_offline');
         setError(`Cannot reach the API. Start the backend and confirm your phone is on the same network. Current API: ${getApiBaseUrl()}`);
       } else {
         // Provide more helpful messages for common auth failures.
@@ -57,7 +57,7 @@ export function SignInScreen() {
           if (err.status === 401) setError('Invalid phone or password.');
           else if (err.status === 400 && err.code === 'VALIDATION_ERROR') setError(String(err.details ?? err.message));
           else if (err.status === 503 || err.code === 'DATABASE_UNAVAILABLE') {
-            setApiOnline(false);
+            setApiStatus('database_offline');
             setError('The backend database is offline. Start Postgres, then retry sign in.');
           }
           else setError(err.message || 'Authentication failed');
@@ -88,7 +88,7 @@ export function SignInScreen() {
           <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Fast delivery and logistics built for Ghana.</Text>
         </View>
 
-        {apiOnline === false ? (
+        {apiStatus === 'api_offline' || apiStatus === 'database_offline' ? (
           <View
             style={{
               backgroundColor: '#FFF7E6',
@@ -99,9 +99,13 @@ export function SignInScreen() {
               gap: 8
             }}
           >
-            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>API is offline</Text>
+            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>
+              {apiStatus === 'database_offline' ? 'Database is offline' : 'API is offline'}
+            </Text>
             <Text style={{ color: theme.colors.muted, lineHeight: 20 }}>
-              Start the backend and make sure this phone can reach {getApiBaseUrl()}.
+              {apiStatus === 'database_offline'
+                ? 'The backend is reachable, but Postgres is not responding. Start the database, then retry.'
+                : `Start the backend and make sure this phone can reach ${getApiBaseUrl()}.`}
             </Text>
             <Button
               label={checkingApi ? 'Checking API' : 'Retry API check'}
@@ -220,24 +224,89 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
     onError(null);
     let googleStatusCodes: GoogleSignInModule['statusCodes'] | null = null;
     try {
-      const { GoogleSignin, statusCodes } = await loadGoogleSignIn();
-      googleStatusCodes = statusCodes;
-      GoogleSignin.configure({
-        ...(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
-          ? { webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }
-          : {}),
-        scopes: ['openid', 'profile', 'email']
-      });
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      const response = await GoogleSignin.signIn();
+      const googleModule = await loadGoogleSignIn().catch(() => null);
 
-      if (response.type === 'cancelled') return;
+      async function tryAuthSessionFallback() {
+        const AuthSessionModule = await import('expo-auth-session').catch(() => null);
+        const WebBrowserModule = await import('expo-web-browser').catch(() => null);
+        if (!AuthSessionModule) throw new Error('expo-auth-session is not available. Install it to enable Google sign-in in Expo.');
 
-      const tokens = await GoogleSignin.getTokens();
-      await loginWithGoogle({
-        accessToken: tokens.accessToken,
-        idToken: tokens.idToken
-      });
+        // complete any pending browser sessions
+        (WebBrowserModule?.maybeCompleteAuthSession ?? WebBrowserModule?.default?.maybeCompleteAuthSession)?.();
+
+        const clientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+        if (!clientId) throw new Error('Missing Google client ID. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env');
+
+        const makeRedirect = AuthSessionModule.makeRedirectUri ?? AuthSessionModule.default?.makeRedirectUri;
+        const startAsync = AuthSessionModule.startAsync ?? AuthSessionModule.default?.startAsync;
+        if (typeof makeRedirect !== 'function' || typeof startAsync !== 'function') {
+          throw new Error('expo-auth-session is missing required methods (startAsync/makeRedirectUri).');
+        }
+
+        const redirectUri = makeRedirect({ useProxy: true });
+        const nonce = Math.random().toString(36).substring(2);
+        const params = new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: redirectUri,
+          response_type: 'id_token token',
+          scope: 'openid profile email',
+          nonce,
+          prompt: 'select_account'
+        });
+
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+        const result = await startAsync({ authUrl } as any);
+        (WebBrowserModule?.maybeCompleteAuthSession ?? WebBrowserModule?.default?.maybeCompleteAuthSession)?.();
+        if (result.type !== 'success') throw new Error('Google sign-in cancelled');
+        const idToken = (result as any).params?.id_token ?? (result as any).params?.idToken;
+        const accessToken = (result as any).params?.access_token ?? (result as any).params?.accessToken;
+        if (!idToken && !accessToken) throw new Error('No token returned from Google');
+
+        await loginWithGoogle({ idToken, accessToken } as any);
+      }
+
+      // If native GoogleSignin module is available and appears functional, try native first
+      if (googleModule && googleModule.GoogleSignin && typeof googleModule.GoogleSignin.hasPlayServices === 'function') {
+        const { GoogleSignin, statusCodes } = googleModule;
+        googleStatusCodes = statusCodes;
+        GoogleSignin.configure({
+          ...(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ? { webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID } : {}),
+          scopes: ['openid', 'profile', 'email']
+        });
+
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+        try {
+          await GoogleSignin.signIn();
+          const tokens = await GoogleSignin.getTokens();
+          await loginWithGoogle({ accessToken: tokens.accessToken, idToken: tokens.idToken });
+        } catch (nativeErr: unknown) {
+          // If native fails due to developer misconfiguration, fall back to Expo AuthSession instead of surfacing the raw error.
+          const isDevError = (typeof nativeErr === 'object' && nativeErr !== null && 'code' in (nativeErr as any) && (nativeErr as any).code === 'DEVELOPER_ERROR') ||
+            (nativeErr instanceof Error && /DEVELOPER_ERROR/i.test(nativeErr.message));
+
+          if (isDevError) {
+            try {
+              await tryAuthSessionFallback();
+              return;
+            } catch (fallbackErr) {
+              onError(fallbackErr instanceof Error ? fallbackErr.message : 'Google sign-in failed');
+              return;
+            }
+          }
+
+          if (googleStatusCodes && isGoogleSignInError(nativeErr, googleStatusCodes.SIGN_IN_CANCELLED)) return;
+          if (googleStatusCodes && isGoogleSignInError(nativeErr, googleStatusCodes.PLAY_SERVICES_NOT_AVAILABLE)) {
+            onError('Google Play Services is not available or needs to be updated.');
+            return;
+          }
+
+          throw nativeErr;
+        }
+      } else {
+        // No native module available — use AuthSession fallback
+        await tryAuthSessionFallback();
+      }
     } catch (err) {
       if (googleStatusCodes && isGoogleSignInError(err, googleStatusCodes.SIGN_IN_CANCELLED)) return;
       if (googleStatusCodes && isGoogleSignInError(err, googleStatusCodes.PLAY_SERVICES_NOT_AVAILABLE)) {

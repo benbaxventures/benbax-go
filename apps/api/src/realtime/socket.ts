@@ -27,6 +27,7 @@ export function registerRealtimeHandlers(io: Server) {
 
     socket.join(`user:${user.id}`);
     if (user.role === 'RIDER') socket.join(`rider:${user.id}`);
+    if (user.role === 'DRIVER') socket.join(`driver:${user.id}`);
     if (['ADMIN', 'OPERATIONS', 'SUPPORT'].includes(user.role)) socket.join('admins');
 
     socket.on('delivery:join', (deliveryId: string) => {
@@ -35,6 +36,14 @@ export function registerRealtimeHandlers(io: Server) {
 
     socket.on('delivery:leave', (deliveryId: string) => {
       socket.leave(`delivery:${deliveryId}`);
+    });
+
+    socket.on('ride:join', (tripId: string) => {
+      socket.join(`ride:${tripId}`);
+    });
+
+    socket.on('ride:leave', (tripId: string) => {
+      socket.leave(`ride:${tripId}`);
     });
 
     socket.on(realtimeEvents.chatMessage, (payload) => {
