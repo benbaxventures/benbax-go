@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 const ACCESS_TOKEN_KEY = 'benbax.accessToken';
 const REFRESH_TOKEN_KEY = 'benbax.refreshToken';
@@ -14,7 +15,11 @@ type StoredUser = {
 };
 
 export async function getAccessToken() {
-  return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+  try {
+    return await SecureStore.getItemAsync(ACCESS_TOKEN_KEY);
+  } catch {
+    return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+  }
 }
 
 export async function saveAuthSession(input: {
@@ -22,15 +27,32 @@ export async function saveAuthSession(input: {
   refreshToken: string;
   user: StoredUser;
 }, rememberMe = true) {
-  await Promise.all([
-    AsyncStorage.setItem(ACCESS_TOKEN_KEY, input.accessToken),
-    AsyncStorage.setItem(REFRESH_TOKEN_KEY, input.refreshToken),
-    AsyncStorage.setItem(USER_KEY, JSON.stringify(input.user)),
-    AsyncStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false')
-  ]);
+  try {
+    await Promise.all([
+      SecureStore.setItemAsync(ACCESS_TOKEN_KEY, input.accessToken),
+      SecureStore.setItemAsync(REFRESH_TOKEN_KEY, input.refreshToken),
+      AsyncStorage.setItem(USER_KEY, JSON.stringify(input.user)),
+      AsyncStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false')
+    ]);
+  } catch {
+    await Promise.all([
+      AsyncStorage.setItem(ACCESS_TOKEN_KEY, input.accessToken),
+      AsyncStorage.setItem(REFRESH_TOKEN_KEY, input.refreshToken),
+      AsyncStorage.setItem(USER_KEY, JSON.stringify(input.user)),
+      AsyncStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false')
+    ]);
+  }
 }
 
 export async function clearAuthSession() {
+  try {
+    await Promise.all([
+      SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
+      SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY)
+    ]);
+  } catch {
+    // fall through
+  }
   await Promise.all([
     AsyncStorage.removeItem(ACCESS_TOKEN_KEY),
     AsyncStorage.removeItem(REFRESH_TOKEN_KEY),

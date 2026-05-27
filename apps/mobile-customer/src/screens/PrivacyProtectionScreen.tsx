@@ -1,11 +1,15 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, Switch, Text, View } from 'react-native';
-import { Bell, ChevronLeft, History, MapPin, PhoneOff, ShieldCheck } from 'lucide-react-native';
+import { Alert, ActivityIndicator, Linking, Pressable, Switch, Text, View } from 'react-native';
+import { Bell, ChevronLeft, Download, Fingerprint, History, MapPin, PhoneOff, ShieldCheck, Trash2 } from 'lucide-react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '../components/Screen';
 import { usePrivacySettings, type PrivacySettings } from '../hooks/usePrivacySettings';
+import { deleteAccount, exportMyData } from '../services/privacy';
+import { useAuthStore } from '../store/authStore';
 import type { RootStackParamList } from '../navigation/types';
 import { theme } from '../theme/tokens';
+import { useState } from 'react';
+import * as LocalAuthentication from 'expo-local-authentication';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PrivacyProtection'>;
 
@@ -40,11 +44,80 @@ const options: PrivacyOption[] = [
     title: 'Safety alerts',
     description: 'Receive alerts about route changes, emergency events, and unusual delivery activity.',
     icon: <Bell size={20} color={theme.colors.primary} />
+  },
+  {
+    key: 'biometricLock',
+    title: 'Biometric lock',
+    description: 'Require Face ID or fingerprint to open the app.',
+    icon: <Fingerprint size={20} color={theme.colors.primary} />
   }
 ];
 
 export function PrivacyProtectionScreen({ navigation }: Props) {
   const { settings, isLoading, updateSetting } = usePrivacySettings();
+  const logout = useAuthStore((state) => state.logout);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  async function handleExport() {
+    setIsExporting(true);
+    try {
+      const data = await exportMyData();
+      Alert.alert('Data exported', `Your data has been retrieved (${Object.keys(data).length} sections). Check your profile for details.`);
+    } catch {
+      Alert.alert('Export failed', 'Could not export your data. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
+  function confirmDelete() {
+    Alert.alert(
+      'Delete account',
+      'This will permanently delete your account, personal data, and all associated records. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete my account', style: 'destructive', onPress: handleDelete }
+      ]
+    );
+  }
+
+  async function handleDelete() {
+    setIsDeleting(true);
+    try {
+      await deleteAccount();
+      await logout();
+    } catch {
+      Alert.alert('Deletion failed', 'Could not delete your account. Please contact support.');
+      setIsDeleting(false);
+    }
+  }
+
+  async function handleBiometricToggle(value: boolean) {
+    if (!value) {
+      await updateSetting('biometricLock', false);
+      return;
+    }
+
+    const enrolled = await LocalAuthentication.isEnrolledAsync();
+    if (!enrolled) {
+      Alert.alert(
+        'Biometric not set up',
+        'Please enrol Face ID or fingerprint in your device settings first.',
+        [{ text: 'OK', style: 'default' }]
+      );
+      return;
+    }
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Authenticate to enable biometric lock',
+      fallbackLabel: 'Use passcode'
+    });
+
+    if (result.success) {
+      await updateSetting('biometricLock', true);
+    }
+  }
 
   return (
     <Screen>
@@ -111,13 +184,86 @@ export function PrivacyProtectionScreen({ navigation }: Props) {
               </View>
               <Switch
                 value={settings[option.key]}
-                onValueChange={(value) => void updateSetting(option.key, value)}
+                onValueChange={option.key === 'biometricLock' ? handleBiometricToggle : (value) => void updateSetting(option.key, value)}
                 trackColor={{ false: theme.colors.border, true: '#9BE5D4' }}
                 thumbColor={settings[option.key] ? theme.colors.primary : '#fff'}
               />
             </View>
           </View>
         ))}
+      </View>
+
+      <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: 16, gap: 10 }}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={isExporting}
+          onPress={handleExport}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            padding: 14,
+            borderRadius: 8,
+            backgroundColor: theme.colors.surface,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            opacity: isExporting ? 0.6 : 1
+          }}
+        >
+          <Download size={20} color={theme.colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.ink, fontSize: 16, fontWeight: '900' }}>Export my data</Text>
+            <Text style={{ color: theme.colors.muted, marginTop: 3 }}>Download a copy of your personal data</Text>
+          </View>
+          {isExporting ? <ActivityIndicator color={theme.colors.primary} /> : null}
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => Linking.openURL('https://benbax.com/privacy')}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            padding: 14,
+            borderRadius: 8,
+            backgroundColor: theme.colors.surface,
+            borderWidth: 1,
+            borderColor: theme.colors.border
+          }}
+        >
+          <ShieldCheck size={20} color={theme.colors.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.ink, fontSize: 16, fontWeight: '900' }}>Privacy policy</Text>
+            <Text style={{ color: theme.colors.muted, marginTop: 3 }}>How we handle your data</Text>
+          </View>
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={isDeleting}
+          onPress={confirmDelete}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            padding: 14,
+            borderRadius: 8,
+            backgroundColor: theme.colors.surface,
+            borderWidth: 1,
+            borderColor: '#FCA5A5',
+            opacity: isDeleting ? 0.6 : 1
+          }}
+        >
+          <Trash2 size={20} color="#EF4444" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#EF4444', fontSize: 16, fontWeight: '900' }}>
+              {isDeleting ? 'Deleting...' : 'Delete my account'}
+            </Text>
+            <Text style={{ color: theme.colors.muted, marginTop: 3 }}>Permanently remove your account and data</Text>
+          </View>
+          {isDeleting ? <ActivityIndicator color="#EF4444" /> : null}
+        </Pressable>
       </View>
     </Screen>
   );
