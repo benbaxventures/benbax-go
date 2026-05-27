@@ -7,12 +7,14 @@ import { ActivityIndicator, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { PaymentCheckoutScreen } from '../screens/PaymentCheckoutScreen';
 import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { PrivacyProtectionScreen } from '../screens/PrivacyProtectionScreen';
+import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { SignInScreen } from '../screens/SignInScreen';
 import { SupportScreen } from '../screens/SupportScreen';
 import { TrackingScreen } from '../screens/TrackingScreen';
@@ -77,7 +79,11 @@ export function RootNavigator() {
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
           </>
         ) : (
-          <Stack.Screen name="SignIn" component={SignInScreen} />
+          <>
+            <Stack.Screen name="SignIn" component={SignInScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

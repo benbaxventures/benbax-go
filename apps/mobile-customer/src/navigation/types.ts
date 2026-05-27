@@ -1,5 +1,7 @@
 export type RootStackParamList = {
   SignIn: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { phone: string; resetToken: string };
   MainTabs: undefined;
   Tracking: { deliveryId: string };
   PaymentCheckout: {

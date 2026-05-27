@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import Constants from 'expo-constants';
-import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View, Switch } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { Button } from '../components/Button';
 import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
+import type { RootStackParamList } from '../navigation/types';
 
 type GoogleSignInModule = typeof import('@react-native-google-signin/google-signin');
 
@@ -30,16 +33,18 @@ export function SignInScreen() {
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { login, register, loginWithGoogle } = useAuthStore();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const googleSignInUnavailableReason = getGoogleSignInUnavailableReason();
 
   async function submit() {
     setLoading(true);
     setError(null);
     try {
-      if (mode === 'login') await login(phone, password);
+      if (mode === 'login') await login(phone, password, rememberMe);
       else await register({ name, phone, password });
     } catch (err) {
       if (isApiConnectionError(err)) {
@@ -116,6 +121,22 @@ export function SignInScreen() {
             </Pressable>
           </View>
         </View>
+        {mode === 'login' ? (
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Switch
+                value={rememberMe}
+                onValueChange={setRememberMe}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+              <Text style={{ color: theme.colors.ink }}>Remember me</Text>
+            </View>
+            <Pressable onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Forgot password?</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
         <Button label={mode === 'login' ? 'Sign in' : 'Create driver account'} onPress={submit} loading={loading} />
         {mode === 'login' ? (

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useAdminSession } from '../state/adminSession';
 
 export function LoginPage() {
-  const [phone, setPhone] = useState('+233200000001');
-  const [password, setPassword] = useState('BenbaxDemo123!');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const login = useAdminSession((state) => state.login);

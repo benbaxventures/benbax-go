@@ -5,6 +5,7 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { created, ok } from '../../utils/response';
+import { dispatchRide } from '../dispatch/dispatch.service';
 import * as service from './rides.service';
 
 export const ridesRouter = Router();
@@ -50,15 +51,14 @@ ridesRouter.post(
   '/',
   requireRoles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.OPERATIONS),
   validate(createSchema),
-  asyncHandler(async (req, res) =>
-    created(
-      res,
-      await service.createRide({
-        ...req.body,
-        passengerId: req.user!.id
-      })
-    )
-  )
+  asyncHandler(async (req, res) => {
+    const trip = await service.createRide({
+      ...req.body,
+      passengerId: req.user!.id
+    });
+    void dispatchRide(trip.id, req.app.get('io'));
+    return created(res, trip);
+  })
 );
 
 ridesRouter.get(

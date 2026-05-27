@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
-import { CheckCircle2, Power, XCircle } from 'lucide-react-native';
+import { CheckCircle2, Crosshair, Power, XCircle } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
 import { realtimeEvents } from '@benbax/shared';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
+import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useRiderStore } from '../store/riderStore';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
@@ -16,6 +17,7 @@ export function DispatchScreen() {
   const { isOnline, setOnline, currentOffer, setCurrentOffer } = useRiderStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { latitude, longitude, loading: locationLoading, requestLocation } = useCurrentLocation();
 
   useEffect(() => {
     let cleanup: () => void = () => undefined;
@@ -34,10 +36,18 @@ export function DispatchScreen() {
     setLoading(true);
     const next = !isOnline;
     setError(null);
+
+    if (latitude === 0 && longitude === 0) {
+      await requestLocation();
+    }
+
+    const lat = latitude || 5.6508;
+    const lng = longitude || -0.1668;
+
     try {
       await apiRequest('/riders/me/availability', {
         method: 'PATCH',
-        body: JSON.stringify({ isOnline: next, latitude: 5.6508, longitude: -0.1668 })
+        body: JSON.stringify({ isOnline: next, latitude: lat, longitude: lng })
       });
       setOnline(next);
     } catch (err) {
@@ -78,6 +88,21 @@ export function DispatchScreen() {
       </View>
 
       {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
+
+      <Pressable
+        onPress={requestLocation}
+        style={{
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          paddingVertical: 6, paddingHorizontal: 12,
+          alignSelf: 'flex-start', borderRadius: 6,
+          backgroundColor: theme.colors.surface
+        }}
+      >
+        <Crosshair size={14} color={theme.colors.primary} />
+        <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
+          {locationLoading ? 'Detecting...' : latitude && longitude ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}` : 'Update location'}
+        </Text>
+      </Pressable>
 
       <Pressable
         onPress={toggleOnline}

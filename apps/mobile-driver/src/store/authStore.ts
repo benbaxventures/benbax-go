@@ -13,8 +13,8 @@ type DriverUser = {
 type AuthState = {
   user: DriverUser | null;
   isHydrating: boolean;
-  login: (phone: string, password: string) => Promise<void>;
-  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string }) => Promise<void>;
+  login: (phone: string, password: string, rememberMe?: boolean) => Promise<void>;
+  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string }, rememberMe?: boolean) => Promise<void>;
   register: (input: { name: string; phone: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
@@ -24,7 +24,7 @@ type AuthState = {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isHydrating: true,
-  async login(phone, password) {
+  async login(phone, password, rememberMe = true) {
     const data = await apiRequest<{ user: DriverUser; tokens: { accessToken: string; refreshToken: string } }>(
       '/auth/login',
       {
@@ -36,11 +36,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     await AsyncStorage.multiSet([
       ['benbax.driver.accessToken', data.tokens.accessToken],
       ['benbax.driver.refreshToken', data.tokens.refreshToken],
-      ['benbax.driver.user', JSON.stringify(data.user)]
+      ['benbax.driver.user', JSON.stringify(data.user)],
+      ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false']
     ]);
     set({ user: data.user });
   },
-  async loginWithGoogle(tokens) {
+  async loginWithGoogle(tokens, rememberMe = true) {
     const data = await apiRequest<{ user: DriverUser; tokens: { accessToken: string; refreshToken: string } }>(
       '/auth/google',
       {
@@ -52,7 +53,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     await AsyncStorage.multiSet([
       ['benbax.driver.accessToken', data.tokens.accessToken],
       ['benbax.driver.refreshToken', data.tokens.refreshToken],
-      ['benbax.driver.user', JSON.stringify(data.user)]
+      ['benbax.driver.user', JSON.stringify(data.user)],
+      ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false']
     ]);
     set({ user: data.user });
   },
@@ -68,17 +70,20 @@ export const useAuthStore = create<AuthState>((set) => ({
     await AsyncStorage.multiSet([
       ['benbax.driver.accessToken', data.tokens.accessToken],
       ['benbax.driver.refreshToken', data.tokens.refreshToken],
-      ['benbax.driver.user', JSON.stringify(data.user)]
+      ['benbax.driver.user', JSON.stringify(data.user)],
+      ['benbax.driver.rememberMe', 'true']
     ]);
     set({ user: data.user });
   },
-  async logout() {
-    await AsyncStorage.multiRemove(['benbax.driver.accessToken', 'benbax.driver.refreshToken', 'benbax.driver.user']);
-    set({ user: null });
-  },
   async hydrate() {
-    const raw = await AsyncStorage.getItem('benbax.driver.user');
-    set({ user: raw ? JSON.parse(raw) : null, isHydrating: false });
+    const [raw, rememberMe] = await AsyncStorage.multiGet(['benbax.driver.user', 'benbax.driver.rememberMe']);
+    const shouldRestore = rememberMe[1] !== 'false';
+    set({ user: shouldRestore && raw[1] ? JSON.parse(raw[1]) : null, isHydrating: false });
+  },
+
+  async logout() {
+    await AsyncStorage.multiRemove(['benbax.driver.accessToken', 'benbax.driver.refreshToken', 'benbax.driver.user', 'benbax.driver.rememberMe']);
+    set({ user: null });
   },
   async updateUser(updated) {
     const currentUser = useAuthStore.getState().user;

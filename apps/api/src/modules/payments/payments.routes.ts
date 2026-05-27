@@ -76,20 +76,30 @@ async function markPaystackWalletTopup(reference: string) {
   const wt = await prisma.walletTransaction.findFirst({ where: { reference } });
   if (!wt) throw notFound('Wallet transaction not found');
 
+  const meta = wt.metadata as Record<string, unknown> | null;
+  if (meta?.status === 'success') {
+    return { wallet: await prisma.wallet.findUnique({ where: { id: wt.walletId } }) };
+  }
+
   const transaction = (await verifyPaystackTransaction(reference)) as PaystackTransaction;
   const isPaid = transaction.status === 'success' && transaction.currency === 'GHS' && transaction.amount === toPesewas(wt.amount);
 
-  // update transaction metadata
-  await prisma.walletTransaction.update({ where: { id: wt.id }, data: { metadata: transaction as unknown as Prisma.InputJsonValue } });
+  await prisma.walletTransaction.update({
+    where: { id: wt.id },
+    data: { metadata: transaction as unknown as Prisma.InputJsonValue }
+  });
 
   if (!isPaid) {
     return null;
   }
 
-  // credit wallet balance
-  await prisma.wallet.update({ where: { id: wt.walletId }, data: { balance: { increment: transaction.amount / 100 } } as any });
+  const amount = new Prisma.Decimal(transaction.amount).div(100);
+  const wallet = await prisma.wallet.update({
+    where: { id: wt.walletId },
+    data: { balance: { increment: amount } }
+  });
 
-  return true;
+  return { wallet };
 }
 
 paymentsRouter.post(
@@ -289,13 +299,15 @@ paymentsRouter.post(
     const reference = req.params.reference;
     if (!reference) throw badRequest('Payment reference is required');
 
-    const wt = await prisma.walletTransaction.findFirst({ where: { reference }, include: { wallet: true } });
-    if (!wt) throw notFound('Wallet transaction not found');
-
     const result = await markPaystackWalletTopup(reference);
     if (!result) throw badRequest('Payment not confirmed');
 
-    return ok(res, { walletTransaction: wt });
+    const walletTransaction = await prisma.walletTransaction.findFirst({
+      where: { reference },
+      include: { wallet: true }
+    });
+
+    return ok(res, { walletTransaction, wallet: result.wallet });
   })
 );
 

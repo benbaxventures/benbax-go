@@ -60,6 +60,30 @@ authRouter.post(
   )
 );
 
+const forgotPasswordSchema = z.object({
+  body: z.object({ phone: z.string().min(8) })
+});
+
+const resetPasswordSchema = z.object({
+  body: z.object({
+    phone: z.string().min(8),
+    token: z.string().length(6),
+    newPassword: z.string().min(8)
+  })
+});
+
+authRouter.post(
+  '/forgot-password',
+  validate(forgotPasswordSchema),
+  asyncHandler(async (req, res) => ok(res, await service.forgotPassword(req.body.phone)))
+);
+
+authRouter.post(
+  '/reset-password',
+  validate(resetPasswordSchema),
+  asyncHandler(async (req, res) => ok(res, await service.resetPassword(req.body.phone, req.body.token, req.body.newPassword)))
+);
+
 authRouter.get(
   '/me',
   requireAuth,

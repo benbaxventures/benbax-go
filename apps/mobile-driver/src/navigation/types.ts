@@ -1,8 +1,9 @@
 export type RootStackParamList = {
   SignIn: undefined;
+  ForgotPassword: undefined;
+  ResetPassword: { phone: string; resetToken: string };
   MainTabs: undefined;
   ActiveTrip: { tripId: string };
-  WalletCheckout: { authorizationUrl: string; reference: string; walletTransactionId?: string };
   EditProfile: undefined;
   Wallet: undefined;
 };

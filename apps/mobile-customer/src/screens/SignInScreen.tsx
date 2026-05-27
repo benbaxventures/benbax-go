@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import Constants from 'expo-constants';
-import { KeyboardAvoidingView, Platform, Text, TextInput, View, TouchableOpacity } from 'react-native';
+import { KeyboardAvoidingView, Platform, Text, TextInput, View, TouchableOpacity, Switch, Pressable } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { Button } from '../components/Button';
 import { checkApiHealth, getApiBaseUrl, isApiConnectionError, ApiResponseError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
+import type { RootStackParamList } from '../navigation/types';
 
 type GoogleSignInModule = typeof import('@react-native-google-signin/google-signin');
 
@@ -16,11 +19,13 @@ export function SignInScreen() {
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [apiStatus, setApiStatus] = useState<'online' | 'api_offline' | 'database_offline' | null>(null);
   const [checkingApi, setCheckingApi] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuthStore();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const googleSignInUnavailableReason = getGoogleSignInUnavailableReason();
   const insets = useSafeAreaInsets();
 
@@ -45,7 +50,7 @@ export function SignInScreen() {
     setLoading(true);
     setError(null);
     try {
-      if (mode === 'login') await login(phone, password);
+      if (mode === 'login') await login(phone, password, rememberMe);
       else await register({ name, phone, password });
     } catch (err) {
       if (isApiConnectionError(err)) {
@@ -144,6 +149,23 @@ export function SignInScreen() {
             {showPassword ? <EyeOff size={20} color={theme.colors.muted} /> : <Eye size={20} color={theme.colors.muted} />}
           </TouchableOpacity>
         </View>
+
+        {mode === 'login' ? (
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Switch
+                value={rememberMe}
+                onValueChange={setRememberMe}
+                trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+                thumbColor="#fff"
+              />
+              <Text style={{ color: theme.colors.ink }}>Remember me</Text>
+            </View>
+            <Pressable onPress={() => navigation.navigate('ForgotPassword')}>
+              <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Forgot password?</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
 

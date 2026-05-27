@@ -5,6 +5,7 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { created, ok } from '../../utils/response';
+import { dispatchDelivery } from '../dispatch/dispatch.service';
 import * as service from './deliveries.service';
 
 export const deliveriesRouter = Router();
@@ -56,15 +57,14 @@ deliveriesRouter.post(
   '/',
   requireRoles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.OPERATIONS),
   validate(createSchema),
-  asyncHandler(async (req, res) =>
-    created(
-      res,
-      await service.createDelivery({
-        ...req.body,
-        customerId: req.user!.id
-      })
-    )
-  )
+  asyncHandler(async (req, res) => {
+    const delivery = await service.createDelivery({
+      ...req.body,
+      customerId: req.user!.id
+    });
+    void dispatchDelivery(delivery.id, req.app.get('io'));
+    return created(res, delivery);
+  })
 );
 
 deliveriesRouter.get(

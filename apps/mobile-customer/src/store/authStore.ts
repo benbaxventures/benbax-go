@@ -13,8 +13,8 @@ type User = {
 type AuthState = {
   user: User | null;
   isHydrating: boolean;
-  login: (phone: string, password: string) => Promise<void>;
-  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string }) => Promise<void>;
+  login: (phone: string, password: string, rememberMe?: boolean) => Promise<void>;
+  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string }, rememberMe?: boolean) => Promise<void>;
   register: (input: { name: string; phone: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
@@ -23,7 +23,7 @@ type AuthState = {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isHydrating: true,
-  async login(phone, password) {
+  async login(phone, password, rememberMe = true) {
     const data = await apiRequest<{ user: User; tokens: { accessToken: string; refreshToken: string } }>(
       '/auth/login',
       {
@@ -32,10 +32,10 @@ export const useAuthStore = create<AuthState>((set) => ({
         skipAuth: true
       }
     );
-    await saveAuthSession({ ...data.tokens, user: data.user });
+    await saveAuthSession({ ...data.tokens, user: data.user }, rememberMe);
     set({ user: data.user });
   },
-  async loginWithGoogle(tokens) {
+  async loginWithGoogle(tokens, rememberMe = true) {
     const data = await apiRequest<{ user: User; tokens: { accessToken: string; refreshToken: string } }>(
       '/auth/google',
       {
@@ -44,7 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         skipAuth: true
       }
     );
-    await saveAuthSession({ ...data.tokens, user: data.user });
+    await saveAuthSession({ ...data.tokens, user: data.user }, rememberMe);
     set({ user: data.user });
   },
   async register(input) {
@@ -56,7 +56,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         skipAuth: true
       }
     );
-    await saveAuthSession({ ...data.tokens, user: data.user });
+    await saveAuthSession({ ...data.tokens, user: data.user }, true);
     set({ user: data.user });
   },
   async logout() {

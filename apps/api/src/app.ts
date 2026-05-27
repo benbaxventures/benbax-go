@@ -3,6 +3,7 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import { corsOrigins } from './config/env';
 import { prisma } from './config/prisma';
 import { errorHandler } from './middleware/error';
@@ -30,6 +31,27 @@ export function createApp() {
   );
   app.use(express.urlencoded({ extended: true }));
   app.use(morgan('tiny'));
+
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later' } }
+  });
+  app.use('/api/', limiter);
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { ok: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts, please try again later' } }
+  });
+  app.use('/api/v1/auth/login', authLimiter);
+  app.use('/api/v1/auth/register', authLimiter);
+  app.use('/api/v1/auth/forgot-password', authLimiter);
+  app.use('/api/v1/auth/reset-password', authLimiter);
 
   app.get('/health', async (_req, res) => {
     try {

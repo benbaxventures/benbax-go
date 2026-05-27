@@ -1,6 +1,7 @@
 import type { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
+import { prisma } from '../config/prisma';
 import { realtimeEvents } from './events';
 
 type SocketAuth = {
@@ -22,13 +23,20 @@ export function registerRealtimeHandlers(io: Server) {
     }
   });
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     const user = socket.data.user as { id: string; role: string };
 
     socket.join(`user:${user.id}`);
     if (user.role === 'RIDER') socket.join(`rider:${user.id}`);
     if (user.role === 'DRIVER') socket.join(`driver:${user.id}`);
     if (['ADMIN', 'OPERATIONS', 'SUPPORT'].includes(user.role)) socket.join('admins');
+
+    try {
+      await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
+    } catch {}
+
+    socket.to(`user:${user.id}`).emit(realtimeEvents.userPresence, { userId: user.id, online: true });
+    io.to('admins').emit(realtimeEvents.userPresence, { userId: user.id, online: true });
 
     socket.on('delivery:join', (deliveryId: string) => {
       socket.join(`delivery:${deliveryId}`);
@@ -52,6 +60,14 @@ export function registerRealtimeHandlers(io: Server) {
         senderId: user.id,
         sentAt: new Date().toISOString()
       });
+    });
+
+    socket.on('disconnect', async () => {
+      try {
+        await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
+      } catch {}
+      io.to(`user:${user.id}`).emit(realtimeEvents.userPresence, { userId: user.id, online: false });
+      io.to('admins').emit(realtimeEvents.userPresence, { userId: user.id, online: false });
     });
   });
 }

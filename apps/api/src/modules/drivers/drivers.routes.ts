@@ -69,7 +69,9 @@ driversRouter.patch(
       }
     });
 
-    req.app.get('io')?.to('admins').emit(realtimeEvents.driverAvailability, driver);
+    const io = req.app.get('io');
+    io?.to(`driver:${driver.userId}`).emit(realtimeEvents.driverAvailability, driver);
+    io?.to('admins').emit(realtimeEvents.driverAvailability, driver);
     return ok(res, driver);
   })
 );

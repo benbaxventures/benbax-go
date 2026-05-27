@@ -11,8 +11,9 @@ import { EarningsScreen } from '../screens/EarningsScreen';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { KycScreen } from '../screens/KycScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
+import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { SignInScreen } from '../screens/SignInScreen';
-import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
@@ -69,12 +70,15 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="ActiveTrip" component={ActiveTripScreen} />
-            <Stack.Screen name="WalletCheckout" component={WalletCheckoutScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Wallet" component={WalletScreen} />
           </>
         ) : (
-          <Stack.Screen name="SignIn" component={SignInScreen} />
+          <>
+            <Stack.Screen name="SignIn" component={SignInScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

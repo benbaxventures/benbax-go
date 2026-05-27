@@ -138,9 +138,10 @@ model User {
   rideRatingsGiven RideRating[]     @relation("RideRatingsGiven")
   messages      ChatMessage[]
   deviceTokens  DeviceToken[]
-  refreshTokens RefreshToken[]
-  supportCases  SupportTicket[]    @relation("TicketRequester")
-  auditLogs     AuditLog[]         @relation("AuditActor")
+  refreshTokens     RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  supportCases      SupportTicket[]    @relation("TicketRequester")
+  auditLogs         AuditLog[]         @relation("AuditActor")
   notifications Notification[]
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
@@ -601,6 +602,19 @@ model PricingRule {
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([token])
 }
 
 model EmergencyIncident {

@@ -92,6 +92,41 @@ export type RiderAssignment = {
   expiresAt: string;
 };
 
+export type RideQuote = {
+  distanceKm: number;
+  estimatedMinutes: number;
+  baseFare: number;
+  perKmFare: number;
+  perMinuteFare: number;
+  surgeMultiplier: number;
+  vehicleMultiplier: number;
+  total: number;
+  serviceFee: number;
+  currency: 'GHS';
+};
+
+export type RideTripSummary = {
+  id: string;
+  tripCode: string;
+  status: RideTripStatus;
+  pickup: AddressPoint;
+  dropoff: AddressPoint;
+  requestedVehicleType?: string;
+  distanceKm: number;
+  etaMinutes: number;
+  totalFare: number;
+  driver?: {
+    id: string;
+    name: string;
+    phone: string;
+    rating: number;
+    avatarUrl?: string;
+    vehicleType?: string;
+    plateNumber?: string;
+  };
+  createdAt: string;
+};
+
 export type ApiErrorShape = {
   code: string;
   message: string;

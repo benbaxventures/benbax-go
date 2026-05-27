@@ -1,10 +1,11 @@
+import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import axios from 'axios';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { Prisma, UserRole } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
-import { badRequest, unauthorized } from '../../utils/http';
+import { badRequest, notFound, unauthorized } from '../../utils/http';
 
 type RegisterInput = {
   name: string;
@@ -187,6 +188,38 @@ export async function googleLogin(input: GoogleLoginInput) {
   });
 
   return authPayload(user);
+}
+
+export async function forgotPassword(phone: string) {
+  const user = await prisma.user.findUnique({ where: { phone } });
+  if (!user) throw notFound('No account found with this phone number');
+
+  const token = crypto.randomInt(100000, 999999).toString();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+  await prisma.passwordResetToken.create({
+    data: { userId: user.id, token, expiresAt }
+  });
+
+  return { message: 'Reset code sent' };
+}
+
+export async function resetPassword(phone: string, token: string, newPassword: string) {
+  const user = await prisma.user.findUnique({ where: { phone } });
+  if (!user) throw notFound('No account found with this phone number');
+
+  const resetToken = await prisma.passwordResetToken.findFirst({
+    where: { token, userId: user.id, usedAt: null, expiresAt: { gte: new Date() } }
+  });
+  if (!resetToken) throw badRequest('Invalid or expired reset code');
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+    prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } })
+  ]);
+
+  return { message: 'Password updated successfully' };
 }
 
 export async function me(userId: string) {

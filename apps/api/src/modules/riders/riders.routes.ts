@@ -66,7 +66,9 @@ ridersRouter.patch(
       }
     });
 
-    req.app.get('io')?.to('admins').emit(realtimeEvents.riderAvailability, rider);
+    const io = req.app.get('io');
+    io?.to(`rider:${rider.userId}`).emit(realtimeEvents.riderAvailability, rider);
+    io?.to('admins').emit(realtimeEvents.riderAvailability, rider);
     return ok(res, rider);
   })
 );

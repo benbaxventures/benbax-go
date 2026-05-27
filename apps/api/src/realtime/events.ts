@@ -15,5 +15,6 @@ export const realtimeEvents = {
   driverWarning: 'driver:warning',
   emergencyRaised: 'emergency:raised',
   adminAlert: 'admin:alert',
-  chatMessage: 'chat:message'
+  chatMessage: 'chat:message',
+  userPresence: 'user:presence'
 } as const;
