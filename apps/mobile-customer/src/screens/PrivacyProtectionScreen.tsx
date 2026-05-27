@@ -9,7 +9,6 @@ import { useAuthStore } from '../store/authStore';
 import type { RootStackParamList } from '../navigation/types';
 import { theme } from '../theme/tokens';
 import { useState } from 'react';
-import * as LocalAuthentication from 'expo-local-authentication';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PrivacyProtection'>;
 
@@ -99,23 +98,28 @@ export function PrivacyProtectionScreen({ navigation }: Props) {
       return;
     }
 
-    const enrolled = await LocalAuthentication.isEnrolledAsync();
-    if (!enrolled) {
-      Alert.alert(
-        'Biometric not set up',
-        'Please enrol Face ID or fingerprint in your device settings first.',
-        [{ text: 'OK', style: 'default' }]
-      );
-      return;
-    }
+    try {
+      const LocalAuthentication = await import('expo-local-authentication');
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!enrolled) {
+        Alert.alert(
+          'Biometric not set up',
+          'Please enrol Face ID or fingerprint in your device settings first.',
+          [{ text: 'OK', style: 'default' }]
+        );
+        return;
+      }
 
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Authenticate to enable biometric lock',
-      fallbackLabel: 'Use passcode'
-    });
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Authenticate to enable biometric lock',
+        fallbackLabel: 'Use passcode'
+      });
 
-    if (result.success) {
-      await updateSetting('biometricLock', true);
+      if (result.success) {
+        await updateSetting('biometricLock', true);
+      }
+    } catch {
+      Alert.alert('Not available', 'Biometric authentication is not supported on this device.');
     }
   }
 
