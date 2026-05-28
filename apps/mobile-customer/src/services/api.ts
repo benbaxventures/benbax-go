@@ -2,12 +2,22 @@ import type { ApiResponse } from '@benbax/shared';
 import { getAccessToken } from './authStorage';
 import { resolveApiBaseUrl } from './network';
 
-const API_BASE_URL = resolveApiBaseUrl();
-const API_ORIGIN = API_BASE_URL.replace(/\/api\/v\d+\/?$/, '');
+let _apiBaseUrl: string | null = null;
+let _apiOrigin: string | null = null;
+
+function getApiBaseUrlCached() {
+  if (!_apiBaseUrl) _apiBaseUrl = resolveApiBaseUrl();
+  return _apiBaseUrl;
+}
+
+function getApiOriginCached() {
+  if (!_apiOrigin) _apiOrigin = getApiBaseUrlCached().replace(/\/api\/v\d+\/?$/, '');
+  return _apiOrigin;
+}
 
 export class ApiConnectionError extends Error {
   constructor() {
-    super(`Could not reach the Benbax API at ${API_BASE_URL}`);
+    super(`Could not reach the Benbax API at ${getApiBaseUrlCached()}`);
     this.name = 'ApiConnectionError';
   }
 }
@@ -27,7 +37,7 @@ export class ApiResponseError extends Error {
 }
 
 export function getApiBaseUrl() {
-  return API_BASE_URL;
+  return getApiBaseUrlCached();
 }
 
 export function isApiConnectionError(error: unknown) {
@@ -36,7 +46,7 @@ export function isApiConnectionError(error: unknown) {
 
 export async function checkApiHealth() {
   try {
-    const response = await fetch(`${API_ORIGIN}/health`);
+    const response = await fetch(`${getApiOriginCached()}/health`);
     if (response.ok) return 'online';
     if (response.status === 503) return 'database_offline';
     return 'api_offline';
@@ -57,7 +67,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${getApiBaseUrlCached()}${path}`, {
       ...options,
       headers
     });

@@ -3,13 +3,17 @@ import Constants from 'expo-constants';
 const API_PORT = 4000;
 
 function getExpoHost() {
-  const legacyManifest = Constants.manifest as { debuggerHost?: string } | null;
-  const hostUri =
-    Constants.expoConfig?.hostUri ??
-    Constants.manifest2?.extra?.expoGo?.debuggerHost ??
-    legacyManifest?.debuggerHost;
+  try {
+    const legacyManifest = Constants.manifest as { debuggerHost?: string } | null;
+    const hostUri =
+      Constants.expoConfig?.hostUri ??
+      Constants.manifest2?.extra?.expoGo?.debuggerHost ??
+      legacyManifest?.debuggerHost;
 
-  return hostUri?.split(':')[0] ?? null;
+    return hostUri?.split(':')[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function isLocalHost(hostname: string) {

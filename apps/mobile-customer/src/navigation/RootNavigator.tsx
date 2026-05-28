@@ -2,8 +2,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Headphones, Home, Package, User, Wallet } from 'lucide-react-native';
-import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
@@ -19,6 +19,7 @@ import { SignInScreen } from '../screens/SignInScreen';
 import { SupportScreen } from '../screens/SupportScreen';
 import { TrackingScreen } from '../screens/TrackingScreen';
 import { WalletScreen } from '../screens/WalletScreen';
+import { setGlobalErrorFallback } from '../components/ErrorBoundary';
 import type { MainTabsParamList, RootStackParamList } from './types';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
 
@@ -53,10 +54,46 @@ function MainTabs() {
 
 export function RootNavigator() {
   const { user, isHydrating, hydrate } = useAuthStore();
+  const [hydrateError, setHydrateError] = useState<string | null>(null);
+  const hydrateAttempted = useRef(false);
+
+  const doHydrate = useCallback(async () => {
+    if (hydrateAttempted.current) return;
+    hydrateAttempted.current = true;
+    try {
+      await hydrate();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to restore session';
+      console.warn('[hydrate]', message);
+      setHydrateError(message);
+    }
+  }, [hydrate]);
 
   useEffect(() => {
-    hydrate();
-  }, [hydrate]);
+    doHydrate();
+  }, [doHydrate]);
+
+  setGlobalErrorFallback(() => {
+    hydrateAttempted.current = false;
+    setHydrateError(null);
+    doHydrate();
+  });
+
+  if (hydrateError) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.canvas, padding: 32, gap: 12 }}>
+        <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.ink, textAlign: 'center' }}>
+          Session restore failed
+        </Text>
+        <Text style={{ color: theme.colors.muted, textAlign: 'center', fontSize: 14 }}>
+          {hydrateError}
+        </Text>
+        <Text style={{ color: theme.colors.muted, textAlign: 'center', fontSize: 14 }}>
+          Your session data may be corrupted. Try restarting the app or reinstalling.
+        </Text>
+      </View>
+    );
+  }
 
   if (isHydrating) {
     return (

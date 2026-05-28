@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Phone, ShieldCheck } from 'lucide-react-native';
-import { Text, View } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { realtimeEvents } from '@benbax/shared';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
@@ -12,8 +11,6 @@ import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
-
-type Props = NativeStackScreenProps<RootStackParamList, 'Tracking'>;
 
 type Coordinate = {
   latitude: number;
@@ -42,6 +39,73 @@ type DeliveryDetail = {
     };
   }>;
 };
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Tracking'>;
+
+function LazyMap({ pickup, dropoff, latestPoint, routePoints }: {
+  pickup: Coordinate;
+  dropoff: Coordinate;
+  latestPoint: Coordinate | null;
+  routePoints: Coordinate[];
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const modulesRef = useRef<{
+    MapView: any;
+    Marker: any;
+    Polyline: any;
+  } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const mod = await import('react-native-maps');
+        modulesRef.current = {
+          MapView: mod.default,
+          Marker: mod.Marker,
+          Polyline: mod.Polyline
+        };
+        setLoaded(true);
+      } catch {
+        setError('Map view is not available on this device.');
+      }
+    })();
+  }, []);
+
+  if (error) {
+    return (
+      <View style={{ flex: 1, borderRadius: 8, backgroundColor: theme.colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ color: theme.colors.muted }}>{error}</Text>
+      </View>
+    );
+  }
+
+  if (!loaded) {
+    return (
+      <View style={{ flex: 1, borderRadius: 8, backgroundColor: theme.colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  const { MapView, Marker, Polyline } = modulesRef.current!;
+  return (
+    <MapView
+      style={{ flex: 1, borderRadius: 8, overflow: 'hidden' }}
+      initialRegion={{
+        latitude: 5.602,
+        longitude: -0.174,
+        latitudeDelta: 0.12,
+        longitudeDelta: 0.12
+      }}
+    >
+      <Marker coordinate={pickup} title="Pickup" />
+      <Marker coordinate={dropoff} title="Drop-off" />
+      {latestPoint ? <Marker coordinate={latestPoint} title="Rider" pinColor={theme.colors.primary} /> : null}
+      <Polyline coordinates={routePoints} strokeColor={theme.colors.primary} strokeWidth={4} />
+    </MapView>
+  );
+}
 
 export function TrackingScreen({ route }: Props) {
   const [riderPoint, setRiderPoint] = useState<Coordinate | null>(null);
@@ -96,20 +160,7 @@ export function TrackingScreen({ route }: Props) {
           <Text style={{ color: theme.colors.muted }}>OTP verification and proof of delivery protect both sides.</Text>
         </View>
 
-        <MapView
-          style={{ flex: 1, borderRadius: 8, overflow: 'hidden' }}
-          initialRegion={{
-            latitude: 5.602,
-            longitude: -0.174,
-            latitudeDelta: 0.12,
-            longitudeDelta: 0.12
-          }}
-        >
-          <Marker coordinate={pickup} title="Pickup" />
-          <Marker coordinate={dropoff} title="Drop-off" />
-          {latestPoint ? <Marker coordinate={latestPoint} title="Rider" pinColor={theme.colors.primary} /> : null}
-          <Polyline coordinates={routePoints} strokeColor={theme.colors.primary} strokeWidth={4} />
-        </MapView>
+        <LazyMap pickup={pickup} dropoff={dropoff} latestPoint={latestPoint} routePoints={routePoints} />
 
         <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 14, gap: 10 }}>
           <Text style={{ fontWeight: '900', color: theme.colors.ink }}>{rider?.user?.fullName ?? 'Rider'} is on the way</Text>

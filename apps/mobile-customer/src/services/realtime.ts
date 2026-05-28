@@ -2,13 +2,11 @@ import { io, type Socket } from 'socket.io-client';
 import { resolveSocketUrl } from './network';
 import { getAccessToken } from './authStorage';
 
-const SOCKET_URL = resolveSocketUrl();
-
 type SocketHandler = (socket: Socket) => void;
 
 export async function createRealtimeClient(onReady?: SocketHandler) {
   const token = await getAccessToken();
-  const socket = io(SOCKET_URL, {
+  const socket = io(resolveSocketUrl(), {
     transports: ['websocket', 'polling'],
     auth: { token },
     reconnection: true,

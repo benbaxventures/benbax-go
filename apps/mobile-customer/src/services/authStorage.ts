@@ -62,12 +62,22 @@ export async function clearAuthSession() {
 }
 
 export async function getStoredUser() {
-  const [userRaw, rememberMe] = await Promise.all([
-    AsyncStorage.getItem(USER_KEY),
-    AsyncStorage.getItem(REMEMBER_ME_KEY)
-  ]);
-  if (rememberMe === 'false') return null;
-  return userRaw ? (JSON.parse(userRaw) as StoredUser) : null;
+  try {
+    const [userRaw, rememberMe] = await Promise.all([
+      AsyncStorage.getItem(USER_KEY),
+      AsyncStorage.getItem(REMEMBER_ME_KEY)
+    ]);
+    if (rememberMe === 'false' || !userRaw) return null;
+    const parsed = JSON.parse(userRaw);
+    if (!parsed || typeof parsed !== 'object' || !parsed.id || !parsed.name) {
+      await AsyncStorage.removeItem(USER_KEY).catch(() => {});
+      return null;
+    }
+    return parsed as StoredUser;
+  } catch {
+    await AsyncStorage.removeItem(USER_KEY).catch(() => {});
+    return null;
+  }
 }
 
 export async function updateStoredUser(user: StoredUser) {

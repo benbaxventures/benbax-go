@@ -10,14 +10,23 @@ export type QueuedAction = {
 };
 
 export async function enqueueOfflineAction(action: QueuedAction) {
-  const raw = await AsyncStorage.getItem(QUEUE_KEY);
-  const queue = raw ? (JSON.parse(raw) as QueuedAction[]) : [];
+  let queue: QueuedAction[];
+  try {
+    const raw = await AsyncStorage.getItem(QUEUE_KEY);
+    queue = raw ? (JSON.parse(raw) as QueuedAction[]) : [];
+  } catch {
+    queue = [];
+  }
   await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify([...queue, action]));
 }
 
 export async function readOfflineQueue() {
-  const raw = await AsyncStorage.getItem(QUEUE_KEY);
-  return raw ? (JSON.parse(raw) as QueuedAction[]) : [];
+  try {
+    const raw = await AsyncStorage.getItem(QUEUE_KEY);
+    return raw ? (JSON.parse(raw) as QueuedAction[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function clearOfflineQueue() {

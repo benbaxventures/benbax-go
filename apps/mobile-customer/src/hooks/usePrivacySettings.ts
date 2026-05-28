@@ -36,7 +36,12 @@ export function usePrivacySettings() {
 
       if (!mounted) return;
 
-      const parsed: Partial<PrivacySettings> = stored ? JSON.parse(stored) : {};
+      let parsed: Partial<PrivacySettings> = {};
+      try {
+        parsed = stored ? JSON.parse(stored) : {};
+      } catch {
+        parsed = {};
+      }
       if (biometricPref !== null) {
         parsed.biometricLock = biometricPref === 'true';
       }
