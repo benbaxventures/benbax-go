@@ -1,6 +1,8 @@
 import Constants from 'expo-constants';
 
 const API_PORT = 4000;
+const DEFAULT_API_BASE_URL = 'https://benbaxapi-production.up.railway.app:8080/api/v1';
+const DEFAULT_SOCKET_URL = 'https://benbaxapi-production.up.railway.app:8080';
 
 function getExpoHost() {
   try {
@@ -30,7 +32,7 @@ function isPrivateLanHost(hostname: string) {
 
 function shouldUseExpoHost(configuredUrl: string | undefined, expoHost: string | null) {
   if (!expoHost) return false;
-  if (!configuredUrl) return true;
+  if (!configuredUrl) return false;
 
   try {
     const configuredHost = new URL(configuredUrl).hostname;
@@ -51,7 +53,7 @@ export function resolveApiBaseUrl() {
     return `http://${expoHost}:${API_PORT}/api/v1`;
   }
 
-  return process.env.EXPO_PUBLIC_API_BASE_URL ?? `http://localhost:${API_PORT}/api/v1`;
+  return process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 }
 
 export function resolveSocketUrl() {
@@ -61,5 +63,5 @@ export function resolveSocketUrl() {
     return `http://${expoHost}:${API_PORT}`;
   }
 
-  return process.env.EXPO_PUBLIC_SOCKET_URL ?? `http://localhost:${API_PORT}`;
+  return process.env.EXPO_PUBLIC_SOCKET_URL ?? DEFAULT_SOCKET_URL;
 }

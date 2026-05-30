@@ -61,7 +61,7 @@ export function usePrivacySettings() {
       await SecureStore.setItemAsync(BIOMETRIC_KEY, value ? 'true' : 'false').catch(() => {});
     }
 
-    const toStore = { ...next };
+    const toStore: Omit<PrivacySettings, 'biometricLock'> & Partial<Pick<PrivacySettings, 'biometricLock'>> = { ...next };
     delete toStore.biometricLock;
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
   }

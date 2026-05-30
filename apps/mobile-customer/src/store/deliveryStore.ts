@@ -1,4 +1,4 @@
-import type { AddressPoint, DeliveryCategory, DeliveryQuote } from '@benbax/shared';
+import type { AddressPoint, DeliveryCategory, DeliveryQuote } from '../shared';
 import { create } from 'zustand';
 
 type DeliveryDraft = {

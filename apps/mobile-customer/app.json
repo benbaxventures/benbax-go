@@ -52,7 +52,8 @@
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/049700bf-4ecd-47ef-8047-06f704e9a03e"
+      "url": "https://u.expo.dev/049700bf-4ecd-47ef-8047-06f704e9a03e",
+      "checkAutomatically": "NEVER"
     }
   }
 }

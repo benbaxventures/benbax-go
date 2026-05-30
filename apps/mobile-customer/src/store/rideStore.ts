@@ -1,4 +1,4 @@
-import type { AddressPoint, RideQuote } from '@benbax/shared';
+import type { AddressPoint, RideQuote } from '../shared';
 import { create } from 'zustand';
 
 type RideDraft = {

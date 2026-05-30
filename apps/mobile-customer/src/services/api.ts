@@ -1,4 +1,4 @@
-import type { ApiResponse } from '@benbax/shared';
+import type { ApiResponse } from '../shared';
 import { getAccessToken } from './authStorage';
 import { resolveApiBaseUrl } from './network';
 

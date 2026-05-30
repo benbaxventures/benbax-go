@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { useOTAUpdates } from './hooks/useOTAUpdates';
 import { RootNavigator } from './navigation/RootNavigator';
 import { theme } from './theme/tokens';
 
@@ -32,6 +33,7 @@ function FatalErrorFallback() {
 }
 
 export default function App() {
+  useOTAUpdates();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   useEffect(() => {

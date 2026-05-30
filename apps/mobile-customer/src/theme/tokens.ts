@@ -1,4 +1,4 @@
-import { colors, radius, spacing } from '@benbax/shared';
+import { colors, radius, spacing } from '../shared';
 
 export const theme = {
   colors,

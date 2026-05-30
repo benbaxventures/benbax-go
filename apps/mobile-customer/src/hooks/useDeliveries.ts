@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AddressPoint, DeliveryCategory, DeliveryQuote, DeliverySummary } from '@benbax/shared';
+import type { AddressPoint, DeliveryCategory, DeliveryQuote, DeliverySummary } from '../shared';
 import { apiRequest } from '../services/api';
 
 export function useDeliveryQuote() {

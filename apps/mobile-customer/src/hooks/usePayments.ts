@@ -13,6 +13,21 @@ export type InitializePaymentResult = {
   };
 };
 
+export type WalletTopupResult = {
+  checkout?: {
+    authorizationUrl: string;
+    accessCode?: string;
+    reference: string;
+  };
+  walletTransaction?: {
+    id: string;
+  };
+};
+
+export type WalletResult = {
+  balance: string | number;
+};
+
 export function useInitializePayment() {
   return useMutation({
     mutationFn: (input: { deliveryId: string; method: PaymentMethod; mobileNumber?: string }) =>
@@ -40,7 +55,7 @@ export function useVerifyPayment() {
 export function useWalletTopup() {
   return useMutation({
     mutationFn: (input: { amount: number }) =>
-      apiRequest('/payments/wallet-topup', {
+      apiRequest<WalletTopupResult>('/payments/wallet-topup', {
         method: 'POST',
         body: JSON.stringify(input)
       })
@@ -61,6 +76,6 @@ export function useVerifyWalletTopup() {
 export function useWallet() {
   return useQuery({
     queryKey: ['wallet'],
-    queryFn: () => apiRequest('/payments/wallet')
+    queryFn: () => apiRequest<WalletResult>('/payments/wallet')
   });
 }

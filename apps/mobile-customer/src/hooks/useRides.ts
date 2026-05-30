@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import type { AddressPoint, RideQuote, RideTripSummary } from '@benbax/shared';
+import type { AddressPoint, RideQuote, RideTripSummary } from '../shared';
 import { apiRequest } from '../services/api';
 
 export function useRideQuote() {

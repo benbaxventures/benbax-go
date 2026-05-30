@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
 import { Bike, CalendarClock, CreditCard, Crosshair, PackageCheck, Car } from 'lucide-react-native';
 import { Alert, Pressable, Text, View } from 'react-native';
-import type { DeliveryCategory } from '@benbax/shared';
+import type { DeliveryCategory } from '../shared';
 import { Button } from '../components/Button';
 import { LocationInput } from '../components/LocationInput';
 import { Screen } from '../components/Screen';

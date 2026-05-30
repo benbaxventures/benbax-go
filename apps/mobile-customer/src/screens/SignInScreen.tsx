@@ -260,12 +260,14 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
         if (!clientId) throw new Error('Missing Google client ID. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env');
 
         const makeRedirect = AuthSessionModule.makeRedirectUri ?? AuthSessionModule.default?.makeRedirectUri;
-        const startAsync = AuthSessionModule.startAsync ?? AuthSessionModule.default?.startAsync;
+        const startAsync =
+          (AuthSessionModule as unknown as { startAsync?: (options: { authUrl: string }) => Promise<{ type: string; params?: Record<string, string> }> }).startAsync ??
+          (AuthSessionModule.default as unknown as { startAsync?: (options: { authUrl: string }) => Promise<{ type: string; params?: Record<string, string> }> })?.startAsync;
         if (typeof makeRedirect !== 'function' || typeof startAsync !== 'function') {
           throw new Error('expo-auth-session is missing required methods (startAsync/makeRedirectUri).');
         }
 
-        const redirectUri = makeRedirect({ useProxy: true });
+        const redirectUri = makeRedirect({ useProxy: true } as Parameters<typeof makeRedirect>[0]);
         const nonce = Math.random().toString(36).substring(2);
         const params = new URLSearchParams({
           client_id: clientId,

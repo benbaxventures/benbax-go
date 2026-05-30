@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Phone, ShieldCheck } from 'lucide-react-native';
 import { ActivityIndicator, Text, View } from 'react-native';
-import { realtimeEvents } from '@benbax/shared';
+import { realtimeEvents } from '../shared';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { StatusPill } from '../components/StatusPill';

@@ -36,11 +36,12 @@ export function WalletScreen() {
     try {
       const result = await topup.mutateAsync({ amount: parsed });
       if (result.checkout) {
-        navigation.navigate('WalletCheckout', {
+        const checkoutParams: RootStackParamList['WalletCheckout'] = {
           authorizationUrl: result.checkout.authorizationUrl,
-          reference: result.checkout.reference,
-          walletTransactionId: result.walletTransaction?.id
-        });
+          reference: result.checkout.reference
+        };
+        if (result.walletTransaction?.id) checkoutParams.walletTransactionId = result.walletTransaction.id;
+        navigation.navigate('WalletCheckout', checkoutParams);
         return;
       }
 
