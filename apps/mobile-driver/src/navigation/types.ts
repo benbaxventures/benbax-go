@@ -4,12 +4,15 @@ export type RootStackParamList = {
   ResetPassword: { phone: string; resetToken: string };
   MainTabs: undefined;
   ActiveTrip: { tripId: string };
+  ActiveDelivery: { deliveryId: string };
+  WalletCheckout: { authorizationUrl: string; reference: string; walletTransactionId?: string };
   EditProfile: undefined;
   Wallet: undefined;
 };
 
 export type MainTabsParamList = {
-  Dispatch: undefined;
+  RideDispatch: undefined;
+  DeliveryDispatch: undefined;
   Earnings: undefined;
   KYC: undefined;
   Profile: undefined;

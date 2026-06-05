@@ -18,7 +18,13 @@ export async function dispatchRide(tripId: string, io?: Server) {
     take: 25
   });
 
-  if (!drivers.length) return;
+  if (!drivers.length) {
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, {
+      ...trip,
+      dispatchStatus: 'NO_AVAILABLE_DRIVERS'
+    });
+    return;
+  }
 
   const ranked = rankRiders(
     {
@@ -53,12 +59,14 @@ export async function dispatchRide(tripId: string, io?: Server) {
     }
   });
 
-  await prisma.rideTrip.update({
+  const updatedTrip = await prisma.rideTrip.update({
     where: { id: trip.id },
     data: { status: 'ASSIGNING' }
   });
 
   io?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.driverOffer, assignment);
+  io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, updatedTrip);
+  io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, updatedTrip);
   io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);
 }
 

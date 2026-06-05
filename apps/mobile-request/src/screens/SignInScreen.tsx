@@ -1,61 +1,84 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Constants from 'expo-constants';
-import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View, Switch } from 'react-native';
+import { KeyboardAvoidingView, Platform, Text, TextInput, View, TouchableOpacity, Switch, Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { Button } from '../components/Button';
-import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../services/api';
+import { checkApiHealth, getApiBaseUrl, isApiConnectionError, ApiResponseError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
 
 type GoogleSignInModule = typeof import('@react-native-google-signin/google-signin');
 
-function FieldLabel({ children }: { children: string }) {
-  return <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>{children}</Text>;
-}
+const GOOGLE_ANDROID_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
+  '227842274371-n0cvmj1u88nrp82kbfhsoqaf3qmgsbv4.apps.googleusercontent.com';
 
-const inputStyle = {
-  backgroundColor: '#fff',
-  borderRadius: 8,
-  borderColor: theme.colors.border,
-  borderWidth: 1,
-  color: theme.colors.ink,
-  fontSize: 16,
-  minHeight: 58,
-  paddingHorizontal: 14
-};
+const GOOGLE_WEB_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
+  '227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com';
+
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 
 export function SignInScreen() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [partnerRole, setPartnerRole] = useState<'DRIVER' | 'RIDER'>('DRIVER');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { login, register, loginWithGoogle } = useAuthStore();
+  const [apiStatus, setApiStatus] = useState<'online' | 'api_offline' | 'database_offline' | null>(null);
+  const [checkingApi, setCheckingApi] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { login, register } = useAuthStore();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const googleSignInUnavailableReason = getGoogleSignInUnavailableReason();
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    void refreshApiStatus();
+  }, []);
+
+  async function refreshApiStatus() {
+    setCheckingApi(true);
+    const status = await checkApiHealth();
+    setApiStatus(status);
+    setCheckingApi(false);
+  }
 
   async function submit() {
+    const validationError = validateCredentials({ mode, name, phone, password });
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       if (mode === 'login') await login(phone, password, rememberMe);
-      else await register({ name, phone, password, role: partnerRole });
+      else await register({ name, phone, password });
     } catch (err) {
       if (isApiConnectionError(err)) {
-        setError(`Cannot reach the API at ${getApiBaseUrl()}. Start the backend and make sure this phone is on the same network.`);
-      } else if (err instanceof ApiResponseError && err.status === 401) {
-        setError('Invalid phone or password.');
-      } else if (err instanceof ApiResponseError && (err.status === 503 || err.code === 'DATABASE_UNAVAILABLE')) {
-        setError('The backend database is offline. Start Postgres, then retry sign in.');
+        setApiStatus('api_offline');
+        setError(`Cannot reach the API. Start the backend and confirm your phone is on the same network. Current API: ${getApiBaseUrl()}`);
       } else {
-        setError(err instanceof Error ? err.message : 'Authentication failed');
+        // Provide more helpful messages for common auth failures.
+        if (err instanceof ApiResponseError) {
+          if (err.status === 401) setError('Invalid phone or password.');
+          else if (err.status === 400 && err.code === 'VALIDATION_ERROR') setError(String(err.details ?? err.message));
+          else if (err.status === 503 || err.code === 'DATABASE_UNAVAILABLE') {
+            setApiStatus('database_offline');
+            setError('The backend database is offline. Start Postgres, then retry sign in.');
+          }
+          else setError(err.message || 'Authentication failed');
+        } else {
+          setError(err instanceof Error ? err.message : 'Authentication failed');
+        }
       }
     } finally {
       setLoading(false);
@@ -65,92 +88,78 @@ export function SignInScreen() {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: theme.colors.canvas, justifyContent: 'center', padding: 20 }}
+      style={{
+        flex: 1,
+        backgroundColor: theme.colors.canvas,
+        justifyContent: 'center',
+        paddingHorizontal: 20,
+        paddingTop: 20,
+        paddingBottom: 20 + insets.bottom
+      }}
     >
       <View style={{ gap: 18 }}>
         <View style={{ gap: 8 }}>
-          <Text style={{ fontSize: 32, fontWeight: '900', color: theme.colors.ink }}>Benbax Partner</Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Earn with passenger trips, deliveries, clear routes, and safety-first dispatch.</Text>
+          <Text style={{ fontSize: 32, fontWeight: '900', color: theme.colors.ink }}>Benbax Request</Text>
+          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Fast delivery and logistics built for Ghana.</Text>
         </View>
 
-        {mode === 'register' ? (
-          <>
-            <View style={{ gap: 8 }}>
-              <FieldLabel>Partner type</FieldLabel>
-              <View style={{ flexDirection: 'row', backgroundColor: theme.colors.surface, borderRadius: 8, padding: 3, borderWidth: 1, borderColor: theme.colors.border }}>
-                {[
-                  { role: 'DRIVER' as const, label: 'Ride driver' },
-                  { role: 'RIDER' as const, label: 'Delivery rider' }
-                ].map((item) => {
-                  const selected = partnerRole === item.role;
-                  return (
-                    <Pressable
-                      key={item.role}
-                      onPress={() => setPartnerRole(item.role)}
-                      style={{
-                        flex: 1,
-                        minHeight: 44,
-                        borderRadius: 6,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: selected ? theme.colors.primary : 'transparent'
-                      }}
-                    >
-                      <Text style={{ color: selected ? '#fff' : theme.colors.ink, fontWeight: '800' }}>{item.label}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-            <View style={{ gap: 8 }}>
-              <FieldLabel>Full name</FieldLabel>
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="Enter your legal name"
-                autoCapitalize="words"
-                autoComplete="name"
-                accessibilityLabel="Full name"
-                style={inputStyle}
-              />
-            </View>
-          </>
-        ) : null}
-        <View style={{ gap: 8 }}>
-          <FieldLabel>Phone number</FieldLabel>
-          <TextInput
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            placeholder="+233 phone number"
-            autoComplete="tel"
-            accessibilityLabel="Phone number"
-            style={inputStyle}
-          />
-        </View>
-        <View style={{ gap: 8 }}>
-          <FieldLabel>Password</FieldLabel>
-          <View style={{ ...inputStyle, paddingRight: 10, flexDirection: 'row', alignItems: 'center' }}>
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              placeholder="Enter password"
-              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              accessibilityLabel="Password"
-              style={{ flex: 1, color: theme.colors.ink, fontSize: 16, paddingVertical: 14 }}
+        {apiStatus === 'api_offline' || apiStatus === 'database_offline' ? (
+          <View
+            style={{
+              backgroundColor: '#FFF7E6',
+              borderColor: theme.colors.accent,
+              borderWidth: 1,
+              borderRadius: theme.radius.md,
+              padding: 12,
+              gap: 8
+            }}
+          >
+            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>
+              {apiStatus === 'database_offline' ? 'Database is offline' : 'API is offline'}
+            </Text>
+            <Text style={{ color: theme.colors.muted, lineHeight: 20 }}>
+              {apiStatus === 'database_offline'
+                ? 'The backend is reachable, but Postgres is not responding. Start the database, then retry.'
+                : `Start the backend and make sure this phone can reach ${getApiBaseUrl()}.`}
+            </Text>
+            <Button
+              label={checkingApi ? 'Checking API' : 'Retry API check'}
+              onPress={refreshApiStatus}
+              loading={checkingApi}
+              variant="secondary"
             />
-            <Pressable
-              onPress={() => setShowPassword((visible) => !visible)}
-              accessibilityRole="button"
-              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-              hitSlop={12}
-              style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
-            >
-              {showPassword ? <EyeOff size={22} color={theme.colors.muted} /> : <Eye size={22} color={theme.colors.muted} />}
-            </Pressable>
           </View>
+        ) : null}
+
+        {mode === 'register' ? (
+          <TextInput
+            value={name}
+            onChangeText={setName}
+            placeholder="Full name"
+            style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+          />
+        ) : null}
+
+        <TextInput
+          value={phone}
+          onChangeText={setPhone}
+          keyboardType="phone-pad"
+          placeholder="+233 phone number"
+          style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+        />
+        <View style={{ backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center' }}>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            placeholder="Password"
+            style={{ flex: 1, padding: 14, fontSize: 16 }}
+          />
+          <TouchableOpacity onPress={() => setShowPassword((s) => !s)} accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
+            {showPassword ? <EyeOff size={20} color={theme.colors.muted} /> : <Eye size={20} color={theme.colors.muted} />}
+          </TouchableOpacity>
         </View>
+
         {mode === 'login' ? (
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -167,8 +176,10 @@ export function SignInScreen() {
             </Pressable>
           </View>
         ) : null}
+
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
-        <Button label={mode === 'login' ? 'Sign in' : partnerRole === 'DRIVER' ? 'Create ride driver account' : 'Create delivery rider account'} onPress={submit} loading={loading} />
+
+        <Button label={mode === 'login' ? 'Sign in' : 'Create account'} onPress={submit} loading={loading} />
         {mode === 'login' ? (
           googleSignInUnavailableReason ? (
             <Button
@@ -177,17 +188,39 @@ export function SignInScreen() {
               variant="secondary"
             />
           ) : (
-            <GoogleSignInButton role={partnerRole} onError={setError} />
+            <GoogleSignInButton onError={setError} />
           )
         ) : null}
         <Button
-          label={mode === 'login' ? 'New partner onboarding' : 'I already partner with Benbax'}
-          onPress={() => setMode(mode === 'login' ? 'register' : 'login')}
-          variant="secondary"
+          label={mode === 'login' ? 'Create a Benbax Request account' : 'I already have an account'}
+          onPress={() => {
+            setError(null);
+            setMode(mode === 'login' ? 'register' : 'login');
+          }}
+          variant="quiet"
         />
       </View>
     </KeyboardAvoidingView>
   );
+}
+
+function validateCredentials(input: { mode: 'login' | 'register'; name: string; phone: string; password: string }) {
+  const phone = input.phone.trim();
+  const password = input.password.trim();
+
+  if (input.mode === 'register' && input.name.trim().length < 2) {
+    return 'Enter your full name.';
+  }
+
+  if (!phone.startsWith('+233') || phone.length < 12) {
+    return 'Enter a valid Ghana phone number starting with +233.';
+  }
+
+  if (password.length < 6) {
+    return 'Password must be at least 6 characters.';
+  }
+
+  return null;
 }
 
 function getGoogleSignInUnavailableReason() {
@@ -195,26 +228,26 @@ function getGoogleSignInUnavailableReason() {
     return 'Google sign-in needs a development build. Expo Go cannot run native Google Sign-In.';
   }
 
-  if (Platform.OS === 'android' && !process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID) {
-    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID in apps/mobile-driver/.env';
+  if (Platform.OS === 'android' && !GOOGLE_ANDROID_CLIENT_ID) {
+    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID in apps/mobile-request/.env';
   }
 
-  if (Platform.OS === 'android' && !process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
-    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in apps/mobile-driver/.env';
+  if (Platform.OS === 'android' && !GOOGLE_WEB_CLIENT_ID) {
+    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in apps/mobile-request/.env';
   }
 
-  if (Platform.OS === 'ios' && !process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID) {
-    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID in apps/mobile-driver/.env';
+  if (Platform.OS === 'ios' && !GOOGLE_IOS_CLIENT_ID) {
+    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID in apps/mobile-request/.env';
   }
 
-  if (Platform.OS === 'web' && !process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
-    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in apps/mobile-driver/.env';
+  if (Platform.OS === 'web' && !GOOGLE_WEB_CLIENT_ID) {
+    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in apps/mobile-request/.env';
   }
 
   return null;
 }
 
-function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onError: (message: string | null) => void }) {
+function GoogleSignInButton({ onError }: { onError: (message: string | null) => void }) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const { loginWithGoogle } = useAuthStore();
 
@@ -230,9 +263,10 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
         const WebBrowserModule = await import('expo-web-browser').catch(() => null);
         if (!AuthSessionModule) throw new Error('expo-auth-session is not available. Install it to enable Google sign-in in Expo.');
 
+        // complete any pending browser sessions
         (WebBrowserModule?.maybeCompleteAuthSession ?? WebBrowserModule?.default?.maybeCompleteAuthSession)?.();
 
-        const clientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+        const clientId = GOOGLE_WEB_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_IOS_CLIENT_ID;
         if (!clientId) throw new Error('Missing Google client ID. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env');
 
         const { AuthRequest, Prompt, makeRedirectUri } = AuthSessionModule;
@@ -241,10 +275,9 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
         }
 
         const redirectUri = makeRedirectUri({
-          scheme: 'benbax-driver',
+          scheme: 'benbax',
           path: 'oauthredirect'
         });
-
         const request = new AuthRequest({
           clientId,
           redirectUri,
@@ -256,7 +289,6 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
             nonce: Math.random().toString(36).substring(2)
           }
         });
-
         const result = await request.promptAsync({
           authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth'
         });
@@ -269,14 +301,15 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
         const accessToken = result.params?.access_token ?? result.params?.accessToken;
         if (!idToken && !accessToken) throw new Error('No token returned from Google');
 
-        await loginWithGoogle({ idToken, accessToken, role } as any);
+        await loginWithGoogle({ idToken, accessToken } as any);
       }
 
+      // If native GoogleSignin module is available and appears functional, try native first
       if (googleModule && googleModule.GoogleSignin && typeof googleModule.GoogleSignin.hasPlayServices === 'function') {
         const { GoogleSignin, statusCodes } = googleModule;
         googleStatusCodes = statusCodes;
         GoogleSignin.configure({
-          ...(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ? { webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID } : {}),
+          ...(GOOGLE_WEB_CLIENT_ID ? { webClientId: GOOGLE_WEB_CLIENT_ID } : {}),
           scopes: ['openid', 'profile', 'email']
         });
 
@@ -285,19 +318,18 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
         try {
           await GoogleSignin.signIn();
           const tokens = await GoogleSignin.getTokens();
-          await loginWithGoogle({ accessToken: tokens.accessToken, idToken: tokens.idToken, role });
+          await loginWithGoogle({ accessToken: tokens.accessToken, idToken: tokens.idToken });
         } catch (nativeErr: unknown) {
+          // Native DEVELOPER_ERROR means Google's Android OAuth client does not match
+          // this APK's package name/signing certificate. A browser fallback cannot fix it.
           const isDevError = (typeof nativeErr === 'object' && nativeErr !== null && 'code' in (nativeErr as any) && (nativeErr as any).code === 'DEVELOPER_ERROR') ||
             (nativeErr instanceof Error && /DEVELOPER_ERROR/i.test(nativeErr.message));
 
           if (isDevError) {
-            try {
-              await tryAuthSessionFallback();
-              return;
-            } catch (fallbackErr) {
-              onError(fallbackErr instanceof Error ? fallbackErr.message : 'Google sign-in failed');
-              return;
-            }
+            onError(
+              'Google sign-in is misconfigured for this APK. Add the APK signing SHA-1/SHA-256 to the Android OAuth client for com.benbax.customer, update google-services.json, then rebuild the APK.'
+            );
+            return;
           }
 
           if (googleStatusCodes && isGoogleSignInError(nativeErr, googleStatusCodes.SIGN_IN_CANCELLED)) return;
@@ -309,6 +341,7 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
           throw nativeErr;
         }
       } else {
+        // No native module available — use AuthSession fallback
         await tryAuthSessionFallback();
       }
     } catch (err) {

@@ -67,13 +67,16 @@ rideDispatchRouter.post(
       }
     });
 
-    await prisma.rideTrip.update({
+    const updatedTrip = await prisma.rideTrip.update({
       where: { id: trip.id },
       data: { status: 'ASSIGNING' }
     });
 
-    req.app.get('io')?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.driverOffer, assignment);
-    req.app.get('io')?.to('admins').emit(realtimeEvents.rideAssigned, assignment);
+    const io = req.app.get('io');
+    io?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.driverOffer, assignment);
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, updatedTrip);
+    io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, updatedTrip);
+    io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);
 
     return ok(res, { assignment, ranked });
   })
@@ -88,6 +91,15 @@ rideDispatchRouter.post(
     const assignmentId = req.params.id;
     if (!assignmentId) throw badRequest('Assignment id is required');
 
+    const existing = await prisma.rideAssignment.findFirst({
+      where: {
+        id: assignmentId,
+        driverProfileId: driver.id,
+        status: 'OFFERED'
+      }
+    });
+    if (!existing) throw notFound('Ride assignment not found');
+
     const assignment = await prisma.rideAssignment.update({
       where: { id: assignmentId },
       data: {
@@ -96,10 +108,17 @@ rideDispatchRouter.post(
         trip: { update: { status: 'ASSIGNED' } },
         driverProfile: { update: { status: 'ON_TRIP' } }
       },
-      include: { trip: true }
+      include: {
+        driverProfile: { include: { user: true, vehicle: true } },
+        trip: true
+      }
     });
 
-    req.app.get('io')?.to(`ride:${assignment.tripId}`).emit(realtimeEvents.rideAssigned, assignment);
+    const io = req.app.get('io');
+    io?.to(`ride:${assignment.tripId}`).emit(realtimeEvents.rideAssigned, assignment);
+    io?.to(`user:${assignment.trip.passengerId}`).emit(realtimeEvents.rideAssigned, assignment);
+    io?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.rideAssigned, assignment);
+    io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);
     return ok(res, assignment);
   })
 );
@@ -110,6 +129,18 @@ rideDispatchRouter.post(
   asyncHandler(async (req, res) => {
     const assignmentId = req.params.id;
     if (!assignmentId) throw badRequest('Assignment id is required');
+
+    const driver = await prisma.driverProfile.findUnique({ where: { userId: req.user!.id } });
+    if (!driver) throw notFound('Driver profile not found');
+
+    const existing = await prisma.rideAssignment.findFirst({
+      where: {
+        id: assignmentId,
+        driverProfileId: driver.id,
+        status: 'OFFERED'
+      }
+    });
+    if (!existing) throw notFound('Ride assignment not found');
 
     const assignment = await prisma.rideAssignment.update({
       where: { id: assignmentId },

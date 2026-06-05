@@ -6,7 +6,9 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.benbax.driver",
@@ -29,13 +31,29 @@
     "plugins": [
       "expo-location",
       "expo-document-picker",
+      "@react-native-google-signin/google-signin",
+      "expo-updates",
       [
         "expo-image-picker",
         {
           "photosPermission": "Benbax uses photo library access to upload driver KYC documents.",
           "cameraPermission": "Benbax uses the camera to capture driver KYC documents."
         }
-      ]
-    ]
+      ],
+      "expo-web-browser"
+    ],
+    "extra": {
+      "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",
+      "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}",
+      "eas": {
+        "projectId": "${EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID}"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/${EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID}",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": "1.0.0"
   }
 }

@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "Benbax Request",
+    "slug": "benbax-request",
+    "scheme": "benbax",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.benbax.customer",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Benbax uses your location to set pickup points and track deliveries."
+      }
+    },
+    "android": {
+      "package": "com.benbax.customer",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "POST_NOTIFICATIONS",
+        "USE_BIOMETRIC",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0E7C66"
+      }
+    },
+    "plugins": [
+      "expo-location",
+      "expo-notifications",
+      "@react-native-google-signin/google-signin",
+      "expo-secure-store",
+      "expo-local-authentication",
+      "expo-updates",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",
+      "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}",
+      "eas": {
+        "projectId": "75160589-e514-4b17-82b0-cf5870857b56"
+      }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/049700bf-4ecd-47ef-8047-06f704e9a03e",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": "1.0.0",
+    "owner": "a16-0s-organization"
+  }
+}

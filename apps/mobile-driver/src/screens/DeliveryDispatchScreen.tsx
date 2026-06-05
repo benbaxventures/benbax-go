@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { NavigationProp, useNavigation } from '@react-navigation/native';
-import { CheckCircle2, Crosshair, Power, XCircle } from 'lucide-react-native';
+import { Bike, CheckCircle2, Crosshair, Power, XCircle } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
-import { apiRequest } from '../services/api';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
-import { useDriverStore } from '../store/driverStore';
+import { apiRequest } from '../services/api';
+import { useRiderStore } from '../store/riderStore';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
 
-export function DispatchScreen() {
+export function DeliveryDispatchScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const { isOnline, setOnline, currentOffer, setCurrentOffer } = useDriverStore();
+  const { isOnline, setOnline, currentOffer, setCurrentOffer } = useRiderStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { latitude, longitude, loading: locationLoading, requestLocation } = useCurrentLocation();
@@ -22,24 +22,21 @@ export function DispatchScreen() {
     const next = !isOnline;
     setError(null);
 
-    let coords = { latitude: 0, longitude: 0 };
-    if (latitude !== 0 || longitude !== 0) {
-      coords = { latitude, longitude };
-    } else {
+    if (latitude === 0 && longitude === 0) {
       await requestLocation();
     }
 
-    const lat = coords.latitude || latitude;
-    const lng = coords.longitude || longitude;
+    const lat = latitude || 5.6508;
+    const lng = longitude || -0.1668;
 
     try {
-      await apiRequest('/drivers/me/availability', {
+      await apiRequest('/riders/me/availability', {
         method: 'PATCH',
         body: JSON.stringify({ isOnline: next, latitude: lat, longitude: lng })
       });
       setOnline(next);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update availability.');
+      setError(err instanceof Error ? err.message : 'Could not update delivery availability.');
     } finally {
       setLoading(false);
     }
@@ -49,11 +46,11 @@ export function DispatchScreen() {
     if (!currentOffer) return;
     setError(null);
     try {
-      await apiRequest(`/ride-dispatch/assignments/${currentOffer.id}/accept`, { method: 'POST' });
-      navigation.navigate('ActiveTrip', { tripId: currentOffer.tripId });
+      await apiRequest(`/dispatch/assignments/${currentOffer.id}/accept`, { method: 'POST' });
+      navigation.navigate('ActiveDelivery', { deliveryId: currentOffer.deliveryId });
       setCurrentOffer(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not accept this offer.');
+      setError(err instanceof Error ? err.message : 'Could not accept this delivery offer.');
     }
   }
 
@@ -61,18 +58,18 @@ export function DispatchScreen() {
     if (!currentOffer) return;
     setError(null);
     try {
-      await apiRequest(`/ride-dispatch/assignments/${currentOffer.id}/reject`, { method: 'POST' });
+      await apiRequest(`/dispatch/assignments/${currentOffer.id}/reject`, { method: 'POST' });
       setCurrentOffer(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reject this offer.');
+      setError(err instanceof Error ? err.message : 'Could not reject this delivery offer.');
     }
   }
 
   return (
     <Screen>
       <View style={{ gap: 6 }}>
-        <Text style={{ fontSize: 28, fontWeight: '900', color: theme.colors.ink }}>Dispatch</Text>
-        <Text style={{ color: theme.colors.muted }}>Go online to receive nearby passenger trip requests.</Text>
+        <Text style={{ fontSize: 28, fontWeight: '900', color: theme.colors.ink }}>Delivery dispatch</Text>
+        <Text style={{ color: theme.colors.muted }}>Go online to receive parcel, food, courier, and pharmacy delivery offers.</Text>
       </View>
 
       {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
@@ -80,9 +77,13 @@ export function DispatchScreen() {
       <Pressable
         onPress={requestLocation}
         style={{
-          flexDirection: 'row', alignItems: 'center', gap: 6,
-          paddingVertical: 6, paddingHorizontal: 12,
-          alignSelf: 'flex-start', borderRadius: 6,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          paddingVertical: 6,
+          paddingHorizontal: 12,
+          alignSelf: 'flex-start',
+          borderRadius: 6,
           backgroundColor: theme.colors.surface
         }}
       >
@@ -105,17 +106,20 @@ export function DispatchScreen() {
       >
         <Power size={26} color={isOnline ? '#fff' : theme.colors.primary} />
         <Text style={{ color: isOnline ? '#fff' : theme.colors.ink, fontSize: 24, fontWeight: '900' }}>
-          {isOnline ? 'Online' : 'Offline'}
+          {isOnline ? 'Online for deliveries' : 'Offline for deliveries'}
         </Text>
-        <Text style={{ color: isOnline ? '#D7FFF5' : theme.colors.muted }}>{loading ? 'Updating...' : 'Tap to change availability'}</Text>
+        <Text style={{ color: isOnline ? '#D7FFF5' : theme.colors.muted }}>{loading ? 'Updating...' : 'Tap to change delivery availability'}</Text>
       </Pressable>
 
       <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 16, gap: 10 }}>
-        <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>Current offer</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Bike size={18} color={theme.colors.primary} />
+          <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>Current delivery offer</Text>
+        </View>
         {currentOffer ? (
           <>
-            <Text style={{ color: theme.colors.muted }}>Trip {currentOffer.tripId}</Text>
-            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>Match score {currentOffer.score}</Text>
+            <Text style={{ color: theme.colors.muted }}>Delivery {currentOffer.deliveryId}</Text>
+            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>Dispatch score {currentOffer.score}</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
                 <Button label="Accept" icon={<CheckCircle2 size={18} color="#fff" />} onPress={acceptOffer} />
@@ -126,7 +130,7 @@ export function DispatchScreen() {
             </View>
           </>
         ) : (
-          <Text style={{ color: theme.colors.muted }}>No active request. Fresh GPS, high acceptance, and strong ratings improve matching.</Text>
+          <Text style={{ color: theme.colors.muted }}>No active delivery offer. Fresh GPS and high completion rate improve matching.</Text>
         )}
       </View>
     </Screen>

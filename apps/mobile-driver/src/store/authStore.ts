@@ -14,8 +14,8 @@ type AuthState = {
   user: DriverUser | null;
   isHydrating: boolean;
   login: (phone: string, password: string, rememberMe?: boolean) => Promise<void>;
-  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string }, rememberMe?: boolean) => Promise<void>;
-  register: (input: { name: string; phone: string; password: string }) => Promise<void>;
+  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string; role?: 'RIDER' | 'DRIVER' }, rememberMe?: boolean) => Promise<void>;
+  register: (input: { name: string; phone: string; password: string; role: 'RIDER' | 'DRIVER' }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
   updateUser: (updated: Partial<DriverUser>) => Promise<void>;
@@ -46,7 +46,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       '/auth/google',
       {
         method: 'POST',
-        body: JSON.stringify({ ...tokens, role: 'DRIVER' }),
+        body: JSON.stringify({ ...tokens, role: tokens.role ?? 'DRIVER' }),
         skipAuth: true
       }
     );
@@ -63,7 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       '/auth/register',
       {
         method: 'POST',
-        body: JSON.stringify({ ...input, role: 'DRIVER' }),
+        body: JSON.stringify(input),
         skipAuth: true
       }
     );

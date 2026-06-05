@@ -24,8 +24,8 @@ apps/
       modules/
       realtime/
       utils/
-  mobile-customer/
-  mobile-rider/
+  mobile-request/
+  mobile-driver/
 packages/
   shared/
 docs/

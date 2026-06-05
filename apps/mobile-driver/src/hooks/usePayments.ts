@@ -35,8 +35,17 @@ export function useVerifyPayment() {
   });
 }
 
+export type WalletTransaction = {
+  id: string;
+  description?: string;
+  type: string;
+  createdAt: string;
+  amount: number;
+};
+
 export type WalletData = {
   balance: string | number;
+  transactions?: WalletTransaction[];
 };
 
 export function useWalletTopup() {

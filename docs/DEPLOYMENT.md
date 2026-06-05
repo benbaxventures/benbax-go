@@ -9,7 +9,7 @@ docker compose up -d postgres redis
 npm run db:migrate
 npm run db:seed
 npm run dev:api
-npm run dev:customer
+npm run dev:request
 npm run dev:rider
 npm run dev:admin
 ```

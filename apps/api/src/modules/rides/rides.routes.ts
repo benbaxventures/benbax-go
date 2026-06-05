@@ -6,6 +6,7 @@ import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { created, ok } from '../../utils/response';
 import { dispatchRide } from '../dispatch/dispatch.service';
+import { realtimeEvents } from '../../realtime/events';
 import * as service from './rides.service';
 
 export const ridesRouter = Router();
@@ -56,7 +57,11 @@ ridesRouter.post(
       ...req.body,
       passengerId: req.user!.id
     });
-    void dispatchRide(trip.id, req.app.get('io'));
+    const io = req.app.get('io');
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideRequested, trip);
+    io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, trip);
+    io?.to('admins').emit(realtimeEvents.rideRequested, trip);
+    void dispatchRide(trip.id, io);
     return created(res, trip);
   })
 );
