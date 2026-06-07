@@ -22,15 +22,21 @@ export function DispatchScreen() {
     const next = !isOnline;
     setError(null);
 
-    let coords = { latitude: 0, longitude: 0 };
+    let coords = { latitude, longitude };
     if (latitude !== 0 || longitude !== 0) {
       coords = { latitude, longitude };
     } else {
-      await requestLocation();
+      coords = (await requestLocation()) ?? coords;
     }
 
-    const lat = coords.latitude || latitude;
-    const lng = coords.longitude || longitude;
+    const lat = coords.latitude;
+    const lng = coords.longitude;
+
+    if (next && (!lat || !lng)) {
+      setError('Turn on location and tap Update location before going online.');
+      setLoading(false);
+      return;
+    }
 
     try {
       await apiRequest('/drivers/me/availability', {

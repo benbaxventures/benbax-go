@@ -76,9 +76,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: data.user });
   },
   async hydrate() {
-    const [raw, rememberMe] = await AsyncStorage.multiGet(['benbax.driver.user', 'benbax.driver.rememberMe']);
-    const shouldRestore = rememberMe[1] !== 'false';
-    set({ user: shouldRestore && raw[1] ? JSON.parse(raw[1]) : null, isHydrating: false });
+    const entries = await AsyncStorage.multiGet(['benbax.driver.user', 'benbax.driver.rememberMe']);
+    const rawUser = entries[0]?.[1];
+    const rememberMe = entries[1]?.[1];
+    const shouldRestore = rememberMe !== 'false';
+    set({ user: shouldRestore && rawUser ? JSON.parse(rawUser) : null, isHydrating: false });
   },
 
   async logout() {

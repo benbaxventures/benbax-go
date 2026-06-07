@@ -43,37 +43,55 @@ export function HomeScreen() {
   const createRideMutation = useCreateRide();
   const initializePayment = useInitializePayment();
 
-  const { latitude, longitude, loading: locationLoading, requestLocation } = useCurrentLocation();
+  const { latitude, longitude, label: detectedLocationLabel, address: detectedAddress, nearbyName, loading: locationLoading, requestLocation } = useCurrentLocation();
 
   const [pickupText, setPickupText] = useState('East Legon, Accra');
   const [dropoffText, setDropoffText] = useState('Osu Oxford Street');
   const [pickupLandmark, setPickupLandmark] = useState('Near A&C Mall');
   const [dropoffLandmark, setDropoffLandmark] = useState('Near Papaye');
 
-  const currentPickupLatitude = pickupText === 'Current location' ? latitude : 5.6508;
-  const currentPickupLongitude = pickupText === 'Current location' ? longitude : -0.1668;
+  const usingDetectedPickup = pickupText === 'Current location' || pickupText === detectedLocationLabel;
+  const currentPickupLatitude = usingDetectedPickup && latitude ? latitude : 5.6508;
+  const currentPickupLongitude = usingDetectedPickup && longitude ? longitude : -0.1668;
 
   const handleUseLocation = useCallback(async () => {
-    await requestLocation();
     setPickupText('Current location');
+    await requestLocation();
   }, [requestLocation]);
 
   useEffect(() => {
-    if (pickupText === 'Current location' && latitude && longitude) {
-      const point = { label: 'Current location', latitude, longitude, landmark: pickupLandmark };
+    if ((pickupText === 'Current location' || pickupText === detectedLocationLabel) && latitude && longitude) {
+      const point = {
+        label: detectedLocationLabel ?? 'Current location',
+        address: detectedAddress ?? undefined,
+        latitude,
+        longitude,
+        landmark: nearbyName ?? pickupLandmark
+      };
       deliveryStore.setPickup(point);
       rideStore.setPickup(point);
     }
-  }, [latitude, longitude, pickupText, pickupLandmark]);
+  }, [detectedAddress, detectedLocationLabel, deliveryStore, latitude, longitude, nearbyName, pickupLandmark, pickupText, rideStore]);
+
+  useEffect(() => {
+    if (!latitude || !longitude || !detectedLocationLabel) return;
+    if (pickupText === 'Current location' || pickupText.length === 0) {
+      setPickupText(detectedLocationLabel);
+    }
+    if (nearbyName && (pickupLandmark === 'Near A&C Mall' || pickupLandmark.length === 0)) {
+      setPickupLandmark(`Near ${nearbyName}`);
+    }
+  }, [detectedLocationLabel, latitude, longitude, nearbyName, pickupLandmark, pickupText]);
 
   const pickup = useMemo(
     () => ({
       label: pickupText,
+      address: usingDetectedPickup ? detectedAddress ?? undefined : undefined,
       latitude: currentPickupLatitude,
       longitude: currentPickupLongitude,
       landmark: pickupLandmark
     }),
-    [pickupText, currentPickupLatitude, currentPickupLongitude, pickupLandmark]
+    [currentPickupLatitude, currentPickupLongitude, detectedAddress, pickupLandmark, pickupText, usingDetectedPickup]
   );
 
   const dropoff = useMemo(
@@ -138,6 +156,34 @@ export function HomeScreen() {
     }
   }
 
+  async function handleSchedule() {
+    const scheduledFor = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    try {
+      if (mode === 'delivery') {
+        const delivery = await createDeliveryMutation.mutateAsync({
+          category: deliveryStore.draft.category,
+          pickup,
+          dropoff,
+          paymentMethod: 'PAYSTACK_CARD',
+          scheduledFor
+        });
+        Alert.alert('Delivery scheduled', 'Your delivery is scheduled for about 30 minutes from now.');
+        navigation.navigate('Tracking', { deliveryId: delivery.id });
+      } else {
+        const ride = await createRideMutation.mutateAsync({
+          pickup,
+          dropoff,
+          requestedVehicleType: rideStore.draft.vehicleType,
+          scheduledFor
+        });
+        Alert.alert('Ride scheduled', 'Your ride is scheduled for about 30 minutes from now.');
+        navigation.navigate('RideTracking', { tripId: ride.id });
+      }
+    } catch (error) {
+      Alert.alert('Could not schedule request', error instanceof Error ? error.message : 'Please try again.');
+    }
+  }
+
   const quoteLoading = deliveryQuoteMutation.isPending || rideQuoteMutation.isPending;
   const bookLoading = createDeliveryMutation.isPending || createRideMutation.isPending || initializePayment.isPending;
 
@@ -182,7 +228,7 @@ export function HomeScreen() {
         >
           <Crosshair size={14} color={theme.colors.primary} />
           <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
-            {locationLoading ? 'Detecting...' : latitude && longitude ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}` : 'Use my location'}
+            {locationLoading ? 'Detecting...' : latitude && longitude ? detectedLocationLabel ?? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}` : 'Use my location'}
           </Text>
         </Pressable>
       </View>
@@ -287,7 +333,8 @@ export function HomeScreen() {
       <Button
         label={mode === 'delivery' ? 'Schedule delivery' : 'Schedule ride'}
         icon={<CalendarClock size={18} color={theme.colors.ink} />}
-        onPress={handleQuote}
+        onPress={handleSchedule}
+        loading={bookLoading}
         variant="secondary"
       />
     </Screen>

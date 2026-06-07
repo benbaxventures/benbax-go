@@ -109,7 +109,7 @@ export function ResetPasswordScreen({ navigation, route }: any) {
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
 
         <Button label="Reset password" onPress={handleSubmit} loading={loading} />
-        <Button label="Back to sign in" onPress={() => navigation.navigate('SignIn')} variant="quiet" />
+        <Button label="Back to sign in" onPress={() => navigation.navigate('SignIn')} variant="secondary" />
       </View>
     </KeyboardAvoidingView>
   );

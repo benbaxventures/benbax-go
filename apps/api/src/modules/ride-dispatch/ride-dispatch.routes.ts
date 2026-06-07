@@ -74,6 +74,8 @@ rideDispatchRouter.post(
 
     const io = req.app.get('io');
     io?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.driverOffer, assignment);
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideAssigned, assignment);
+    io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideAssigned, assignment);
     io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, updatedTrip);
     io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, updatedTrip);
     io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);

@@ -29,11 +29,15 @@ export function useCurrentLocation() {
           permissionDenied: true,
           error: 'Location permission denied'
         }));
-        return;
+        return null;
       }
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced
       });
+      const nextLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
       setState({
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
@@ -41,12 +45,14 @@ export function useCurrentLocation() {
         error: null,
         permissionDenied: false
       });
+      return nextLocation;
     } catch (err) {
       setState((prev) => ({
         ...prev,
         loading: false,
         error: err instanceof Error ? err.message : 'Could not get location'
       }));
+      return null;
     }
   }, []);
 

@@ -19,10 +19,12 @@ export async function dispatchRide(tripId: string, io?: Server) {
   });
 
   if (!drivers.length) {
-    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, {
+    const noDriverUpdate = {
       ...trip,
       dispatchStatus: 'NO_AVAILABLE_DRIVERS'
-    });
+    };
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, noDriverUpdate);
+    io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, noDriverUpdate);
     return;
   }
 
@@ -65,6 +67,8 @@ export async function dispatchRide(tripId: string, io?: Server) {
   });
 
   io?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.driverOffer, assignment);
+  io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideAssigned, assignment);
+  io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideAssigned, assignment);
   io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, updatedTrip);
   io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, updatedTrip);
   io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);

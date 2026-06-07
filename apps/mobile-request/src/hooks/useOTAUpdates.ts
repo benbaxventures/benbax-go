@@ -10,6 +10,7 @@ export function useOTAUpdates() {
 
     (async () => {
       try {
+        if (!Updates.isEnabled) return;
         const update = await Updates.checkForUpdateAsync();
         if (update.isAvailable) {
           await Updates.fetchUpdateAsync();

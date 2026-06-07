@@ -18,6 +18,7 @@ export function useCreateRide() {
       pickup: AddressPoint;
       dropoff: AddressPoint;
       requestedVehicleType?: string;
+      scheduledFor?: string;
       paymentMethod?: 'MTN_MOMO' | 'PAYSTACK_CARD' | 'WALLET' | 'CASH_ON_DELIVERY';
     }) =>
       apiRequest<RideTripSummary>('/rides', {

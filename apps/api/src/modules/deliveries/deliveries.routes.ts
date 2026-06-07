@@ -62,7 +62,14 @@ deliveriesRouter.post(
       ...req.body,
       customerId: req.user!.id
     });
-    void dispatchDelivery(delivery.id, req.app.get('io'));
+    const scheduledTime = delivery.scheduledFor?.getTime();
+    if (scheduledTime && scheduledTime > Date.now()) {
+      setTimeout(() => {
+        void dispatchDelivery(delivery.id, req.app.get('io'));
+      }, Math.min(scheduledTime - Date.now(), 2_147_483_647));
+    } else {
+      void dispatchDelivery(delivery.id, req.app.get('io'));
+    }
     return created(res, delivery);
   })
 );

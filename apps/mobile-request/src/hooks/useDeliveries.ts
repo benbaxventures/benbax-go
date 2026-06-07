@@ -21,6 +21,7 @@ export function useCreateDelivery() {
       pickup: AddressPoint;
       dropoff: AddressPoint;
       paymentMethod: 'MTN_MOMO' | 'PAYSTACK_CARD' | 'WALLET' | 'CASH_ON_DELIVERY';
+      scheduledFor?: string;
       notes?: string;
     }) =>
       apiRequest<DeliverySummary>('/deliveries', {

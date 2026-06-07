@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Car, Phone, ShieldCheck } from 'lucide-react-native';
-import { ActivityIndicator, Alert, Text, View } from 'react-native';
+import { Car, MapPinned, MessageSquareText, Phone, ShieldCheck } from 'lucide-react-native';
+import { ActivityIndicator, Alert, Linking, Text, View } from 'react-native';
 import { realtimeEvents } from '../shared';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { StatusPill } from '../components/StatusPill';
 import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
+import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -20,12 +21,15 @@ type Coordinate = {
 type DriverInfo = {
   user?: { name?: string; fullName?: string; phone?: string };
   vehicle?: { type?: string; plateNumber?: string | null; color?: string | null; make?: string | null; model?: string | null };
+  currentLatitude?: string | number | null;
+  currentLongitude?: string | number | null;
 };
 
 type RideDetail = {
   id: string;
   tripCode: string;
   status: string;
+  scheduledFor?: string | null;
   pickupLabel: string;
   pickupLatitude: string;
   pickupLongitude: string;
@@ -153,9 +157,22 @@ export function RideTrackingScreen({ route }: Props) {
       });
       socket.on(realtimeEvents.rideAssigned, (assignment: RideAssignmentEvent) => {
         if (assignment.tripId !== route.params.tripId) return;
-        setLiveStatus('ASSIGNED');
-        if (assignment.driverProfile) setAssignedDriver(assignment.driverProfile);
-        Alert.alert('Driver assigned', 'Your driver accepted the trip and is on the way.');
+        setLiveStatus(assignment.status === 'ACCEPTED' ? 'ASSIGNED' : 'ASSIGNING');
+        if (assignment.driverProfile) {
+          setAssignedDriver(assignment.driverProfile);
+          if (assignment.driverProfile.currentLatitude && assignment.driverProfile.currentLongitude) {
+            setDriverPoint({
+              latitude: Number(assignment.driverProfile.currentLatitude),
+              longitude: Number(assignment.driverProfile.currentLongitude)
+            });
+          }
+        }
+        Alert.alert(
+          assignment.status === 'ACCEPTED' ? 'Driver assigned' : 'Driver found',
+          assignment.status === 'ACCEPTED'
+            ? 'Your driver accepted the trip and is on the way.'
+            : 'A nearby driver has received your request.'
+        );
         refetch();
       });
       socket.on(realtimeEvents.rideTrackingPoint, (point) => {
@@ -189,7 +206,12 @@ export function RideTrackingScreen({ route }: Props) {
         latitude: Number((driverPoint ?? ride?.trackingPoints?.[0])?.latitude),
         longitude: Number((driverPoint ?? ride?.trackingPoints?.[0])?.longitude)
       }
-    : null;
+    : assignedDriver?.currentLatitude && assignedDriver?.currentLongitude
+      ? {
+          latitude: Number(assignedDriver.currentLatitude),
+          longitude: Number(assignedDriver.currentLongitude)
+        }
+      : null;
   const routePoints = ride?.metadata?.expectedRoute?.polyline?.length
     ? ride.metadata.expectedRoute.polyline
     : latestPoint
@@ -198,12 +220,28 @@ export function RideTrackingScreen({ route }: Props) {
   const driverName = assignedDriver?.user?.name ?? assignedDriver?.user?.fullName ?? 'Driver';
   const vehicle = assignedDriver?.vehicle;
   const vehicleLabel = [vehicle?.color, vehicle?.make, vehicle?.model, vehicle?.plateNumber].filter(Boolean).join(' ');
+  const isScheduledFuture = ride?.scheduledFor ? new Date(ride.scheduledFor).getTime() > Date.now() : false;
   const statusLabel =
-    liveStatus === 'NO_AVAILABLE_DRIVERS'
+    isScheduledFuture && !assignedDriver
+      ? 'Scheduled'
+      : liveStatus === 'NO_AVAILABLE_DRIVERS'
       ? 'No drivers online'
       : liveStatus === 'REQUESTED'
         ? 'Matching driver'
+        : liveStatus === 'ASSIGNING'
+          ? 'Driver found'
         : liveStatus.replaceAll('_', ' ').toLowerCase();
+
+  function openDriverMap() {
+    if (!latestPoint) {
+      Alert.alert('Driver location unavailable', 'The driver location will appear when the driver shares GPS.');
+      return;
+    }
+    const query = `${latestPoint.latitude},${latestPoint.longitude}`;
+    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`).catch(() => {
+      Alert.alert('Map unavailable', 'Could not open Google Maps on this device.');
+    });
+  }
 
   return (
     <Screen scroll={false}>
@@ -222,18 +260,31 @@ export function RideTrackingScreen({ route }: Props) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Car size={18} color={theme.colors.primary} />
             <Text style={{ fontWeight: '900', color: theme.colors.ink }}>
-              {assignedDriver ? `${driverName} is on the way` : 'Waiting for driver acceptance'}
+              {assignedDriver
+                ? `${driverName} ${liveStatus === 'ASSIGNING' ? 'is reviewing your request' : 'is on the way'}`
+                : isScheduledFuture
+                  ? 'Driver matching starts near pickup time'
+                  : 'Waiting for driver acceptance'}
             </Text>
           </View>
           <Text style={{ color: theme.colors.muted }}>
-            {assignedDriver ? vehicleLabel || 'Vehicle details pending' : 'Keep this screen open to receive the assignment in real time.'}
+            {assignedDriver
+              ? vehicleLabel || 'Vehicle details pending'
+              : isScheduledFuture
+                ? `Scheduled for ${new Date(ride?.scheduledFor ?? Date.now()).toLocaleString()}.`
+                : 'Keep this screen open to receive the assignment in real time.'}
           </Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <Button label="Call" icon={<Phone size={18} color="#fff" />} onPress={() => undefined} />
+              <Button label="Call" icon={<Phone size={18} color="#fff" />} onPress={() => callPhone(assignedDriver?.user?.phone ?? BENBAX_PHONE)} />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Emergency" icon={<ShieldCheck size={18} color={theme.colors.ink} />} onPress={() => undefined} variant="secondary" />
+              <Button label="WhatsApp" icon={<MessageSquareText size={18} color={theme.colors.ink} />} onPress={() => openWhatsApp(assignedDriver?.user?.phone ?? BENBAX_PHONE)} variant="secondary" />
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Button label="Open map" icon={<MapPinned size={18} color={theme.colors.ink} />} onPress={openDriverMap} variant="secondary" />
             </View>
           </View>
         </View>

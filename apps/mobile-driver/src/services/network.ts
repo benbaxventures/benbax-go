@@ -4,6 +4,17 @@ const API_PORT = 4000;
 const DEFAULT_API_BASE_URL = 'https://benbaxapi-production.up.railway.app/api/v1';
 const DEFAULT_SOCKET_URL = 'https://benbaxapi-production.up.railway.app';
 const RAILWAY_HOST = 'benbaxapi-production.up.railway.app';
+const USE_LOCAL_API = process.env.EXPO_PUBLIC_USE_LOCAL_API === 'true';
+
+function getConfiguredApiBaseUrl() {
+  const extraApiBaseUrl = Constants.expoConfig?.extra?.apiBaseUrl;
+  return process.env.EXPO_PUBLIC_API_BASE_URL || (typeof extraApiBaseUrl === 'string' ? extraApiBaseUrl : undefined);
+}
+
+function getConfiguredSocketUrl() {
+  const extraSocketUrl = Constants.expoConfig?.extra?.socketUrl;
+  return process.env.EXPO_PUBLIC_SOCKET_URL || (typeof extraSocketUrl === 'string' ? extraSocketUrl : undefined);
+}
 
 function getExpoHost() {
   try {
@@ -32,6 +43,7 @@ function isPrivateLanHost(hostname: string) {
 }
 
 function shouldUseExpoHost(configuredUrl: string | undefined, expoHost: string | null) {
+  if (!USE_LOCAL_API) return false;
   if (!expoHost) return false;
   if (!configuredUrl) return false;
 
@@ -64,20 +76,22 @@ function normalizeRemoteUrl(url: string) {
 
 export function resolveApiBaseUrl() {
   const expoHost = getExpoHost();
+  const configuredUrl = getConfiguredApiBaseUrl();
 
-  if (shouldUseExpoHost(process.env.EXPO_PUBLIC_API_BASE_URL, expoHost) && expoHost) {
+  if (shouldUseExpoHost(configuredUrl, expoHost) && expoHost) {
     return `http://${expoHost}:${API_PORT}/api/v1`;
   }
 
-  return normalizeRemoteUrl(process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL);
+  return normalizeRemoteUrl(configuredUrl ?? DEFAULT_API_BASE_URL);
 }
 
 export function resolveSocketUrl() {
   const expoHost = getExpoHost();
+  const configuredUrl = getConfiguredSocketUrl();
 
-  if (shouldUseExpoHost(process.env.EXPO_PUBLIC_SOCKET_URL, expoHost) && expoHost) {
+  if (shouldUseExpoHost(configuredUrl, expoHost) && expoHost) {
     return `http://${expoHost}:${API_PORT}`;
   }
 
-  return normalizeRemoteUrl(process.env.EXPO_PUBLIC_SOCKET_URL ?? DEFAULT_SOCKET_URL);
+  return normalizeRemoteUrl(configuredUrl ?? DEFAULT_SOCKET_URL);
 }

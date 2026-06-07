@@ -12,6 +12,10 @@ import type { RootStackParamList } from '../navigation/types';
 
 type GoogleSignInModule = typeof import('@react-native-google-signin/google-signin');
 
+const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
+const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+
 function FieldLabel({ children }: { children: string }) {
   return <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>{children}</Text>;
 }
@@ -195,19 +199,15 @@ function getGoogleSignInUnavailableReason() {
     return 'Google sign-in needs a development build. Expo Go cannot run native Google Sign-In.';
   }
 
-  if (Platform.OS === 'android' && !process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID) {
-    return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID in apps/mobile-driver/.env';
-  }
-
-  if (Platform.OS === 'android' && !process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
+  if (Platform.OS === 'android' && !GOOGLE_WEB_CLIENT_ID) {
     return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in apps/mobile-driver/.env';
   }
 
-  if (Platform.OS === 'ios' && !process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID) {
+  if (Platform.OS === 'ios' && !GOOGLE_IOS_CLIENT_ID) {
     return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID in apps/mobile-driver/.env';
   }
 
-  if (Platform.OS === 'web' && !process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
+  if (Platform.OS === 'web' && !GOOGLE_WEB_CLIENT_ID) {
     return 'Google sign-in needs EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in apps/mobile-driver/.env';
   }
 
@@ -232,7 +232,7 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
 
         (WebBrowserModule?.maybeCompleteAuthSession ?? WebBrowserModule?.default?.maybeCompleteAuthSession)?.();
 
-        const clientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+        const clientId = GOOGLE_WEB_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_IOS_CLIENT_ID;
         if (!clientId) throw new Error('Missing Google client ID. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env');
 
         const { AuthRequest, Prompt, makeRedirectUri } = AuthSessionModule;
@@ -276,7 +276,7 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
         const { GoogleSignin, statusCodes } = googleModule;
         googleStatusCodes = statusCodes;
         GoogleSignin.configure({
-          ...(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ? { webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID } : {}),
+          ...(GOOGLE_WEB_CLIENT_ID ? { webClientId: GOOGLE_WEB_CLIENT_ID } : {}),
           scopes: ['openid', 'profile', 'email']
         });
 
@@ -295,7 +295,11 @@ function GoogleSignInButton({ role, onError }: { role: 'RIDER' | 'DRIVER'; onErr
               await tryAuthSessionFallback();
               return;
             } catch (fallbackErr) {
-              onError(fallbackErr instanceof Error ? fallbackErr.message : 'Google sign-in failed');
+              onError(
+                fallbackErr instanceof Error
+                  ? fallbackErr.message
+                  : 'Google sign-in is misconfigured for this APK. Add the APK signing SHA-1/SHA-256 to the Android OAuth client for com.benbax.driver, update google-services.json, then rebuild the APK.'
+              );
               return;
             }
           }

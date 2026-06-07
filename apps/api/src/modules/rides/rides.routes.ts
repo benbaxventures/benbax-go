@@ -61,7 +61,14 @@ ridesRouter.post(
     io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideRequested, trip);
     io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, trip);
     io?.to('admins').emit(realtimeEvents.rideRequested, trip);
-    void dispatchRide(trip.id, io);
+    const scheduledTime = trip.scheduledFor?.getTime();
+    if (scheduledTime && scheduledTime > Date.now()) {
+      setTimeout(() => {
+        void dispatchRide(trip.id, io);
+      }, Math.min(scheduledTime - Date.now(), 2_147_483_647));
+    } else {
+      void dispatchRide(trip.id, io);
+    }
     return created(res, trip);
   })
 );

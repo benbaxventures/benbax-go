@@ -1,8 +1,9 @@
-import { Headphones, MessageSquareText } from 'lucide-react-native';
+import { Headphones, MessageSquareText, Phone } from 'lucide-react-native';
 import { Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { theme } from '../theme/tokens';
+import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
 
 export function SupportScreen() {
   return (
@@ -13,7 +14,14 @@ export function SupportScreen() {
         <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>Smart customer support</Text>
         <Text style={{ color: theme.colors.muted }}>The assistant triages payment, pickup, rider, emergency, and delivery proof issues.</Text>
       </View>
-      <Button label="Chat with Benbax" icon={<MessageSquareText size={18} color="#fff" />} onPress={() => undefined} />
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Button label="Call Benbax" icon={<Phone size={18} color="#fff" />} onPress={() => callPhone(BENBAX_PHONE)} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button label="WhatsApp" icon={<MessageSquareText size={18} color="#fff" />} onPress={() => openWhatsApp(BENBAX_PHONE)} />
+        </View>
+      </View>
     </Screen>
   );
 }

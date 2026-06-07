@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Phone, ShieldCheck } from 'lucide-react-native';
+import { MessageSquareText, Phone, ShieldCheck } from 'lucide-react-native';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { realtimeEvents } from '../shared';
 import { Button } from '../components/Button';
@@ -9,6 +9,7 @@ import { Screen } from '../components/Screen';
 import { StatusPill } from '../components/StatusPill';
 import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
+import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
 import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
 
@@ -34,7 +35,7 @@ type DeliveryDetail = {
   }>;
   assignments?: Array<{
     riderProfile?: {
-      user?: { fullName?: string };
+      user?: { fullName?: string; phone?: string };
       vehicle?: { type?: string; plateNumber?: string | null };
     };
   }>;
@@ -169,10 +170,10 @@ export function TrackingScreen({ route }: Props) {
           </Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <Button label="Call" icon={<Phone size={18} color="#fff" />} onPress={() => undefined} />
+              <Button label="Call" icon={<Phone size={18} color="#fff" />} onPress={() => callPhone(rider?.user?.phone ?? BENBAX_PHONE)} />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="Emergency" icon={<ShieldCheck size={18} color={theme.colors.ink} />} onPress={() => undefined} variant="secondary" />
+              <Button label="WhatsApp" icon={<MessageSquareText size={18} color={theme.colors.ink} />} onPress={() => openWhatsApp(rider?.user?.phone ?? BENBAX_PHONE)} variant="secondary" />
             </View>
           </View>
         </View>

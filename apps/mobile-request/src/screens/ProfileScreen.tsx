@@ -14,6 +14,17 @@ export function ProfileScreen() {
   const { user, logout } = useAuthStore();
   const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
 
+  function getUpdateErrorMessage(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/failed to check for update/i.test(message)) {
+      return 'Could not reach the update server. Check your internet connection, then try again.';
+    }
+    if (/No compatible update|runtime/i.test(message)) {
+      return 'No compatible update is published for this installed build yet.';
+    }
+    return message || 'Could not check for updates. Try again later.';
+  }
+
   async function handleUpdatePress() {
     if (!Updates.isEnabled) {
       Alert.alert('Updates unavailable', 'Remote updates are only available in installed preview or production builds.');
@@ -40,7 +51,7 @@ export function ProfileScreen() {
         }
       ]);
     } catch (error) {
-      Alert.alert('Update failed', error instanceof Error ? error.message : 'Could not check for updates. Try again later.');
+      Alert.alert('Update check failed', getUpdateErrorMessage(error));
     } finally {
       setIsCheckingForUpdate(false);
     }
