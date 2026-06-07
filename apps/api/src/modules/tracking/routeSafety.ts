@@ -32,13 +32,16 @@ type RealtimeServer = {
 const ROUTE_CORRIDOR_METERS = 300;
 const STALE_LOCATION_MINUTES = 5;
 
-export async function buildExpectedRoute(pickup: Coordinate, dropoff: Coordinate): Promise<ExpectedRoute> {
+export async function buildExpectedRoute(
+  pickup: Coordinate,
+  dropoff: Coordinate
+): Promise<ExpectedRoute> {
   if (!env.GOOGLE_MAPS_API_KEY) {
     return {
       provider: 'fallback',
       polyline: [pickup, dropoff],
       corridorMeters: ROUTE_CORRIDOR_METERS,
-      calculatedAt: new Date().toISOString()
+      calculatedAt: new Date().toISOString(),
     };
   }
 
@@ -46,9 +49,11 @@ export async function buildExpectedRoute(pickup: Coordinate, dropoff: Coordinate
     const params = new URLSearchParams({
       origin: `${pickup.latitude},${pickup.longitude}`,
       destination: `${dropoff.latitude},${dropoff.longitude}`,
-      key: env.GOOGLE_MAPS_API_KEY
+      key: env.GOOGLE_MAPS_API_KEY,
     });
-    const response = await fetch(`https://maps.googleapis.com/maps/api/directions/json?${params.toString()}`);
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/directions/json?${params.toString()}`
+    );
     const body = (await response.json()) as {
       routes?: Array<{ overview_polyline?: { points?: string } }>;
     };
@@ -58,14 +63,14 @@ export async function buildExpectedRoute(pickup: Coordinate, dropoff: Coordinate
       provider: encoded ? 'google' : 'fallback',
       polyline: encoded ? decodePolyline(encoded) : [pickup, dropoff],
       corridorMeters: ROUTE_CORRIDOR_METERS,
-      calculatedAt: new Date().toISOString()
+      calculatedAt: new Date().toISOString(),
     };
   } catch {
     return {
       provider: 'fallback',
       polyline: [pickup, dropoff],
       corridorMeters: ROUTE_CORRIDOR_METERS,
-      calculatedAt: new Date().toISOString()
+      calculatedAt: new Date().toISOString(),
     };
   }
 }
@@ -82,11 +87,11 @@ export async function evaluateTrackingSafety(input: {
     (await buildExpectedRoute(
       {
         latitude: Number(input.delivery.pickupLatitude),
-        longitude: Number(input.delivery.pickupLongitude)
+        longitude: Number(input.delivery.pickupLongitude),
       },
       {
         latitude: Number(input.delivery.dropoffLatitude),
-        longitude: Number(input.delivery.dropoffLongitude)
+        longitude: Number(input.delivery.dropoffLongitude),
       }
     ));
 
@@ -96,19 +101,20 @@ export async function evaluateTrackingSafety(input: {
       data: {
         metadata: {
           ...metadata,
-          expectedRoute
-        } satisfies Prisma.InputJsonValue
-      }
+          expectedRoute,
+        } satisfies Prisma.InputJsonValue,
+      },
     });
   }
 
   const currentPoint = {
     latitude: Number(input.point.latitude),
-    longitude: Number(input.point.longitude)
+    longitude: Number(input.point.longitude),
   };
   const distanceFromRouteMeters = distanceToPolylineMeters(currentPoint, expectedRoute.polyline);
   const isRouteDeviation = distanceFromRouteMeters > expectedRoute.corridorMeters;
-  const isStalePoint = Date.now() - input.point.capturedAt.getTime() > STALE_LOCATION_MINUTES * 60_000;
+  const isStalePoint =
+    Date.now() - input.point.capturedAt.getTime() > STALE_LOCATION_MINUTES * 60_000;
   const isImpossibleSpeed = Number(input.point.speedKph ?? 0) > 120;
 
   if (!isRouteDeviation && !isStalePoint && !isImpossibleSpeed) {
@@ -119,9 +125,9 @@ export async function evaluateTrackingSafety(input: {
           metadata: {
             ...metadata,
             expectedRoute,
-            routeSafety: { consecutiveDeviationCount: 0 }
-          } satisfies Prisma.InputJsonValue
-        }
+            routeSafety: { consecutiveDeviationCount: 0 },
+          } satisfies Prisma.InputJsonValue,
+        },
       });
     }
     return;
@@ -131,7 +137,11 @@ export async function evaluateTrackingSafety(input: {
     ? (metadata.routeSafety?.consecutiveDeviationCount ?? 0) + 1
     : (metadata.routeSafety?.consecutiveDeviationCount ?? 0);
   const severity = getSeverity(consecutiveDeviationCount, isImpossibleSpeed, isStalePoint);
-  const type = isRouteDeviation ? 'ROUTE_DEVIATION' : isImpossibleSpeed ? 'IMPOSSIBLE_SPEED' : 'STALE_LOCATION';
+  const type = isRouteDeviation
+    ? 'ROUTE_DEVIATION'
+    : isImpossibleSpeed
+      ? 'IMPOSSIBLE_SPEED'
+      : 'STALE_LOCATION';
   const details = {
     deliveryId: input.delivery.id,
     trackingCode: input.delivery.trackingCode,
@@ -140,7 +150,7 @@ export async function evaluateTrackingSafety(input: {
     distanceFromRouteMeters: Math.round(distanceFromRouteMeters),
     corridorMeters: expectedRoute.corridorMeters,
     speedKph: input.point.speedKph ? Number(input.point.speedKph) : null,
-    escalation: getEscalation(severity)
+    escalation: getEscalation(severity),
   };
 
   const activity = await prisma.suspiciousActivity.create({
@@ -149,8 +159,8 @@ export async function evaluateTrackingSafety(input: {
       deliveryId: input.delivery.id,
       type,
       severity,
-      details
-    }
+      details,
+    },
   });
 
   await prisma.delivery.update({
@@ -161,10 +171,10 @@ export async function evaluateTrackingSafety(input: {
         expectedRoute,
         routeSafety: {
           lastDeviationAt: new Date().toISOString(),
-          consecutiveDeviationCount
-        }
-      } satisfies Prisma.InputJsonValue
-    }
+          consecutiveDeviationCount,
+        },
+      } satisfies Prisma.InputJsonValue,
+    },
   });
 
   if (isRouteDeviation) {
@@ -173,8 +183,8 @@ export async function evaluateTrackingSafety(input: {
         userId: input.rider.userId,
         title: 'Route warning',
         body: 'You are moving away from the delivery route.',
-        data: details
-      }
+        data: details,
+      },
     });
   }
 
@@ -184,7 +194,7 @@ export async function evaluateTrackingSafety(input: {
     severity,
     message: buildAlertMessage(type, severity, details.distanceFromRouteMeters),
     details,
-    createdAt: activity.createdAt
+    createdAt: activity.createdAt,
   });
   input.io?.to(`rider:${input.rider.userId}`).emit(realtimeEvents.riderWarning, {
     type,
@@ -192,7 +202,7 @@ export async function evaluateTrackingSafety(input: {
     message: isRouteDeviation
       ? 'You are moving away from the delivery route.'
       : 'Your tracking signal needs attention.',
-    details
+    details,
   });
 }
 
@@ -202,7 +212,11 @@ function getRouteMetadata(metadata: Prisma.JsonValue): DeliveryRouteMetadata {
     : {};
 }
 
-function getSeverity(consecutiveDeviationCount: number, isImpossibleSpeed: boolean, isStalePoint: boolean) {
+function getSeverity(
+  consecutiveDeviationCount: number,
+  isImpossibleSpeed: boolean,
+  isStalePoint: boolean
+) {
   if (isImpossibleSpeed || consecutiveDeviationCount >= 5) return 'HIGH';
   if (isStalePoint || consecutiveDeviationCount >= 3) return 'MEDIUM';
   return 'LOW';
@@ -258,7 +272,7 @@ function decodePolylineValue(encoded: string, startIndex: number) {
 
   return {
     delta: result & 1 ? ~(result >> 1) : result >> 1,
-    index
+    index,
   };
 }
 
@@ -288,15 +302,22 @@ function distanceToSegmentMeters(point: Coordinate, start: Coordinate, end: Coor
 
   if (lengthSquared === 0) return haversineMeters(point, start);
 
-  const t = Math.max(0, Math.min(1, ((pointXY.x - startXY.x) * dx + (pointXY.y - startXY.y) * dy) / lengthSquared));
+  const t = Math.max(
+    0,
+    Math.min(1, ((pointXY.x - startXY.x) * dx + (pointXY.y - startXY.y) * dy) / lengthSquared)
+  );
   const projection = { x: startXY.x + t * dx, y: startXY.y + t * dy };
   return Math.hypot(pointXY.x - projection.x, pointXY.y - projection.y);
 }
 
-function toXY(point: Coordinate, metersPerDegreeLatitude: number, metersPerDegreeLongitude: number) {
+function toXY(
+  point: Coordinate,
+  metersPerDegreeLatitude: number,
+  metersPerDegreeLongitude: number
+) {
   return {
     x: point.longitude * metersPerDegreeLongitude,
-    y: point.latitude * metersPerDegreeLatitude
+    y: point.latitude * metersPerDegreeLatitude,
   };
 }
 

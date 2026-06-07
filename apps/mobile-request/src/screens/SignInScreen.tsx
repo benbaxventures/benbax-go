@@ -1,17 +1,31 @@
-import { useEffect, useState } from 'react';
-import Constants from 'expo-constants';
-import { KeyboardAvoidingView, Platform, Text, TextInput, View, TouchableOpacity, Switch, Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Constants from 'expo-constants';
 import { Eye, EyeOff } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
-import { checkApiHealth, getApiBaseUrl, isApiConnectionError, ApiResponseError } from '../services/api';
+import type { RootStackParamList } from '../navigation/types';
+import {
+  ApiResponseError,
+  checkApiHealth,
+  getApiBaseUrl,
+  isApiConnectionError,
+} from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
-import type { RootStackParamList } from '../navigation/types';
 
-type GoogleSignInModule = typeof import('@react-native-google-signin/google-signin');
+import type GoogleSignInModule from '@react-native-google-signin/google-signin';
 
 const GOOGLE_ANDROID_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
@@ -31,7 +45,9 @@ export function SignInScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [apiStatus, setApiStatus] = useState<'online' | 'api_offline' | 'database_offline' | null>(null);
+  const [apiStatus, setApiStatus] = useState<'online' | 'api_offline' | 'database_offline' | null>(
+    null
+  );
   const [checkingApi, setCheckingApi] = useState(false);
   const [loading, setLoading] = useState(false);
   const { login, register } = useAuthStore();
@@ -65,17 +81,19 @@ export function SignInScreen() {
     } catch (err) {
       if (isApiConnectionError(err)) {
         setApiStatus('api_offline');
-        setError(`Cannot reach the API. Start the backend and confirm your phone is on the same network. Current API: ${getApiBaseUrl()}`);
+        setError(
+          `Cannot reach the API. Start the backend and confirm your phone is on the same network. Current API: ${getApiBaseUrl()}`
+        );
       } else {
         // Provide more helpful messages for common auth failures.
         if (err instanceof ApiResponseError) {
           if (err.status === 401) setError('Invalid phone or password.');
-          else if (err.status === 400 && err.code === 'VALIDATION_ERROR') setError(String(err.details ?? err.message));
+          else if (err.status === 400 && err.code === 'VALIDATION_ERROR')
+            setError(String(err.details ?? err.message));
           else if (err.status === 503 || err.code === 'DATABASE_UNAVAILABLE') {
             setApiStatus('database_offline');
             setError('The backend database is offline. Start Postgres, then retry sign in.');
-          }
-          else setError(err.message || 'Authentication failed');
+          } else setError(err.message || 'Authentication failed');
         } else {
           setError(err instanceof Error ? err.message : 'Authentication failed');
         }
@@ -94,13 +112,17 @@ export function SignInScreen() {
         justifyContent: 'center',
         paddingHorizontal: 20,
         paddingTop: 20,
-        paddingBottom: 20 + insets.bottom
+        paddingBottom: 20 + insets.bottom,
       }}
     >
       <View style={{ gap: 18 }}>
         <View style={{ gap: 8 }}>
-          <Text style={{ fontSize: 32, fontWeight: '900', color: theme.colors.ink }}>Benbax Request</Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Fast delivery and logistics built for Ghana.</Text>
+          <Text style={{ fontSize: 32, fontWeight: '900', color: theme.colors.ink }}>
+            Benbax Request
+          </Text>
+          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>
+            Fast delivery and logistics built for Ghana.
+          </Text>
         </View>
 
         {apiStatus === 'api_offline' || apiStatus === 'database_offline' ? (
@@ -111,7 +133,7 @@ export function SignInScreen() {
               borderWidth: 1,
               borderRadius: theme.radius.md,
               padding: 12,
-              gap: 8
+              gap: 8,
             }}
           >
             <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>
@@ -147,7 +169,16 @@ export function SignInScreen() {
           placeholder="+233 phone number"
           style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
         />
-        <View style={{ backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, flexDirection: 'row', alignItems: 'center' }}>
+        <View
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 8,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}
+        >
           <TextInput
             value={password}
             onChangeText={setPassword}
@@ -155,13 +186,22 @@ export function SignInScreen() {
             placeholder="Password"
             style={{ flex: 1, padding: 14, fontSize: 16 }}
           />
-          <TouchableOpacity onPress={() => setShowPassword((s) => !s)} accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}>
-            {showPassword ? <EyeOff size={20} color={theme.colors.muted} /> : <Eye size={20} color={theme.colors.muted} />}
+          <TouchableOpacity
+            onPress={() => setShowPassword((s) => !s)}
+            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+          >
+            {showPassword ? (
+              <EyeOff size={20} color={theme.colors.muted} />
+            ) : (
+              <Eye size={20} color={theme.colors.muted} />
+            )}
           </TouchableOpacity>
         </View>
 
         {mode === 'login' ? (
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <View
+            style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}
+          >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Switch
                 value={rememberMe}
@@ -172,14 +212,20 @@ export function SignInScreen() {
               <Text style={{ color: theme.colors.ink }}>Remember me</Text>
             </View>
             <Pressable onPress={() => navigation.navigate('ForgotPassword')}>
-              <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Forgot password?</Text>
+              <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>
+                Forgot password?
+              </Text>
             </Pressable>
           </View>
         ) : null}
 
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
 
-        <Button label={mode === 'login' ? 'Sign in' : 'Create account'} onPress={submit} loading={loading} />
+        <Button
+          label={mode === 'login' ? 'Sign in' : 'Create account'}
+          onPress={submit}
+          loading={loading}
+        />
         {mode === 'login' ? (
           googleSignInUnavailableReason ? (
             <Button
@@ -204,7 +250,12 @@ export function SignInScreen() {
   );
 }
 
-function validateCredentials(input: { mode: 'login' | 'register'; name: string; phone: string; password: string }) {
+function validateCredentials(input: {
+  mode: 'login' | 'register';
+  name: string;
+  phone: string;
+  password: string;
+}) {
   const phone = input.phone.trim();
   const password = input.password.trim();
 
@@ -261,13 +312,20 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
       async function tryAuthSessionFallback() {
         const AuthSessionModule = await import('expo-auth-session').catch(() => null);
         const WebBrowserModule = await import('expo-web-browser').catch(() => null);
-        if (!AuthSessionModule) throw new Error('expo-auth-session is not available. Install it to enable Google sign-in in Expo.');
+        if (!AuthSessionModule)
+          throw new Error(
+            'expo-auth-session is not available. Install it to enable Google sign-in in Expo.'
+          );
 
         // complete any pending browser sessions
-        (WebBrowserModule?.maybeCompleteAuthSession ?? WebBrowserModule?.default?.maybeCompleteAuthSession)?.();
+        (
+          WebBrowserModule?.maybeCompleteAuthSession ??
+          WebBrowserModule?.default?.maybeCompleteAuthSession
+        )?.();
 
         const clientId = GOOGLE_WEB_CLIENT_ID || GOOGLE_ANDROID_CLIENT_ID || GOOGLE_IOS_CLIENT_ID;
-        if (!clientId) throw new Error('Missing Google client ID. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env');
+        if (!clientId)
+          throw new Error('Missing Google client ID. Set EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in .env');
 
         const { AuthRequest, Prompt, makeRedirectUri } = AuthSessionModule;
         if (typeof AuthRequest !== 'function' || typeof makeRedirectUri !== 'function') {
@@ -276,7 +334,7 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
 
         const redirectUri = makeRedirectUri({
           scheme: 'benbax',
-          path: 'oauthredirect'
+          path: 'oauthredirect',
         });
         const request = new AuthRequest({
           clientId,
@@ -286,15 +344,23 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
           prompt: Prompt.SelectAccount,
           usePKCE: false,
           extraParams: {
-            nonce: Math.random().toString(36).substring(2)
-          }
+            nonce: Math.random().toString(36).substring(2),
+          },
         });
         const result = await request.promptAsync({
-          authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth'
+          authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
         });
-        (WebBrowserModule?.maybeCompleteAuthSession ?? WebBrowserModule?.default?.maybeCompleteAuthSession)?.();
+        (
+          WebBrowserModule?.maybeCompleteAuthSession ??
+          WebBrowserModule?.default?.maybeCompleteAuthSession
+        )?.();
         if (result.type === 'error') {
-          throw new Error(result.error?.message || result.params?.error_description || result.params?.error || 'Google sign-in failed');
+          throw new Error(
+            result.error?.message ||
+              result.params?.error_description ||
+              result.params?.error ||
+              'Google sign-in failed'
+          );
         }
         if (result.type !== 'success') throw new Error('Google sign-in cancelled');
         const idToken = result.params?.id_token ?? result.params?.idToken;
@@ -305,12 +371,16 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
       }
 
       // If native GoogleSignin module is available and appears functional, try native first
-      if (googleModule && googleModule.GoogleSignin && typeof googleModule.GoogleSignin.hasPlayServices === 'function') {
+      if (
+        googleModule &&
+        googleModule.GoogleSignin &&
+        typeof googleModule.GoogleSignin.hasPlayServices === 'function'
+      ) {
         const { GoogleSignin, statusCodes } = googleModule;
         googleStatusCodes = statusCodes;
         GoogleSignin.configure({
           ...(GOOGLE_WEB_CLIENT_ID ? { webClientId: GOOGLE_WEB_CLIENT_ID } : {}),
-          scopes: ['openid', 'profile', 'email']
+          scopes: ['openid', 'profile', 'email'],
         });
 
         await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -322,7 +392,11 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
         } catch (nativeErr: unknown) {
           // Native DEVELOPER_ERROR means Google's Android OAuth client does not match
           // this APK's package name/signing certificate. A browser fallback cannot fix it.
-          const isDevError = (typeof nativeErr === 'object' && nativeErr !== null && 'code' in (nativeErr as any) && (nativeErr as any).code === 'DEVELOPER_ERROR') ||
+          const isDevError =
+            (typeof nativeErr === 'object' &&
+              nativeErr !== null &&
+              'code' in (nativeErr as any) &&
+              (nativeErr as any).code === 'DEVELOPER_ERROR') ||
             (nativeErr instanceof Error && /DEVELOPER_ERROR/i.test(nativeErr.message));
 
           if (isDevError) {
@@ -332,8 +406,15 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
             return;
           }
 
-          if (googleStatusCodes && isGoogleSignInError(nativeErr, googleStatusCodes.SIGN_IN_CANCELLED)) return;
-          if (googleStatusCodes && isGoogleSignInError(nativeErr, googleStatusCodes.PLAY_SERVICES_NOT_AVAILABLE)) {
+          if (
+            googleStatusCodes &&
+            isGoogleSignInError(nativeErr, googleStatusCodes.SIGN_IN_CANCELLED)
+          )
+            return;
+          if (
+            googleStatusCodes &&
+            isGoogleSignInError(nativeErr, googleStatusCodes.PLAY_SERVICES_NOT_AVAILABLE)
+          ) {
             onError('Google Play Services is not available or needs to be updated.');
             return;
           }
@@ -345,8 +426,12 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
         await tryAuthSessionFallback();
       }
     } catch (err) {
-      if (googleStatusCodes && isGoogleSignInError(err, googleStatusCodes.SIGN_IN_CANCELLED)) return;
-      if (googleStatusCodes && isGoogleSignInError(err, googleStatusCodes.PLAY_SERVICES_NOT_AVAILABLE)) {
+      if (googleStatusCodes && isGoogleSignInError(err, googleStatusCodes.SIGN_IN_CANCELLED))
+        return;
+      if (
+        googleStatusCodes &&
+        isGoogleSignInError(err, googleStatusCodes.PLAY_SERVICES_NOT_AVAILABLE)
+      ) {
         onError('Google Play Services is not available or needs to be updated.');
         return;
       }

@@ -25,7 +25,7 @@ const envSchema = z.object({
   MTN_MOMO_BASE_URL: z.string().optional(),
   MTN_MOMO_SUBSCRIPTION_KEY: z.string().optional(),
   MTN_MOMO_API_USER: z.string().optional(),
-  MTN_MOMO_API_KEY: z.string().optional()
+  MTN_MOMO_API_KEY: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

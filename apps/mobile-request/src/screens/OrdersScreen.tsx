@@ -14,16 +14,23 @@ export function OrdersScreen() {
       {!isLoading && !data?.length ? (
         <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 18 }}>
           <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>No deliveries yet</Text>
-          <Text style={{ color: theme.colors.muted, marginTop: 4 }}>Your active and past deliveries will appear here.</Text>
+          <Text style={{ color: theme.colors.muted, marginTop: 4 }}>
+            Your active and past deliveries will appear here.
+          </Text>
         </View>
       ) : null}
       {data?.map((delivery) => (
-        <View key={delivery.id} style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 14, gap: 8 }}>
+        <View
+          key={delivery.id}
+          style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 14, gap: 8 }}
+        >
           <StatusPill label={delivery.status} />
           <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
             {delivery.pickup.label} to {delivery.dropoff.label}
           </Text>
-          <Text style={{ color: theme.colors.muted }}>GHS {delivery.quote?.total ?? '--'} · {delivery.category}</Text>
+          <Text style={{ color: theme.colors.muted }}>
+            GHS {delivery.quote?.total ?? '--'} · {delivery.category}
+          </Text>
         </View>
       ))}
     </Screen>

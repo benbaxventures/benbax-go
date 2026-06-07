@@ -1,6 +1,6 @@
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, Text, View } from 'react-native';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '../components/Screen';
 import { useVerifyPayment } from '../hooks/usePayments';
 import type { RootStackParamList } from '../navigation/types';
@@ -23,7 +23,10 @@ export function PaymentCheckoutScreen({ navigation, route }: Props) {
       navigation.replace('Tracking', { deliveryId });
     } catch (error) {
       hasFinalized.current = false;
-      Alert.alert('Payment not confirmed', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(
+        'Payment not confirmed',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
     }
   }
 
@@ -33,7 +36,10 @@ export function PaymentCheckoutScreen({ navigation, route }: Props) {
     try {
       await Linking.openURL(authorizationUrl);
     } catch (error) {
-      Alert.alert('Could not open checkout', error instanceof Error ? error.message : 'Please try again.');
+      Alert.alert(
+        'Could not open checkout',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
     } finally {
       setIsOpeningCheckout(false);
     }
@@ -50,7 +56,6 @@ export function PaymentCheckoutScreen({ navigation, route }: Props) {
 
     return () => subscription.remove();
     // Only run once for this checkout screen.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -89,8 +94,12 @@ export function PaymentCheckoutScreen({ navigation, route }: Props) {
   return (
     <Screen scroll={false}>
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 24, fontWeight: '900', color: theme.colors.ink }}>Secure payment</Text>
-        <Text style={{ color: theme.colors.muted }}>Complete checkout to confirm your delivery.</Text>
+        <Text style={{ fontSize: 24, fontWeight: '900', color: theme.colors.ink }}>
+          Secure payment
+        </Text>
+        <Text style={{ color: theme.colors.muted }}>
+          Complete checkout to confirm your delivery.
+        </Text>
       </View>
 
       <View style={{ flex: 1, minHeight: 520, justifyContent: 'center', gap: 18 }}>
@@ -101,16 +110,19 @@ export function PaymentCheckoutScreen({ navigation, route }: Props) {
             borderWidth: 1,
             borderColor: theme.colors.border,
             backgroundColor: theme.colors.surface,
-            padding: 18
+            padding: 18,
           }}
         >
           {isOpeningCheckout || verifyPayment.isPending ? (
             <ActivityIndicator color={theme.colors.primary} />
           ) : null}
 
-          <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.ink }}>Checkout opened in your browser</Text>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.ink }}>
+            Checkout opened in your browser
+          </Text>
           <Text style={{ color: theme.colors.muted, lineHeight: 20 }}>
-            Complete the Paystack checkout in the browser, then return to Benbax to confirm your payment.
+            Complete the Paystack checkout in the browser, then return to Benbax to confirm your
+            payment.
           </Text>
 
           <Pressable
@@ -121,7 +133,7 @@ export function PaymentCheckoutScreen({ navigation, route }: Props) {
               borderRadius: 8,
               backgroundColor: theme.colors.primary,
               paddingVertical: 14,
-              opacity: isOpeningCheckout ? 0.65 : 1
+              opacity: isOpeningCheckout ? 0.65 : 1,
             }}
           >
             <Text style={{ color: 'white', fontWeight: '800' }}>Open checkout</Text>
@@ -136,13 +148,16 @@ export function PaymentCheckoutScreen({ navigation, route }: Props) {
               borderWidth: 1,
               borderColor: theme.colors.border,
               paddingVertical: 14,
-              opacity: verifyPayment.isPending ? 0.65 : 1
+              opacity: verifyPayment.isPending ? 0.65 : 1,
             }}
           >
             <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>I have paid</Text>
           </Pressable>
 
-          <Pressable onPress={handleCancelPress} style={{ alignItems: 'center', paddingVertical: 8 }}>
+          <Pressable
+            onPress={handleCancelPress}
+            style={{ alignItems: 'center', paddingVertical: 8 }}
+          >
             <Text style={{ color: theme.colors.muted, fontWeight: '700' }}>Cancel</Text>
           </Pressable>
         </View>

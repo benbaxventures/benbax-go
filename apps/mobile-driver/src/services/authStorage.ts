@@ -16,16 +16,24 @@ export async function getAccessToken() {
   return AsyncStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export async function saveAuthSession(input: { accessToken: string; refreshToken: string; user: StoredUser }) {
+export async function saveAuthSession(input: {
+  accessToken: string;
+  refreshToken: string;
+  user: StoredUser;
+}) {
   await Promise.all([
     AsyncStorage.setItem(ACCESS_TOKEN_KEY, input.accessToken),
     AsyncStorage.setItem(REFRESH_TOKEN_KEY, input.refreshToken),
-    AsyncStorage.setItem(USER_KEY, JSON.stringify(input.user))
+    AsyncStorage.setItem(USER_KEY, JSON.stringify(input.user)),
   ]);
 }
 
 export async function clearAuthSession() {
-  await Promise.all([AsyncStorage.removeItem(ACCESS_TOKEN_KEY), AsyncStorage.removeItem(REFRESH_TOKEN_KEY), AsyncStorage.removeItem(USER_KEY)]);
+  await Promise.all([
+    AsyncStorage.removeItem(ACCESS_TOKEN_KEY),
+    AsyncStorage.removeItem(REFRESH_TOKEN_KEY),
+    AsyncStorage.removeItem(USER_KEY),
+  ]);
 }
 
 export async function getStoredUser() {

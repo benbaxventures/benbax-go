@@ -1,5 +1,5 @@
-import { Router } from 'express';
 import { DeliveryCategory, DeliveryStatus, UserRole } from '@prisma/client';
+import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
@@ -19,15 +19,15 @@ const addressSchema = z.object({
   voiceNoteUrl: z.string().url().optional(),
   whatsappLocationUrl: z.string().url().optional(),
   contactName: z.string().optional(),
-  contactPhone: z.string().optional()
+  contactPhone: z.string().optional(),
 });
 
 const quoteSchema = z.object({
   body: z.object({
     category: z.nativeEnum(DeliveryCategory),
     pickup: addressSchema,
-    dropoff: addressSchema
-  })
+    dropoff: addressSchema,
+  }),
 });
 
 const createSchema = z.object({
@@ -36,13 +36,13 @@ const createSchema = z.object({
     recipientName: z.string().optional(),
     recipientPhone: z.string().optional(),
     notes: z.string().max(500).optional(),
-    paymentMethod: z.enum(['MTN_MOMO', 'PAYSTACK_CARD', 'WALLET', 'CASH_ON_DELIVERY']).optional()
-  })
+    paymentMethod: z.enum(['MTN_MOMO', 'PAYSTACK_CARD', 'WALLET', 'CASH_ON_DELIVERY']).optional(),
+  }),
 });
 
 const statusSchema = z.object({
   params: z.object({ id: z.string().min(1) }),
-  body: z.object({ status: z.nativeEnum(DeliveryStatus) })
+  body: z.object({ status: z.nativeEnum(DeliveryStatus) }),
 });
 
 deliveriesRouter.use(requireAuth);
@@ -60,13 +60,16 @@ deliveriesRouter.post(
   asyncHandler(async (req, res) => {
     const delivery = await service.createDelivery({
       ...req.body,
-      customerId: req.user!.id
+      customerId: req.user!.id,
     });
     const scheduledTime = delivery.scheduledFor?.getTime();
     if (scheduledTime && scheduledTime > Date.now()) {
-      setTimeout(() => {
-        void dispatchDelivery(delivery.id, req.app.get('io'));
-      }, Math.min(scheduledTime - Date.now(), 2_147_483_647));
+      setTimeout(
+        () => {
+          void dispatchDelivery(delivery.id, req.app.get('io'));
+        },
+        Math.min(scheduledTime - Date.now(), 2_147_483_647)
+      );
     } else {
       void dispatchDelivery(delivery.id, req.app.get('io'));
     }
@@ -88,5 +91,7 @@ deliveriesRouter.patch(
   '/:id/status',
   requireRoles(UserRole.RIDER, UserRole.ADMIN, UserRole.OPERATIONS),
   validate(statusSchema),
-  asyncHandler(async (req, res) => ok(res, await service.updateDeliveryStatus(req.params.id!, req.body.status)))
+  asyncHandler(async (req, res) =>
+    ok(res, await service.updateDeliveryStatus(req.params.id!, req.body.status))
+  )
 );

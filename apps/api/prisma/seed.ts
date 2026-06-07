@@ -1,5 +1,5 @@
-import bcrypt from 'bcryptjs';
 import { PrismaClient, UserRole } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -15,8 +15,8 @@ async function main() {
       email: 'admin@benbax.com',
       role: UserRole.ADMIN,
       passwordHash,
-      wallet: { create: {} }
-    }
+      wallet: { create: {} },
+    },
   });
 
   await prisma.user.upsert({
@@ -28,9 +28,9 @@ async function main() {
       riderProfile: {
         upsert: {
           update: {},
-          create: {}
-        }
-      }
+          create: {},
+        },
+      },
     },
     create: {
       name: 'Benbax Rider',
@@ -39,8 +39,8 @@ async function main() {
       role: UserRole.RIDER,
       passwordHash,
       wallet: { create: {} },
-      riderProfile: { create: {} }
-    }
+      riderProfile: { create: {} },
+    },
   });
 
   await prisma.pricingRule.upsert({
@@ -53,8 +53,8 @@ async function main() {
       baseFare: 18,
       perKm: 3.5,
       perMinute: 0.35,
-      serviceFee: 2.5
-    }
+      serviceFee: 2.5,
+    },
   });
 }
 

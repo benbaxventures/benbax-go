@@ -46,11 +46,29 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
 
       return (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.canvas, padding: 32, gap: 16 }}>
-          <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.ink, textAlign: 'center' }}>
+        <View
+          style={{
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: theme.colors.canvas,
+            padding: 32,
+            gap: 16,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: '800',
+              color: theme.colors.ink,
+              textAlign: 'center',
+            }}
+          >
             Something went wrong
           </Text>
-          <Text style={{ color: theme.colors.muted, textAlign: 'center', fontSize: 14, lineHeight: 20 }}>
+          <Text
+            style={{ color: theme.colors.muted, textAlign: 'center', fontSize: 14, lineHeight: 20 }}
+          >
             {this.state.error?.message ?? 'An unexpected error occurred.'}
           </Text>
           <Pressable
@@ -60,7 +78,7 @@ export class ErrorBoundary extends Component<Props, State> {
               backgroundColor: theme.colors.primary,
               paddingHorizontal: 24,
               paddingVertical: 12,
-              borderRadius: 8
+              borderRadius: 8,
             }}
           >
             <Text style={{ color: '#fff', fontWeight: '700' }}>Try again</Text>
@@ -70,7 +88,7 @@ export class ErrorBoundary extends Component<Props, State> {
               onPress={this.handleFullReset}
               style={{
                 paddingHorizontal: 24,
-                paddingVertical: 12
+                paddingVertical: 12,
               }}
             >
               <Text style={{ color: theme.colors.muted, fontWeight: '700' }}>Restart app</Text>

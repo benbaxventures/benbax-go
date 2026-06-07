@@ -1,9 +1,9 @@
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
 import { corsOrigins } from './config/env';
 import { prisma } from './config/prisma';
 import { errorHandler } from './middleware/error';
@@ -17,7 +17,7 @@ export function createApp() {
   app.use(
     cors({
       origin: corsOrigins,
-      credentials: true
+      credentials: true,
     })
   );
   app.use(compression());
@@ -26,7 +26,7 @@ export function createApp() {
       limit: '2mb',
       verify: (req, _res, buffer) => {
         (req as express.Request).rawBody = buffer;
-      }
+      },
     })
   );
   app.use(express.urlencoded({ extended: true }));
@@ -37,7 +37,10 @@ export function createApp() {
     max: 200,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { ok: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later' } }
+    message: {
+      ok: false,
+      error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later' },
+    },
   });
   app.use('/api/', limiter);
 
@@ -46,7 +49,10 @@ export function createApp() {
     max: 10,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { ok: false, error: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts, please try again later' } }
+    message: {
+      ok: false,
+      error: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts, please try again later' },
+    },
   });
   app.use('/api/v1/auth/login', authLimiter);
   app.use('/api/v1/auth/register', authLimiter);
@@ -64,8 +70,8 @@ export function createApp() {
         status: 'unavailable',
         service: 'benbax-api',
         dependencies: {
-          database: 'unavailable'
-        }
+          database: 'unavailable',
+        },
       });
     }
   });

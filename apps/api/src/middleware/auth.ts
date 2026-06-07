@@ -1,6 +1,6 @@
+import type { UserRole } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { UserRole } from '@prisma/client';
 import { env } from '../config/env';
 import { forbidden, unauthorized } from '../utils/http';
 
@@ -10,6 +10,7 @@ export type AuthUser = {
 };
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: AuthUser;

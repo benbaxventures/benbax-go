@@ -1,6 +1,6 @@
+import { PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
 import crypto from 'crypto';
 import { Router, type Request } from 'express';
-import { PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
@@ -17,8 +17,8 @@ const initializeSchema = z.object({
   body: z.object({
     deliveryId: z.string(),
     method: z.nativeEnum(PaymentMethod),
-    mobileNumber: z.string().optional()
-  })
+    mobileNumber: z.string().optional(),
+  }),
 });
 
 type PaystackTransaction = {
@@ -42,18 +42,24 @@ function verifyWebhookSignature(req: Request) {
   const signature = req.header('x-paystack-signature');
   if (!signature || !req.rawBody) throw unauthorized('Invalid Paystack signature');
 
-  const expected = crypto.createHmac('sha512', env.PAYSTACK_SECRET_KEY).update(req.rawBody).digest('hex');
+  const expected = crypto
+    .createHmac('sha512', env.PAYSTACK_SECRET_KEY)
+    .update(req.rawBody)
+    .digest('hex');
   const received = Buffer.from(signature, 'hex');
   const expectedBuffer = Buffer.from(expected, 'hex');
 
-  if (received.length !== expectedBuffer.length || !crypto.timingSafeEqual(received, expectedBuffer)) {
+  if (
+    received.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(received, expectedBuffer)
+  ) {
     throw unauthorized('Invalid Paystack signature');
   }
 }
 
 async function markPaystackPayment(reference: string) {
   const payment = await prisma.payment.findFirst({
-    where: { provider: 'PAYSTACK', providerRef: reference }
+    where: { provider: 'PAYSTACK', providerRef: reference },
   });
   if (!payment) throw notFound('Payment not found');
 
@@ -67,8 +73,8 @@ async function markPaystackPayment(reference: string) {
     where: { id: payment.id },
     data: {
       status: isPaid ? PaymentStatus.PAID : PaymentStatus.FAILED,
-      metadata: transaction as unknown as Prisma.InputJsonValue
-    }
+      metadata: transaction as unknown as Prisma.InputJsonValue,
+    },
   });
 }
 
@@ -82,11 +88,14 @@ async function markPaystackWalletTopup(reference: string) {
   }
 
   const transaction = (await verifyPaystackTransaction(reference)) as PaystackTransaction;
-  const isPaid = transaction.status === 'success' && transaction.currency === 'GHS' && transaction.amount === toPesewas(wt.amount);
+  const isPaid =
+    transaction.status === 'success' &&
+    transaction.currency === 'GHS' &&
+    transaction.amount === toPesewas(wt.amount);
 
   await prisma.walletTransaction.update({
     where: { id: wt.id },
-    data: { metadata: transaction as unknown as Prisma.InputJsonValue }
+    data: { metadata: transaction as unknown as Prisma.InputJsonValue },
   });
 
   if (!isPaid) {
@@ -96,7 +105,7 @@ async function markPaystackWalletTopup(reference: string) {
   const amount = new Prisma.Decimal(transaction.amount).div(100);
   const wallet = await prisma.wallet.update({
     where: { id: wt.walletId },
-    data: { balance: { increment: amount } }
+    data: { balance: { increment: amount } },
   });
 
   return { wallet };
@@ -134,7 +143,7 @@ paymentsRouter.post(
   asyncHandler(async (req, res) => {
     const delivery = await prisma.delivery.findFirst({
       where: { id: req.body.deliveryId, customerId: req.user!.id },
-      include: { payment: true, customer: true }
+      include: { payment: true, customer: true },
     });
     if (!delivery) throw notFound('Delivery not found');
 
@@ -155,19 +164,30 @@ paymentsRouter.post(
         mobileNumber: req.body.mobileNumber,
         amount: delivery.totalFare,
         currency: 'GHS',
-        provider: req.body.method === 'MTN_MOMO' ? 'MTN_MOMO' : req.body.method === 'PAYSTACK_CARD' ? 'PAYSTACK' : null,
-        providerRef: reference
+        provider:
+          req.body.method === 'MTN_MOMO'
+            ? 'MTN_MOMO'
+            : req.body.method === 'PAYSTACK_CARD'
+              ? 'PAYSTACK'
+              : null,
+        providerRef: reference,
       },
       update: {
         method: req.body.method,
         mobileNumber: req.body.mobileNumber,
-        provider: req.body.method === 'MTN_MOMO' ? 'MTN_MOMO' : req.body.method === 'PAYSTACK_CARD' ? 'PAYSTACK' : null,
-        providerRef: reference
-      }
+        provider:
+          req.body.method === 'MTN_MOMO'
+            ? 'MTN_MOMO'
+            : req.body.method === 'PAYSTACK_CARD'
+              ? 'PAYSTACK'
+              : null,
+        providerRef: reference,
+      },
     });
 
     if (req.body.method === PaymentMethod.PAYSTACK_CARD) {
-      if (!delivery.customer.email) throw badRequest('Customer email is required for Paystack payments');
+      if (!delivery.customer.email)
+        throw badRequest('Customer email is required for Paystack payments');
 
       const checkout = await initializePaystackTransaction({
         email: delivery.customer.email,
@@ -178,8 +198,8 @@ paymentsRouter.post(
           paymentId: payment.id,
           deliveryId: delivery.id,
           customerId: delivery.customerId,
-          trackingCode: delivery.trackingCode
-        }
+          trackingCode: delivery.trackingCode,
+        },
       });
 
       payment = await prisma.payment.update({
@@ -188,9 +208,9 @@ paymentsRouter.post(
           providerRef: checkout.reference,
           metadata: {
             authorizationUrl: checkout.authorization_url,
-            accessCode: checkout.access_code
-          }
-        }
+            accessCode: checkout.access_code,
+          },
+        },
       });
 
       return ok(res, {
@@ -199,8 +219,8 @@ paymentsRouter.post(
         checkout: {
           authorizationUrl: checkout.authorization_url,
           accessCode: checkout.access_code,
-          reference: checkout.reference
-        }
+          reference: checkout.reference,
+        },
       });
     }
 
@@ -211,7 +231,7 @@ paymentsRouter.post(
           ? 'COLLECT_ON_DELIVERY'
           : req.body.method === 'MTN_MOMO'
             ? 'AUTHORIZE_MOBILE_MONEY_PROMPT'
-            : 'OPEN_PROVIDER_CHECKOUT'
+            : 'OPEN_PROVIDER_CHECKOUT',
     });
   })
 );
@@ -226,8 +246,8 @@ paymentsRouter.post(
       where: {
         provider: 'PAYSTACK',
         providerRef: reference,
-        delivery: { customerId: req.user!.id }
-      }
+        delivery: { customerId: req.user!.id },
+      },
     });
     if (!payment) throw notFound('Payment not found');
 
@@ -248,7 +268,7 @@ paymentsRouter.post(
     if (!wallet) {
       wallet = await prisma.wallet.create({
         data: { userId: req.user!.id },
-        include: { transactions: { orderBy: { createdAt: 'desc' } } }
+        include: { transactions: { orderBy: { createdAt: 'desc' } } },
       });
     }
 
@@ -259,8 +279,8 @@ paymentsRouter.post(
         walletId: wallet.id,
         type: 'TOPUP',
         amount: amount,
-        reference
-      }
+        reference,
+      },
     });
 
     // Load full user record to get email (req.user only contains id + role)
@@ -275,11 +295,20 @@ paymentsRouter.post(
       metadata: {
         walletTransactionId: wt.id,
         walletId: wallet.id,
-        userId: req.user!.id
-      }
+        userId: req.user!.id,
+      },
     });
 
-    await prisma.walletTransaction.update({ where: { id: wt.id }, data: { reference: checkout.reference, metadata: { authorizationUrl: checkout.authorization_url, accessCode: checkout.access_code } } });
+    await prisma.walletTransaction.update({
+      where: { id: wt.id },
+      data: {
+        reference: checkout.reference,
+        metadata: {
+          authorizationUrl: checkout.authorization_url,
+          accessCode: checkout.access_code,
+        },
+      },
+    });
 
     return ok(res, {
       walletTransaction: wt,
@@ -287,8 +316,8 @@ paymentsRouter.post(
       checkout: {
         authorizationUrl: checkout.authorization_url,
         accessCode: checkout.access_code,
-        reference: checkout.reference
-      }
+        reference: checkout.reference,
+      },
     });
   })
 );
@@ -304,7 +333,7 @@ paymentsRouter.post(
 
     const walletTransaction = await prisma.walletTransaction.findFirst({
       where: { reference },
-      include: { wallet: true }
+      include: { wallet: true },
     });
 
     return ok(res, { walletTransaction, wallet: result.wallet });
@@ -314,11 +343,14 @@ paymentsRouter.post(
 paymentsRouter.get(
   '/wallet',
   asyncHandler(async (req, res) => {
-    let wallet = await prisma.wallet.findUnique({ where: { userId: req.user!.id }, include: { transactions: { orderBy: { createdAt: 'desc' } } } });
+    let wallet = await prisma.wallet.findUnique({
+      where: { userId: req.user!.id },
+      include: { transactions: { orderBy: { createdAt: 'desc' } } },
+    });
     if (!wallet) {
       wallet = await prisma.wallet.create({
         data: { userId: req.user!.id },
-        include: { transactions: { orderBy: { createdAt: 'desc' } } }
+        include: { transactions: { orderBy: { createdAt: 'desc' } } },
       });
     }
 

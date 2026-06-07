@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { realtimeEvents } from '@benbax/shared';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
 
@@ -31,7 +31,7 @@ export function DeliveriesPage() {
   const [alerts, setAlerts] = useState<AdminAlert[]>([]);
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['live-deliveries'],
-    queryFn: () => apiRequest<LiveDelivery[]>('/admin/deliveries/live')
+    queryFn: () => apiRequest<LiveDelivery[]>('/admin/deliveries/live'),
   });
   const deliveries = data ?? [];
   const mapBounds = useMemo(() => getMapBounds(deliveries), [deliveries]);
@@ -68,22 +68,48 @@ export function DeliveriesPage() {
             {deliveries.map((delivery) => {
               const latestPoint = delivery.trackingPoints?.[0];
               const pickup = projectPoint(
-                { latitude: Number(delivery.pickupLatitude), longitude: Number(delivery.pickupLongitude) },
+                {
+                  latitude: Number(delivery.pickupLatitude),
+                  longitude: Number(delivery.pickupLongitude),
+                },
                 mapBounds
               );
               const dropoff = projectPoint(
-                { latitude: Number(delivery.dropoffLatitude), longitude: Number(delivery.dropoffLongitude) },
+                {
+                  latitude: Number(delivery.dropoffLatitude),
+                  longitude: Number(delivery.dropoffLongitude),
+                },
                 mapBounds
               );
               const rider = latestPoint
-                ? projectPoint({ latitude: Number(latestPoint.latitude), longitude: Number(latestPoint.longitude) }, mapBounds)
+                ? projectPoint(
+                    {
+                      latitude: Number(latestPoint.latitude),
+                      longitude: Number(latestPoint.longitude),
+                    },
+                    mapBounds
+                  )
                 : null;
 
               return (
                 <div key={delivery.id}>
-                  <span className="map-pin pickup" style={{ left: `${pickup.x}%`, top: `${pickup.y}%` }} title={`${delivery.trackingCode} pickup`} />
-                  <span className="map-pin dropoff" style={{ left: `${dropoff.x}%`, top: `${dropoff.y}%` }} title={`${delivery.trackingCode} drop-off`} />
-                  {rider ? <span className="map-pin rider" style={{ left: `${rider.x}%`, top: `${rider.y}%` }} title={`${delivery.trackingCode} rider`} /> : null}
+                  <span
+                    className="map-pin pickup"
+                    style={{ left: `${pickup.x}%`, top: `${pickup.y}%` }}
+                    title={`${delivery.trackingCode} pickup`}
+                  />
+                  <span
+                    className="map-pin dropoff"
+                    style={{ left: `${dropoff.x}%`, top: `${dropoff.y}%` }}
+                    title={`${delivery.trackingCode} drop-off`}
+                  />
+                  {rider ? (
+                    <span
+                      className="map-pin rider"
+                      style={{ left: `${rider.x}%`, top: `${rider.y}%` }}
+                      title={`${delivery.trackingCode} rider`}
+                    />
+                  ) : null}
                 </div>
               );
             })}
@@ -128,12 +154,16 @@ export function DeliveriesPage() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={6}>Loading deliveries...</td></tr>
+              <tr>
+                <td colSpan={6}>Loading deliveries...</td>
+              </tr>
             ) : deliveries.length ? (
               deliveries.map((delivery) => (
                 <tr key={delivery.id}>
                   <td>{delivery.trackingCode}</td>
-                  <td><span className="status-chip">{delivery.status}</span></td>
+                  <td>
+                    <span className="status-chip">{delivery.status}</span>
+                  </td>
                   <td>{delivery.pickupLabel}</td>
                   <td>{delivery.dropoffLabel}</td>
                   <td>GHS {delivery.totalFare}</td>
@@ -141,7 +171,9 @@ export function DeliveriesPage() {
                 </tr>
               ))
             ) : (
-              <tr><td colSpan={6}>No active deliveries.</td></tr>
+              <tr>
+                <td colSpan={6}>No active deliveries.</td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -155,8 +187,13 @@ function getMapBounds(deliveries: LiveDelivery[]) {
     { latitude: Number(delivery.pickupLatitude), longitude: Number(delivery.pickupLongitude) },
     { latitude: Number(delivery.dropoffLatitude), longitude: Number(delivery.dropoffLongitude) },
     ...(delivery.trackingPoints?.[0]
-      ? [{ latitude: Number(delivery.trackingPoints[0].latitude), longitude: Number(delivery.trackingPoints[0].longitude) }]
-      : [])
+      ? [
+          {
+            latitude: Number(delivery.trackingPoints[0].latitude),
+            longitude: Number(delivery.trackingPoints[0].longitude),
+          },
+        ]
+      : []),
   ]);
   const latitudes = coordinates.map((coordinate) => coordinate.latitude).filter(Number.isFinite);
   const longitudes = coordinates.map((coordinate) => coordinate.longitude).filter(Number.isFinite);
@@ -165,7 +202,7 @@ function getMapBounds(deliveries: LiveDelivery[]) {
     minLatitude: Math.min(...latitudes, 5.5),
     maxLatitude: Math.max(...latitudes, 5.7),
     minLongitude: Math.min(...longitudes, -0.25),
-    maxLongitude: Math.max(...longitudes, -0.1)
+    maxLongitude: Math.max(...longitudes, -0.1),
   };
 }
 
@@ -177,6 +214,6 @@ function projectPoint(
   const latitudeSpan = Math.max(bounds.maxLatitude - bounds.minLatitude, 0.01);
   return {
     x: ((coordinate.longitude - bounds.minLongitude) / longitudeSpan) * 86 + 7,
-    y: (1 - (coordinate.latitude - bounds.minLatitude) / latitudeSpan) * 86 + 7
+    y: (1 - (coordinate.latitude - bounds.minLatitude) / latitudeSpan) * 86 + 7,
   };
 }

@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react';
 import * as Updates from 'expo-updates';
+import { useEffect, useRef } from 'react';
 
 export function useOTAUpdates() {
   const checked = useRef(false);

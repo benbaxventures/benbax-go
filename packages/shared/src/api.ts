@@ -36,5 +36,5 @@ export const realtimeEvents = {
   emergencyRaised: 'emergency:raised',
   adminAlert: 'admin:alert',
   chatMessage: 'chat:message',
-  userPresence: 'user:presence'
+  userPresence: 'user:presence',
 } as const;

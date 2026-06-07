@@ -1,14 +1,18 @@
 import { useMutation } from '@tanstack/react-query';
-import type { AddressPoint, RideQuote, RideTripSummary } from '../shared';
 import { apiRequest } from '../services/api';
+import type { AddressPoint, RideQuote, RideTripSummary } from '../shared';
 
 export function useRideQuote() {
   return useMutation({
-    mutationFn: (input: { pickup: AddressPoint; dropoff: AddressPoint; requestedVehicleType?: string }) =>
+    mutationFn: (input: {
+      pickup: AddressPoint;
+      dropoff: AddressPoint;
+      requestedVehicleType?: string;
+    }) =>
       apiRequest<RideQuote>('/rides/quote', {
         method: 'POST',
-        body: JSON.stringify(input)
-      })
+        body: JSON.stringify(input),
+      }),
   });
 }
 
@@ -23,7 +27,7 @@ export function useCreateRide() {
     }) =>
       apiRequest<RideTripSummary>('/rides', {
         method: 'POST',
-        body: JSON.stringify(input)
-      })
+        body: JSON.stringify(input),
+      }),
   });
 }

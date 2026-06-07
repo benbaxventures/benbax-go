@@ -9,8 +9,8 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
       ok: false,
       error: {
         code: 'DATABASE_UNAVAILABLE',
-        message: 'Database is unavailable. Start Postgres and try again.'
-      }
+        message: 'Database is unavailable. Start Postgres and try again.',
+      },
     });
   }
 
@@ -20,15 +20,16 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
       error: {
         code: error.code,
         message: error.message,
-        details: error.details
-      }
+        details: error.details,
+      },
     });
   }
 
   console.error(error);
 
   const isProd = process.env.NODE_ENV === 'production';
-  const message = !isProd && error instanceof Error && error.message ? error.message : 'Something went wrong';
+  const message =
+    !isProd && error instanceof Error && error.message ? error.message : 'Something went wrong';
   const details = !isProd && error instanceof Error ? { stack: error.stack } : undefined;
 
   return res.status(500).json({
@@ -36,8 +37,8 @@ export const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
     error: {
       code: 'INTERNAL_SERVER_ERROR',
       message,
-      details
-    }
+      details,
+    },
   });
 };
 
@@ -47,7 +48,7 @@ function isDatabaseConnectionError(error: unknown) {
   const knownPrismaConnectionErrorNames = new Set([
     'PrismaClientInitializationError',
     'PrismaClientKnownRequestError',
-    'PrismaClientUnknownRequestError'
+    'PrismaClientUnknownRequestError',
   ]);
 
   if (!knownPrismaConnectionErrorNames.has(error.name)) return false;

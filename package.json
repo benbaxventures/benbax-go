@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Benbax delivery, logistics, rider dispatch, and admin operations platform.",
+  "type": "module",
   "workspaces": [
     "apps/api",
     "apps/admin",
@@ -35,16 +36,37 @@
     "driver:update:preview": "npm run eas:update:preview --workspace apps/mobile-driver",
     "driver:update:production": "npm run eas:update:production --workspace apps/mobile-driver",
     "build": "npm run build --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yml,yaml}\"",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "db:migrate": "npm run db:migrate --workspace apps/api",
-    "db:studio": "npm run db:studio --workspace apps/api"
+    "db:studio": "npm run db:studio --workspace apps/api",
+    "prepare": "husky install"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@eslint/js": "^9.9.1",
+    "eslint": "^9.9.1",
+    "eslint-plugin-prettier": "^5.2.1",
+    "eslint-config-prettier": "^10.0.1",
+    "prettier": "^3.3.3",
+    "prettier-plugin-organize-imports": "^4.0.0",
+    "typescript-eslint": "^8.3.0",
+    "husky": "^9.1.5",
+    "lint-staged": "^15.2.10",
+    "eslint-plugin-react": "^7.35.2",
+    "eslint-plugin-react-hooks": "^5.0.0"
   },
   "dependencies": {
     "expo-notifications": "~55.0.22"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,json,md,yml,yaml}": [
+      "prettier --write",
+      "eslint --fix"
+    ]
   }
 }

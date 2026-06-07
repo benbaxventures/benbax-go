@@ -11,7 +11,14 @@ type Props = {
   onChangeLandmark?: (value: string) => void;
 };
 
-export function LocationInput({ label, value, placeholder, onChangeText, landmark, onChangeLandmark }: Props) {
+export function LocationInput({
+  label,
+  value,
+  placeholder,
+  onChangeText,
+  landmark,
+  onChangeLandmark,
+}: Props) {
   return (
     <View style={{ gap: 8 }}>
       <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '700' }}>{label}</Text>
@@ -22,7 +29,7 @@ export function LocationInput({ label, value, placeholder, onChangeText, landmar
           borderRadius: theme.radius.md,
           borderWidth: 1,
           padding: 12,
-          gap: 10
+          gap: 10,
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

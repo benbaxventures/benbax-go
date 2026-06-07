@@ -1,21 +1,20 @@
-import { NavigationContainer } from '@react-navigation/native';
-import { createNavigationContainerRef } from '@react-navigation/native';
+import { realtimeEvents } from '@benbax/shared';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { BadgeCheck, Bike, Car, User, Wallet } from 'lucide-react-native';
 import { useEffect } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
-import { realtimeEvents } from '@benbax/shared';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ActiveTripScreen } from '../screens/ActiveTripScreen';
 import { ActiveDeliveryScreen } from '../screens/ActiveDeliveryScreen';
+import { ActiveTripScreen } from '../screens/ActiveTripScreen';
 import { DeliveryDispatchScreen } from '../screens/DeliveryDispatchScreen';
 import { DispatchScreen } from '../screens/DispatchScreen';
 import { EarningsScreen } from '../screens/EarningsScreen';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { KycScreen } from '../screens/KycScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
-import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { SignInScreen } from '../screens/SignInScreen';
 import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
@@ -45,34 +44,42 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
           id: offer.id,
           tripId: offer.tripId,
           score: Number(offer.score),
-          expiresAt: offer.expiresAt
+          expiresAt: offer.expiresAt,
         });
-        Alert.alert('New ride request', 'A nearby passenger is waiting. Open Dispatch to accept or reject.', [
-          {
-            text: 'View',
-            onPress: () => {
-              if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
-            }
-          },
-          { text: 'Later', style: 'cancel' }
-        ]);
+        Alert.alert(
+          'New ride request',
+          'A nearby passenger is waiting. Open Dispatch to accept or reject.',
+          [
+            {
+              text: 'View',
+              onPress: () => {
+                if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
+              },
+            },
+            { text: 'Later', style: 'cancel' },
+          ]
+        );
       });
       socket.on(realtimeEvents.riderOffer, (offer) => {
         setCurrentDeliveryOffer({
           id: offer.id,
           deliveryId: offer.deliveryId,
           score: Number(offer.score),
-          expiresAt: offer.expiresAt
+          expiresAt: offer.expiresAt,
         });
-        Alert.alert('New delivery offer', 'A nearby customer delivery is waiting. Open Delivery Dispatch to accept or reject.', [
-          {
-            text: 'View',
-            onPress: () => {
-              if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
-            }
-          },
-          { text: 'Later', style: 'cancel' }
-        ]);
+        Alert.alert(
+          'New delivery offer',
+          'A nearby customer delivery is waiting. Open Delivery Dispatch to accept or reject.',
+          [
+            {
+              text: 'View',
+              onPress: () => {
+                if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
+              },
+            },
+            { text: 'Later', style: 'cancel' },
+          ]
+        );
       });
       socket.on(realtimeEvents.rideAssigned, (assignment) => {
         if (assignment.tripId) setCurrentRideOffer(null);
@@ -103,15 +110,38 @@ function MainTabs() {
           borderTopColor: theme.colors.border,
           height: 58 + bottomInset,
           paddingBottom: bottomInset,
-          paddingTop: 8
-        }
+          paddingTop: 8,
+        },
       }}
     >
-      <Tabs.Screen name="RideDispatch" component={DispatchScreen} options={{ title: 'Rides', tabBarIcon: ({ color }) => <Car size={20} color={color} /> }} />
-      <Tabs.Screen name="DeliveryDispatch" component={DeliveryDispatchScreen} options={{ title: 'Deliveries', tabBarIcon: ({ color }) => <Bike size={20} color={color} /> }} />
-      <Tabs.Screen name="Earnings" component={EarningsScreen} options={{ tabBarIcon: ({ color }) => <Wallet size={20} color={color} /> }} />
-      <Tabs.Screen name="KYC" component={KycScreen} options={{ tabBarIcon: ({ color }) => <BadgeCheck size={20} color={color} /> }} />
-      <Tabs.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: ({ color }) => <User size={20} color={color} /> }} />
+      <Tabs.Screen
+        name="RideDispatch"
+        component={DispatchScreen}
+        options={{ title: 'Rides', tabBarIcon: ({ color }) => <Car size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="DeliveryDispatch"
+        component={DeliveryDispatchScreen}
+        options={{
+          title: 'Deliveries',
+          tabBarIcon: ({ color }) => <Bike size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="Earnings"
+        component={EarningsScreen}
+        options={{ tabBarIcon: ({ color }) => <Wallet size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="KYC"
+        component={KycScreen}
+        options={{ tabBarIcon: ({ color }) => <BadgeCheck size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarIcon: ({ color }) => <User size={20} color={color} /> }}
+      />
     </Tabs.Navigator>
   );
 }
@@ -125,7 +155,14 @@ export function RootNavigator() {
 
   if (isHydrating) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.canvas }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.colors.canvas,
+        }}
+      >
         <ActivityIndicator color={theme.colors.primary} />
       </View>
     );

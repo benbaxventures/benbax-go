@@ -8,9 +8,9 @@ module.exports = {
         muted: '#5B6472',
         canvas: '#F7F8FA',
         primary: '#0E7C66',
-        accent: '#FFB020'
-      }
-    }
+        accent: '#FFB020',
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 };

@@ -20,7 +20,7 @@ export function useCurrentLocation() {
     nearbyName: null,
     loading: false,
     error: null,
-    permissionDenied: false
+    permissionDenied: false,
   });
 
   const requestLocation = useCallback(async () => {
@@ -33,16 +33,16 @@ export function useCurrentLocation() {
           ...prev,
           loading: false,
           permissionDenied: true,
-          error: 'Location permission denied'
+          error: 'Location permission denied',
         }));
         return;
       }
       const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced
+        accuracy: Location.Accuracy.Balanced,
       });
       const [place] = await Location.reverseGeocodeAsync({
         latitude: position.coords.latitude,
-        longitude: position.coords.longitude
+        longitude: position.coords.longitude,
       });
       const nearbyName = place?.name || place?.street || place?.district || null;
       const addressParts = [
@@ -51,7 +51,7 @@ export function useCurrentLocation() {
         place?.district,
         place?.city,
         place?.region,
-        place?.country
+        place?.country,
       ].filter(Boolean);
       const address = addressParts.join(', ') || null;
       const label = nearbyName || place?.city || address || 'Current location';
@@ -64,13 +64,13 @@ export function useCurrentLocation() {
         nearbyName,
         loading: false,
         error: null,
-        permissionDenied: false
+        permissionDenied: false,
       });
     } catch (err) {
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: err instanceof Error ? err.message : 'Could not get location'
+        error: err instanceof Error ? err.message : 'Could not get location',
       }));
     }
   }, []);

@@ -1,4 +1,5 @@
-import { PaymentMethod, Prisma, RideTripStatus } from '@prisma/client';
+import type { PaymentMethod } from '@prisma/client';
+import { Prisma, RideTripStatus } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { notFound } from '../../utils/http';
@@ -23,11 +24,13 @@ type CreateRideInput = {
   paymentMethod?: PaymentMethod;
 };
 
-export async function quoteRide(input: Pick<CreateRideInput, 'pickup' | 'dropoff' | 'requestedVehicleType'>) {
+export async function quoteRide(
+  input: Pick<CreateRideInput, 'pickup' | 'dropoff' | 'requestedVehicleType'>
+) {
   const quote = estimateRide(input.pickup, input.dropoff, input.requestedVehicleType);
   return {
     ...quote,
-    currency: 'GHS' as const
+    currency: 'GHS' as const,
   };
 }
 
@@ -70,16 +73,16 @@ export async function createRide(input: CreateRideInput) {
               create: {
                 method: input.paymentMethod,
                 amount: quote.total,
-                currency: 'GHS'
-              }
-            }
+                currency: 'GHS',
+              },
+            },
           }
-        : {})
+        : {}),
     },
     include: {
       payment: true,
-      assignments: true
-    }
+      assignments: true,
+    },
   });
 }
 
@@ -88,7 +91,7 @@ export async function listPassengerRides(passengerId: string) {
     where: { passengerId },
     orderBy: { createdAt: 'desc' },
     take: 50,
-    include: { payment: true, assignments: { take: 1, orderBy: { offeredAt: 'desc' } } }
+    include: { payment: true, assignments: { take: 1, orderBy: { offeredAt: 'desc' } } },
   });
 }
 
@@ -98,8 +101,8 @@ export async function getRide(id: string, requesterId: string) {
       id,
       OR: [
         { passengerId: requesterId },
-        { assignments: { some: { driverProfile: { userId: requesterId } } } }
-      ]
+        { assignments: { some: { driverProfile: { userId: requesterId } } } },
+      ],
     },
     include: {
       payment: true,
@@ -107,9 +110,9 @@ export async function getRide(id: string, requesterId: string) {
       trackingPoints: { orderBy: { capturedAt: 'desc' }, take: 25 },
       assignments: {
         include: { driverProfile: { include: { user: true, vehicle: true } } },
-        orderBy: { offeredAt: 'desc' }
-      }
-    }
+        orderBy: { offeredAt: 'desc' },
+      },
+    },
   });
 
   if (!ride) throw notFound('Ride trip not found');
@@ -119,6 +122,6 @@ export async function getRide(id: string, requesterId: string) {
 export async function updateRideStatus(id: string, status: RideTripStatus) {
   return prisma.rideTrip.update({
     where: { id },
-    data: { status }
+    data: { status },
   });
 }

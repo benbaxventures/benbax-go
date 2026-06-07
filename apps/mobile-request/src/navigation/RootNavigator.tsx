@@ -1,28 +1,28 @@
-import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Headphones, Home, Package, User, Wallet } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useAuthStore } from '../store/authStore';
-import { theme } from '../theme/tokens';
+import { setGlobalErrorFallback } from '../components/ErrorBoundary';
+import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { PaymentCheckoutScreen } from '../screens/PaymentCheckoutScreen';
-import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
 import { PrivacyProtectionScreen } from '../screens/PrivacyProtectionScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
 import { RideTrackingScreen } from '../screens/RideTrackingScreen';
 import { SignInScreen } from '../screens/SignInScreen';
 import { SupportScreen } from '../screens/SupportScreen';
 import { TrackingScreen } from '../screens/TrackingScreen';
+import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { WalletScreen } from '../screens/WalletScreen';
-import { setGlobalErrorFallback } from '../components/ErrorBoundary';
+import { useAuthStore } from '../store/authStore';
+import { theme } from '../theme/tokens';
 import type { MainTabsParamList, RootStackParamList } from './types';
-import { EditProfileScreen } from '../screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabsParamList>();
@@ -40,15 +40,35 @@ function MainTabs() {
           borderTopColor: theme.colors.border,
           height: 58 + bottomInset,
           paddingBottom: bottomInset,
-          paddingTop: 8
-        }
+          paddingTop: 8,
+        },
       }}
     >
-      <Tabs.Screen name="Home" component={HomeScreen} options={{ tabBarIcon: ({ color }) => <Home size={20} color={color} /> }} />
-      <Tabs.Screen name="Orders" component={OrdersScreen} options={{ tabBarIcon: ({ color }) => <Package size={20} color={color} /> }} />
-      <Tabs.Screen name="Wallet" component={WalletScreen} options={{ tabBarIcon: ({ color }) => <Wallet size={20} color={color} /> }} />
-      <Tabs.Screen name="Support" component={SupportScreen} options={{ tabBarIcon: ({ color }) => <Headphones size={20} color={color} /> }} />
-      <Tabs.Screen name="Profile" component={ProfileScreen} options={{ tabBarIcon: ({ color }) => <User size={20} color={color} /> }} />
+      <Tabs.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ tabBarIcon: ({ color }) => <Home size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="Orders"
+        component={OrdersScreen}
+        options={{ tabBarIcon: ({ color }) => <Package size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="Wallet"
+        component={WalletScreen}
+        options={{ tabBarIcon: ({ color }) => <Wallet size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="Support"
+        component={SupportScreen}
+        options={{ tabBarIcon: ({ color }) => <Headphones size={20} color={color} /> }}
+      />
+      <Tabs.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ tabBarIcon: ({ color }) => <User size={20} color={color} /> }}
+      />
     </Tabs.Navigator>
   );
 }
@@ -82,8 +102,19 @@ export function RootNavigator() {
 
   if (hydrateError) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.canvas, padding: 32, gap: 12 }}>
-        <Text style={{ fontSize: 18, fontWeight: '800', color: theme.colors.ink, textAlign: 'center' }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.colors.canvas,
+          padding: 32,
+          gap: 12,
+        }}
+      >
+        <Text
+          style={{ fontSize: 18, fontWeight: '800', color: theme.colors.ink, textAlign: 'center' }}
+        >
           Session restore failed
         </Text>
         <Text style={{ color: theme.colors.muted, textAlign: 'center', fontSize: 14 }}>
@@ -98,7 +129,14 @@ export function RootNavigator() {
 
   if (isHydrating) {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.canvas }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.colors.canvas,
+        }}
+      >
         <ActivityIndicator color={theme.colors.primary} />
       </View>
     );

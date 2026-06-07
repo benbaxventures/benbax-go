@@ -13,8 +13,8 @@ const ticketSchema = z.object({
     deliveryId: z.string().optional(),
     subject: z.string().min(3),
     description: z.string().min(10),
-    priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).default('NORMAL')
-  })
+    priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).default('NORMAL'),
+  }),
 });
 
 supportRouter.use(requireAuth);
@@ -31,8 +31,8 @@ supportRouter.post(
           deliveryId: req.body.deliveryId,
           subject: req.body.subject,
           description: req.body.description,
-          priority: req.body.priority
-        }
+          priority: req.body.priority,
+        },
       })
     )
   )
@@ -45,7 +45,7 @@ supportRouter.get(
       res,
       await prisma.supportTicket.findMany({
         where: { requesterId: req.user!.id },
-        orderBy: { createdAt: 'desc' }
+        orderBy: { createdAt: 'desc' },
       })
     )
   )

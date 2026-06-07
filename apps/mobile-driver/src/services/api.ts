@@ -1,5 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { ApiResponse } from '@benbax/shared';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { resolveApiBaseUrl } from './network';
 
 let _apiBaseUrl: string | null = null;
@@ -67,7 +67,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   try {
     response = await fetch(`${getApiBaseUrlCached()}${path}`, {
       ...options,
-      headers
+      headers,
     });
   } catch {
     throw new ApiConnectionError();

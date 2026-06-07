@@ -1,10 +1,10 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '../../config/prisma';
 import { requireAuth } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { ok } from '../../utils/response';
-import { z } from 'zod';
-import { validate } from '../../middleware/validate';
 
 export const usersRouter = Router();
 
@@ -15,7 +15,7 @@ usersRouter.get(
   asyncHandler(async (req, res) => {
     const locations = await prisma.savedLocation.findMany({
       where: { userId: req.user!.id },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
     return ok(res, locations);
   })
@@ -24,8 +24,8 @@ usersRouter.get(
 const updateMeSchema = z.object({
   body: z.object({
     name: z.string().min(1).optional(),
-    email: z.string().email().optional()
-  })
+    email: z.string().email().optional(),
+  }),
 });
 
 usersRouter.patch(
@@ -62,8 +62,8 @@ usersRouter.delete(
           phone: `deleted:${userId}`,
           email: null,
           passwordHash: null,
-          avatarUrl: null
-        }
+          avatarUrl: null,
+        },
       });
     });
 
@@ -83,12 +83,13 @@ usersRouter.get(
         savedPlaces: true,
         deliveries: {
           take: 50,
-          orderBy: { createdAt: 'desc' }
-        }
-      }
+          orderBy: { createdAt: 'desc' },
+        },
+      },
     });
 
     const { passwordHash, ...safe } = user as any;
+    void passwordHash;
     return ok(res, safe);
   })
 );

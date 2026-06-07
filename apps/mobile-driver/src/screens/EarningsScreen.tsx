@@ -16,7 +16,9 @@ export function EarningsScreen() {
       <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 16, gap: 6 }}>
         <TrendingUp size={22} color={theme.colors.primary} />
         <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>Performance analytics</Text>
-        <Text style={{ color: theme.colors.muted }}>Completion rate, acceptance rate, ratings, and route efficiency will drive incentives.</Text>
+        <Text style={{ color: theme.colors.muted }}>
+          Completion rate, acceptance rate, ratings, and route efficiency will drive incentives.
+        </Text>
       </View>
       <Button label="Withdraw to MoMo" onPress={() => undefined} />
     </Screen>

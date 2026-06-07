@@ -1,6 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { Activity, Bike, CircleDollarSign, PackageCheck, Users } from 'lucide-react';
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { MetricCard } from '../components/MetricCard';
 import { apiRequest } from '../services/api';
 
@@ -10,7 +18,7 @@ const demand = [
   { hour: '12', orders: 64 },
   { hour: '15', orders: 51 },
   { hour: '18', orders: 88 },
-  { hour: '21', orders: 39 }
+  { hour: '21', orders: 39 },
 ];
 
 type Dashboard = {
@@ -23,7 +31,7 @@ type Dashboard = {
 export function DashboardPage() {
   const { data } = useQuery({
     queryKey: ['admin-dashboard'],
-    queryFn: () => apiRequest<Dashboard>('/admin/dashboard')
+    queryFn: () => apiRequest<Dashboard>('/admin/dashboard'),
   });
 
   return (
@@ -37,10 +45,30 @@ export function DashboardPage() {
       </div>
 
       <div className="metrics-grid">
-        <MetricCard label="Active deliveries" value={`${data?.activeDeliveries ?? 0}`} delta="+12% today" icon={<PackageCheck size={20} />} />
-        <MetricCard label="Riders" value={`${data?.riders ?? 0}`} delta="82% verified" icon={<Bike size={20} />} />
-        <MetricCard label="Users" value={`${data?.users ?? 0}`} delta="Ghana launch" icon={<Users size={20} />} />
-        <MetricCard label="Revenue" value={`GHS ${data?.revenueGhs ?? 0}`} delta="Paid orders" icon={<CircleDollarSign size={20} />} />
+        <MetricCard
+          label="Active deliveries"
+          value={`${data?.activeDeliveries ?? 0}`}
+          delta="+12% today"
+          icon={<PackageCheck size={20} />}
+        />
+        <MetricCard
+          label="Riders"
+          value={`${data?.riders ?? 0}`}
+          delta="82% verified"
+          icon={<Bike size={20} />}
+        />
+        <MetricCard
+          label="Users"
+          value={`${data?.users ?? 0}`}
+          delta="Ghana launch"
+          icon={<Users size={20} />}
+        />
+        <MetricCard
+          label="Revenue"
+          value={`GHS ${data?.revenueGhs ?? 0}`}
+          delta="Paid orders"
+          icon={<CircleDollarSign size={20} />}
+        />
       </div>
 
       <div className="panel-grid">
@@ -64,10 +92,22 @@ export function DashboardPage() {
             <h2>Dispatch quality</h2>
           </div>
           <ul className="dense-list">
-            <li><strong>Nearest rider match</strong><span>Fresh GPS under 60s</span></li>
-            <li><strong>Batching readiness</strong><span>Food and courier clusters</span></li>
-            <li><strong>Risk scan</strong><span>No active severe alerts</span></li>
-            <li><strong>Support SLA</strong><span>Median first reply 2m</span></li>
+            <li>
+              <strong>Nearest rider match</strong>
+              <span>Fresh GPS under 60s</span>
+            </li>
+            <li>
+              <strong>Batching readiness</strong>
+              <span>Food and courier clusters</span>
+            </li>
+            <li>
+              <strong>Risk scan</strong>
+              <span>No active severe alerts</span>
+            </li>
+            <li>
+              <strong>Support SLA</strong>
+              <span>Median first reply 2m</span>
+            </li>
           </ul>
         </div>
       </div>

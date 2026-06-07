@@ -13,7 +13,11 @@ type Props = {
 
 export function Button({ label, onPress, icon, loading, disabled, variant = 'primary' }: Props) {
   const isPrimary = variant === 'primary';
-  const backgroundColor = isPrimary ? theme.colors.primary : variant === 'secondary' ? theme.colors.surface : 'transparent';
+  const backgroundColor = isPrimary
+    ? theme.colors.primary
+    : variant === 'secondary'
+      ? theme.colors.surface
+      : 'transparent';
   const isDisabled = loading || disabled;
 
   return (
@@ -31,11 +35,15 @@ export function Button({ label, onPress, icon, loading, disabled, variant = 'pri
         justifyContent: 'center',
         flexDirection: 'row',
         gap: 8,
-        opacity: isDisabled ? 0.72 : 1
+        opacity: isDisabled ? 0.72 : 1,
       }}
     >
       {loading ? <ActivityIndicator color={isPrimary ? '#fff' : theme.colors.primary} /> : icon}
-      <Text style={{ color: isPrimary ? '#fff' : theme.colors.ink, fontSize: 16, fontWeight: '700' }}>{label}</Text>
+      <Text
+        style={{ color: isPrimary ? '#fff' : theme.colors.ink, fontSize: 16, fontWeight: '700' }}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }

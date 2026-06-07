@@ -1,10 +1,10 @@
-import crypto from 'node:crypto';
-import bcrypt from 'bcryptjs';
+import type { Prisma, Prisma } from '@prisma/client';
+import { UserRole, UserRole } from '@prisma/client';
 import axios from 'axios';
+import bcrypt from 'bcryptjs';
 import jwt, { type SignOptions } from 'jsonwebtoken';
-import { Prisma, UserRole } from '@prisma/client';
-import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
+import { prisma } from '../../config/prisma';
 import { badRequest, notFound, unauthorized } from '../../utils/http';
 
 type RegisterInput = {
@@ -32,38 +32,44 @@ type GoogleProfile = {
 function signAccessToken(user: { id: string; role: UserRole }) {
   const options: SignOptions = {
     subject: user.id,
-    expiresIn: env.JWT_ACCESS_TTL as NonNullable<SignOptions['expiresIn']>
+    expiresIn: env.JWT_ACCESS_TTL as NonNullable<SignOptions['expiresIn']>,
   };
 
   return jwt.sign({ role: user.role }, env.JWT_ACCESS_SECRET, {
-    ...options
+    ...options,
   });
 }
 
 function signRefreshToken(user: { id: string; role: UserRole }) {
   const options: SignOptions = {
     subject: user.id,
-    expiresIn: env.JWT_REFRESH_TTL as NonNullable<SignOptions['expiresIn']>
+    expiresIn: env.JWT_REFRESH_TTL as NonNullable<SignOptions['expiresIn']>,
   };
 
   return jwt.sign({ role: user.role }, env.JWT_REFRESH_SECRET, {
-    ...options
+    ...options,
   });
 }
 
-function authPayload(user: { id: string; name: string; phone: string; email: string | null; role: UserRole }) {
+function authPayload(user: {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  role: UserRole;
+}) {
   return {
     user: {
       id: user.id,
       name: user.name,
       phone: user.phone,
       email: user.email,
-      role: user.role
+      role: user.role,
     },
     tokens: {
       accessToken: signAccessToken(user),
-      refreshToken: signRefreshToken(user)
-    }
+      refreshToken: signRefreshToken(user),
+    },
   };
 }
 
@@ -73,17 +79,20 @@ function isEmailVerified(value: GoogleProfile['email_verified']) {
 
 async function getGoogleProfile(input: GoogleLoginInput): Promise<GoogleProfile> {
   if (input.accessToken) {
-    const { data } = await axios.get<GoogleProfile>('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${input.accessToken}` },
-      timeout: 10000
-    });
+    const { data } = await axios.get<GoogleProfile>(
+      'https://www.googleapis.com/oauth2/v3/userinfo',
+      {
+        headers: { Authorization: `Bearer ${input.accessToken}` },
+        timeout: 10000,
+      }
+    );
     return data;
   }
 
   if (input.idToken) {
     const { data } = await axios.get<GoogleProfile>('https://oauth2.googleapis.com/tokeninfo', {
       params: { id_token: input.idToken },
-      timeout: 10000
+      timeout: 10000,
     });
     return data;
   }
@@ -94,8 +103,8 @@ async function getGoogleProfile(input: GoogleLoginInput): Promise<GoogleProfile>
 export async function register(input: RegisterInput) {
   const existing = await prisma.user.findFirst({
     where: {
-      OR: [{ phone: input.phone }, ...(input.email ? [{ email: input.email }] : [])]
-    }
+      OR: [{ phone: input.phone }, ...(input.email ? [{ email: input.email }] : [])],
+    },
   });
 
   if (existing) throw badRequest('Phone or email already exists');
@@ -107,7 +116,7 @@ export async function register(input: RegisterInput) {
     email: input.email ?? null,
     passwordHash,
     role: input.role ?? UserRole.CUSTOMER,
-    wallet: { create: {} }
+    wallet: { create: {} },
   };
 
   if (input.role === UserRole.RIDER) {
@@ -124,12 +133,12 @@ export async function register(input: RegisterInput) {
       name: true,
       phone: true,
       email: true,
-      role: true
-    }
+      role: true,
+    },
   });
 
   return {
-    ...authPayload(user)
+    ...authPayload(user),
   };
 }
 
@@ -156,7 +165,11 @@ export async function googleLogin(input: GoogleLoginInput) {
   }
 
   const requestedRole = input.role ?? UserRole.CUSTOMER;
-  if (requestedRole !== UserRole.CUSTOMER && requestedRole !== UserRole.RIDER && requestedRole !== UserRole.DRIVER) {
+  if (
+    requestedRole !== UserRole.CUSTOMER &&
+    requestedRole !== UserRole.RIDER &&
+    requestedRole !== UserRole.DRIVER
+  ) {
     throw badRequest('Google sign-in is only available for customers, riders, and drivers');
   }
   const role: 'CUSTOMER' | 'RIDER' | 'DRIVER' = requestedRole;
@@ -168,8 +181,8 @@ export async function googleLogin(input: GoogleLoginInput) {
       data: {
         name: existing.name || profile.name || profile.email,
         avatarUrl: existing.avatarUrl ?? profile.picture ?? null,
-        lastSeenAt: new Date()
-      }
+        lastSeenAt: new Date(),
+      },
     });
     return authPayload(user);
   }
@@ -183,8 +196,8 @@ export async function googleLogin(input: GoogleLoginInput) {
       role,
       wallet: { create: {} },
       ...(role === UserRole.RIDER ? { riderProfile: { create: {} } } : {}),
-      ...(role === UserRole.DRIVER ? { driverProfile: { create: {} } } : {})
-    }
+      ...(role === UserRole.DRIVER ? { driverProfile: { create: {} } } : {}),
+    },
   });
 
   return authPayload(user);
@@ -198,7 +211,7 @@ export async function forgotPassword(phone: string) {
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
   await prisma.passwordResetToken.create({
-    data: { userId: user.id, token, expiresAt }
+    data: { userId: user.id, token, expiresAt },
   });
 
   return { message: 'Reset code sent' };
@@ -209,14 +222,17 @@ export async function resetPassword(phone: string, token: string, newPassword: s
   if (!user) throw notFound('No account found with this phone number');
 
   const resetToken = await prisma.passwordResetToken.findFirst({
-    where: { token, userId: user.id, usedAt: null, expiresAt: { gte: new Date() } }
+    where: { token, userId: user.id, usedAt: null, expiresAt: { gte: new Date() } },
   });
   if (!resetToken) throw badRequest('Invalid or expired reset code');
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
   await prisma.$transaction([
     prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
-    prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } })
+    prisma.passwordResetToken.update({
+      where: { id: resetToken.id },
+      data: { usedAt: new Date() },
+    }),
   ]);
 
   return { message: 'Password updated successfully' };
@@ -234,7 +250,7 @@ export async function me(userId: string) {
       avatarUrl: true,
       wallet: true,
       riderProfile: true,
-      driverProfile: true
-    }
+      driverProfile: true,
+    },
   });
 }

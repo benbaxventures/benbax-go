@@ -24,12 +24,16 @@ export function ForgotPasswordScreen({ navigation }: any) {
       const response = await fetch(`${getApiBaseUrl()}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ phone }),
       });
 
       const body = await response.json();
       if (!response.ok || !body.ok) {
-        throw new ApiResponseError(body.error?.message || 'Request failed', response.status, body.error?.code);
+        throw new ApiResponseError(
+          body.error?.message || 'Request failed',
+          response.status,
+          body.error?.code
+        );
       }
 
       navigation.navigate('ResetPassword', { phone, resetToken: body.data.resetToken });
@@ -55,13 +59,17 @@ export function ForgotPasswordScreen({ navigation }: any) {
         justifyContent: 'center',
         paddingHorizontal: 20,
         paddingTop: 20,
-        paddingBottom: 20 + insets.bottom
+        paddingBottom: 20 + insets.bottom,
       }}
     >
       <View style={{ gap: 18 }}>
         <View style={{ gap: 8 }}>
-          <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Forgot password</Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Enter your phone number to receive a 6-digit reset code.</Text>
+          <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>
+            Forgot password
+          </Text>
+          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>
+            Enter your phone number to receive a 6-digit reset code.
+          </Text>
         </View>
 
         <TextInput

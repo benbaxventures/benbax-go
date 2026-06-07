@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'benbax:privacy-settings';
 const BIOMETRIC_KEY = 'benbax:biometric-lock';
@@ -18,7 +18,7 @@ const defaultSettings: PrivacySettings = {
   maskedPhone: true,
   shareDeliveryHistory: false,
   safetyAlerts: true,
-  biometricLock: false
+  biometricLock: false,
 };
 
 export function usePrivacySettings() {
@@ -31,7 +31,7 @@ export function usePrivacySettings() {
     (async () => {
       const [stored, biometricPref] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
-        SecureStore.getItemAsync(BIOMETRIC_KEY).catch(() => null)
+        SecureStore.getItemAsync(BIOMETRIC_KEY).catch(() => null),
       ]);
 
       if (!mounted) return;
@@ -50,7 +50,9 @@ export function usePrivacySettings() {
       setIsLoading(false);
     })();
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   async function updateSetting(key: keyof PrivacySettings, value: boolean) {
@@ -61,7 +63,8 @@ export function usePrivacySettings() {
       await SecureStore.setItemAsync(BIOMETRIC_KEY, value ? 'true' : 'false').catch(() => {});
     }
 
-    const toStore: Omit<PrivacySettings, 'biometricLock'> & Partial<Pick<PrivacySettings, 'biometricLock'>> = { ...next };
+    const toStore: Omit<PrivacySettings, 'biometricLock'> &
+      Partial<Pick<PrivacySettings, 'biometricLock'>> = { ...next };
     delete toStore.biometricLock;
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
   }

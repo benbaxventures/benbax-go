@@ -1,14 +1,15 @@
-import { useState } from 'react';
-import { NavigationProp, useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Bike, CheckCircle2, Crosshair, Power, XCircle } from 'lucide-react-native';
+import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
+import type { RootStackParamList } from '../navigation/types';
 import { apiRequest } from '../services/api';
 import { useRiderStore } from '../store/riderStore';
 import { theme } from '../theme/tokens';
-import type { RootStackParamList } from '../navigation/types';
 
 export function DeliveryDispatchScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
@@ -32,7 +33,7 @@ export function DeliveryDispatchScreen() {
     try {
       await apiRequest('/riders/me/availability', {
         method: 'PATCH',
-        body: JSON.stringify({ isOnline: next, latitude: lat, longitude: lng })
+        body: JSON.stringify({ isOnline: next, latitude: lat, longitude: lng }),
       });
       setOnline(next);
     } catch (err) {
@@ -68,8 +69,12 @@ export function DeliveryDispatchScreen() {
   return (
     <Screen>
       <View style={{ gap: 6 }}>
-        <Text style={{ fontSize: 28, fontWeight: '900', color: theme.colors.ink }}>Delivery dispatch</Text>
-        <Text style={{ color: theme.colors.muted }}>Go online to receive parcel, food, courier, and pharmacy delivery offers.</Text>
+        <Text style={{ fontSize: 28, fontWeight: '900', color: theme.colors.ink }}>
+          Delivery dispatch
+        </Text>
+        <Text style={{ color: theme.colors.muted }}>
+          Go online to receive parcel, food, courier, and pharmacy delivery offers.
+        </Text>
       </View>
 
       {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
@@ -84,12 +89,16 @@ export function DeliveryDispatchScreen() {
           paddingHorizontal: 12,
           alignSelf: 'flex-start',
           borderRadius: 6,
-          backgroundColor: theme.colors.surface
+          backgroundColor: theme.colors.surface,
         }}
       >
         <Crosshair size={14} color={theme.colors.primary} />
         <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
-          {locationLoading ? 'Detecting...' : latitude && longitude ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}` : 'Update location'}
+          {locationLoading
+            ? 'Detecting...'
+            : latitude && longitude
+              ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+              : 'Update location'}
         </Text>
       </Pressable>
 
@@ -101,17 +110,23 @@ export function DeliveryDispatchScreen() {
           padding: 18,
           gap: 8,
           borderWidth: isOnline ? 0 : 1,
-          borderColor: theme.colors.border
+          borderColor: theme.colors.border,
         }}
       >
         <Power size={26} color={isOnline ? '#fff' : theme.colors.primary} />
-        <Text style={{ color: isOnline ? '#fff' : theme.colors.ink, fontSize: 24, fontWeight: '900' }}>
+        <Text
+          style={{ color: isOnline ? '#fff' : theme.colors.ink, fontSize: 24, fontWeight: '900' }}
+        >
           {isOnline ? 'Online for deliveries' : 'Offline for deliveries'}
         </Text>
-        <Text style={{ color: isOnline ? '#D7FFF5' : theme.colors.muted }}>{loading ? 'Updating...' : 'Tap to change delivery availability'}</Text>
+        <Text style={{ color: isOnline ? '#D7FFF5' : theme.colors.muted }}>
+          {loading ? 'Updating...' : 'Tap to change delivery availability'}
+        </Text>
       </Pressable>
 
-      <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 16, gap: 10 }}>
+      <View
+        style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 16, gap: 10 }}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Bike size={18} color={theme.colors.primary} />
           <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>Current delivery offer</Text>
@@ -119,18 +134,31 @@ export function DeliveryDispatchScreen() {
         {currentOffer ? (
           <>
             <Text style={{ color: theme.colors.muted }}>Delivery {currentOffer.deliveryId}</Text>
-            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>Dispatch score {currentOffer.score}</Text>
+            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>
+              Dispatch score {currentOffer.score}
+            </Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={{ flex: 1 }}>
-                <Button label="Accept" icon={<CheckCircle2 size={18} color="#fff" />} onPress={acceptOffer} />
+                <Button
+                  label="Accept"
+                  icon={<CheckCircle2 size={18} color="#fff" />}
+                  onPress={acceptOffer}
+                />
               </View>
               <View style={{ flex: 1 }}>
-                <Button label="Reject" icon={<XCircle size={18} color="#fff" />} onPress={rejectOffer} variant="danger" />
+                <Button
+                  label="Reject"
+                  icon={<XCircle size={18} color="#fff" />}
+                  onPress={rejectOffer}
+                  variant="danger"
+                />
               </View>
             </View>
           </>
         ) : (
-          <Text style={{ color: theme.colors.muted }}>No active delivery offer. Fresh GPS and high completion rate improve matching.</Text>
+          <Text style={{ color: theme.colors.muted }}>
+            No active delivery offer. Fresh GPS and high completion rate improve matching.
+          </Text>
         )}
       </View>
     </Screen>

@@ -1,5 +1,5 @@
-import { Router } from 'express';
 import { UserRole } from '@prisma/client';
+import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../../config/prisma';
 import { requireAuth, requireRoles } from '../../middleware/auth';
@@ -14,8 +14,8 @@ const upsertSchema = z.object({
     name: z.string().min(2),
     city: z.string().min(2),
     polygon: z.array(z.object({ latitude: z.number(), longitude: z.number() })).min(3),
-    baseMultiplier: z.number().min(0.5).max(5).default(1)
-  })
+    baseMultiplier: z.number().min(0.5).max(5).default(1),
+  }),
 });
 
 geofencesRouter.use(requireAuth);
@@ -25,7 +25,7 @@ geofencesRouter.get(
   asyncHandler(async (_req, res) => {
     const geofences = await prisma.geofence.findMany({
       where: { isActive: true },
-      orderBy: { city: 'asc' }
+      orderBy: { city: 'asc' },
     });
     return ok(res, geofences);
   })

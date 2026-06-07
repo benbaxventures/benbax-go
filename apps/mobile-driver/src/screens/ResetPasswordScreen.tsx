@@ -1,8 +1,15 @@
-import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Text, TextInput, View, Alert } from 'react-native';
-import { Button } from '../components/Button';
 import { Eye, EyeOff } from 'lucide-react-native';
-import { Pressable } from 'react-native';
+import { useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Button } from '../components/Button';
 import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../services/api';
 import { theme } from '../theme/tokens';
 
@@ -31,16 +38,20 @@ export function ResetPasswordScreen({ navigation, route }: any) {
       const response = await fetch(`${getApiBaseUrl()}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, token, newPassword })
+        body: JSON.stringify({ phone, token, newPassword }),
       });
 
       const body = await response.json();
       if (!response.ok || !body.ok) {
-        throw new ApiResponseError(body.error?.message || 'Reset failed', response.status, body.error?.code);
+        throw new ApiResponseError(
+          body.error?.message || 'Reset failed',
+          response.status,
+          body.error?.code
+        );
       }
 
       Alert.alert('Password updated', 'You can now sign in with your new password.', [
-        { text: 'OK', onPress: () => navigation.navigate('SignIn') }
+        { text: 'OK', onPress: () => navigation.navigate('SignIn') },
       ]);
     } catch (err) {
       if (isApiConnectionError(err)) {
@@ -56,23 +67,40 @@ export function ResetPasswordScreen({ navigation, route }: any) {
   }
 
   const inputStyle = {
-    backgroundColor: '#fff', borderRadius: 8, borderColor: theme.colors.border,
-    borderWidth: 1, color: theme.colors.ink, fontSize: 16, minHeight: 58, paddingHorizontal: 14
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderColor: theme.colors.border,
+    borderWidth: 1,
+    color: theme.colors.ink,
+    fontSize: 16,
+    minHeight: 58,
+    paddingHorizontal: 14,
   };
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: theme.colors.canvas, justifyContent: 'center', padding: 20 }}
+      style={{
+        flex: 1,
+        backgroundColor: theme.colors.canvas,
+        justifyContent: 'center',
+        padding: 20,
+      }}
     >
       <View style={{ gap: 18 }}>
         <View style={{ gap: 8 }}>
-          <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Reset password</Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Enter the 6-digit code sent to {phone} and your new password.</Text>
+          <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>
+            Reset password
+          </Text>
+          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>
+            Enter the 6-digit code sent to {phone} and your new password.
+          </Text>
         </View>
 
         <View style={{ gap: 8 }}>
-          <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>Reset code</Text>
+          <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>
+            Reset code
+          </Text>
           <TextInput
             value={token}
             onChangeText={setToken}
@@ -84,8 +112,12 @@ export function ResetPasswordScreen({ navigation, route }: any) {
         </View>
 
         <View style={{ gap: 8 }}>
-          <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>New password</Text>
-          <View style={{ ...inputStyle, paddingRight: 10, flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>
+            New password
+          </Text>
+          <View
+            style={{ ...inputStyle, paddingRight: 10, flexDirection: 'row', alignItems: 'center' }}
+          >
             <TextInput
               value={newPassword}
               onChangeText={setNewPassword}
@@ -101,7 +133,11 @@ export function ResetPasswordScreen({ navigation, route }: any) {
               hitSlop={12}
               style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}
             >
-              {showPassword ? <EyeOff size={22} color={theme.colors.muted} /> : <Eye size={22} color={theme.colors.muted} />}
+              {showPassword ? (
+                <EyeOff size={22} color={theme.colors.muted} />
+              ) : (
+                <Eye size={22} color={theme.colors.muted} />
+              )}
             </Pressable>
           </View>
         </View>
@@ -109,7 +145,11 @@ export function ResetPasswordScreen({ navigation, route }: any) {
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
 
         <Button label="Reset password" onPress={handleSubmit} loading={loading} />
-        <Button label="Back to sign in" onPress={() => navigation.navigate('SignIn')} variant="secondary" />
+        <Button
+          label="Back to sign in"
+          onPress={() => navigation.navigate('SignIn')}
+          variant="secondary"
+        />
       </View>
     </KeyboardAvoidingView>
   );

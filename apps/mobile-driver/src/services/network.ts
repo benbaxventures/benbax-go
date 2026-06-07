@@ -8,12 +8,18 @@ const USE_LOCAL_API = process.env.EXPO_PUBLIC_USE_LOCAL_API === 'true';
 
 function getConfiguredApiBaseUrl() {
   const extraApiBaseUrl = Constants.expoConfig?.extra?.apiBaseUrl;
-  return process.env.EXPO_PUBLIC_API_BASE_URL || (typeof extraApiBaseUrl === 'string' ? extraApiBaseUrl : undefined);
+  return (
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    (typeof extraApiBaseUrl === 'string' ? extraApiBaseUrl : undefined)
+  );
 }
 
 function getConfiguredSocketUrl() {
   const extraSocketUrl = Constants.expoConfig?.extra?.socketUrl;
-  return process.env.EXPO_PUBLIC_SOCKET_URL || (typeof extraSocketUrl === 'string' ? extraSocketUrl : undefined);
+  return (
+    process.env.EXPO_PUBLIC_SOCKET_URL ||
+    (typeof extraSocketUrl === 'string' ? extraSocketUrl : undefined)
+  );
 }
 
 function getExpoHost() {
@@ -63,7 +69,11 @@ function normalizeRemoteUrl(url: string) {
   try {
     const parsedUrl = new URL(url);
 
-    if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === RAILWAY_HOST && parsedUrl.port === '8080') {
+    if (
+      parsedUrl.protocol === 'https:' &&
+      parsedUrl.hostname === RAILWAY_HOST &&
+      parsedUrl.port === '8080'
+    ) {
       parsedUrl.port = '';
       return parsedUrl.toString().replace(/\/$/, '');
     }

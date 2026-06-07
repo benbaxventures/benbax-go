@@ -17,7 +17,15 @@ export function StatusPill({ label, tone = 'info' }: Props) {
           : theme.colors.info;
 
   return (
-    <View style={{ alignSelf: 'flex-start', borderRadius: 999, backgroundColor: `${color}1A`, paddingHorizontal: 10, paddingVertical: 5 }}>
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        borderRadius: 999,
+        backgroundColor: `${color}1A`,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+      }}
+    >
       <Text style={{ color, fontSize: 12, fontWeight: '800' }}>{label}</Text>
     </View>
   );

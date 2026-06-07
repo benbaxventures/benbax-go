@@ -51,7 +51,11 @@ function normalizeRemoteUrl(url: string) {
   try {
     const parsedUrl = new URL(url);
 
-    if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === RAILWAY_HOST && parsedUrl.port === '8080') {
+    if (
+      parsedUrl.protocol === 'https:' &&
+      parsedUrl.hostname === RAILWAY_HOST &&
+      parsedUrl.port === '8080'
+    ) {
       parsedUrl.port = '';
       return parsedUrl.toString().replace(/\/$/, '');
     }

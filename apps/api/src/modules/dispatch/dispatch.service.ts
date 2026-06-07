@@ -1,5 +1,5 @@
-import type { Server } from 'socket.io';
 import { Prisma } from '@prisma/client';
+import type { Server } from 'socket.io';
 import { prisma } from '../../config/prisma';
 import { realtimeEvents } from '../../realtime/events';
 import { rankRiders } from './dispatch.engine';
@@ -13,15 +13,15 @@ export async function dispatchRide(tripId: string, io?: Server) {
       isOnline: true,
       status: 'ACTIVE',
       currentLatitude: { not: null },
-      currentLongitude: { not: null }
+      currentLongitude: { not: null },
     },
-    take: 25
+    take: 25,
   });
 
   if (!drivers.length) {
     const noDriverUpdate = {
       ...trip,
-      dispatchStatus: 'NO_AVAILABLE_DRIVERS'
+      dispatchStatus: 'NO_AVAILABLE_DRIVERS',
     };
     io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, noDriverUpdate);
     io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, noDriverUpdate);
@@ -31,7 +31,7 @@ export async function dispatchRide(tripId: string, io?: Server) {
   const ranked = rankRiders(
     {
       latitude: Number(trip.pickupLatitude),
-      longitude: Number(trip.pickupLongitude)
+      longitude: Number(trip.pickupLongitude),
     },
     drivers.map((driver) => ({
       id: driver.id,
@@ -41,7 +41,7 @@ export async function dispatchRide(tripId: string, io?: Server) {
       activeDeliveries: driver.status === 'ON_TRIP' ? 1 : 0,
       lastLocationAgeSeconds: driver.lastLocationAt
         ? Math.floor((Date.now() - driver.lastLocationAt.getTime()) / 1000)
-        : 300
+        : 300,
     }))
   );
 
@@ -53,17 +53,17 @@ export async function dispatchRide(tripId: string, io?: Server) {
       tripId: trip.id,
       driverProfileId: best.riderId,
       score: new Prisma.Decimal(best.score),
-      expiresAt: new Date(Date.now() + 45_000)
+      expiresAt: new Date(Date.now() + 45_000),
     },
     include: {
       driverProfile: { include: { user: true, vehicle: true } },
-      trip: true
-    }
+      trip: true,
+    },
   });
 
   const updatedTrip = await prisma.rideTrip.update({
     where: { id: trip.id },
-    data: { status: 'ASSIGNING' }
+    data: { status: 'ASSIGNING' },
   });
 
   io?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.driverOffer, assignment);
@@ -83,9 +83,9 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
       isOnline: true,
       status: 'ACTIVE',
       currentLatitude: { not: null },
-      currentLongitude: { not: null }
+      currentLongitude: { not: null },
     },
-    take: 25
+    take: 25,
   });
 
   if (!riders.length) return;
@@ -93,7 +93,7 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
   const ranked = rankRiders(
     {
       latitude: Number(delivery.pickupLatitude),
-      longitude: Number(delivery.pickupLongitude)
+      longitude: Number(delivery.pickupLongitude),
     },
     riders.map((rider) => ({
       id: rider.id,
@@ -103,7 +103,7 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
       activeDeliveries: rider.status === 'ON_DELIVERY' ? 1 : 0,
       lastLocationAgeSeconds: rider.lastLocationAt
         ? Math.floor((Date.now() - rider.lastLocationAt.getTime()) / 1000)
-        : 300
+        : 300,
     }))
   );
 
@@ -115,17 +115,17 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
       deliveryId: delivery.id,
       riderProfileId: best.riderId,
       score: new Prisma.Decimal(best.score),
-      expiresAt: new Date(Date.now() + 45_000)
+      expiresAt: new Date(Date.now() + 45_000),
     },
     include: {
       riderProfile: { include: { user: true } },
-      delivery: true
-    }
+      delivery: true,
+    },
   });
 
   await prisma.delivery.update({
     where: { id: delivery.id },
-    data: { status: 'ASSIGNING' }
+    data: { status: 'ASSIGNING' },
   });
 
   io?.to(`rider:${assignment.riderProfile.userId}`).emit(realtimeEvents.riderOffer, assignment);

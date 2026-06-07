@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Car, MapPinned, MessageSquareText, Phone, ShieldCheck } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
+import { Car, MapPinned, MessageSquareText, Phone } from 'lucide-react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Text, View } from 'react-native';
-import { realtimeEvents } from '../shared';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { StatusPill } from '../components/StatusPill';
-import { apiRequest } from '../services/api';
-import { createRealtimeClient } from '../services/realtime';
-import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
-import { theme } from '../theme/tokens';
 import type { RootStackParamList } from '../navigation/types';
+import { apiRequest } from '../services/api';
+import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
+import { createRealtimeClient } from '../services/realtime';
+import { realtimeEvents } from '../shared';
+import { theme } from '../theme/tokens';
 
 type Coordinate = {
   latitude: number;
@@ -20,7 +20,13 @@ type Coordinate = {
 
 type DriverInfo = {
   user?: { name?: string; fullName?: string; phone?: string };
-  vehicle?: { type?: string; plateNumber?: string | null; color?: string | null; make?: string | null; model?: string | null };
+  vehicle?: {
+    type?: string;
+    plateNumber?: string | null;
+    color?: string | null;
+    make?: string | null;
+    model?: string | null;
+  };
   currentLatitude?: string | number | null;
   currentLongitude?: string | number | null;
 };
@@ -63,7 +69,7 @@ function LazyRideMap({
   pickup,
   dropoff,
   latestPoint,
-  routePoints
+  routePoints,
 }: {
   pickup: Coordinate;
   dropoff: Coordinate;
@@ -85,7 +91,7 @@ function LazyRideMap({
         modulesRef.current = {
           MapView: mod.default,
           Marker: mod.Marker,
-          Polyline: mod.Polyline
+          Polyline: mod.Polyline,
         };
         setLoaded(true);
       } catch {
@@ -96,7 +102,15 @@ function LazyRideMap({
 
   if (error) {
     return (
-      <View style={{ flex: 1, borderRadius: 8, backgroundColor: theme.colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          flex: 1,
+          borderRadius: 8,
+          backgroundColor: theme.colors.surfaceMuted,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <Text style={{ color: theme.colors.muted }}>{error}</Text>
       </View>
     );
@@ -104,7 +118,15 @@ function LazyRideMap({
 
   if (!loaded) {
     return (
-      <View style={{ flex: 1, borderRadius: 8, backgroundColor: theme.colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          flex: 1,
+          borderRadius: 8,
+          backgroundColor: theme.colors.surfaceMuted,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
@@ -118,12 +140,14 @@ function LazyRideMap({
         latitude: pickup.latitude,
         longitude: pickup.longitude,
         latitudeDelta: 0.12,
-        longitudeDelta: 0.12
+        longitudeDelta: 0.12,
       }}
     >
       <Marker coordinate={pickup} title="Pickup" />
       <Marker coordinate={dropoff} title="Destination" />
-      {latestPoint ? <Marker coordinate={latestPoint} title="Driver" pinColor={theme.colors.primary} /> : null}
+      {latestPoint ? (
+        <Marker coordinate={latestPoint} title="Driver" pinColor={theme.colors.primary} />
+      ) : null}
       <Polyline coordinates={routePoints} strokeColor={theme.colors.primary} strokeWidth={4} />
     </MapView>
   );
@@ -136,12 +160,14 @@ export function RideTrackingScreen({ route }: Props) {
 
   const { data: ride, refetch } = useQuery({
     queryKey: ['ride', route.params.tripId],
-    queryFn: () => apiRequest<RideDetail>(`/rides/${route.params.tripId}`)
+    queryFn: () => apiRequest<RideDetail>(`/rides/${route.params.tripId}`),
   });
 
   useEffect(() => {
     if (ride?.status) setLiveStatus(ride.status);
-    const accepted = ride?.assignments?.find((assignment) => assignment.status === 'ACCEPTED') ?? ride?.assignments?.[0];
+    const accepted =
+      ride?.assignments?.find((assignment) => assignment.status === 'ACCEPTED') ??
+      ride?.assignments?.[0];
     if (accepted?.driverProfile) setAssignedDriver(accepted.driverProfile);
   }, [ride]);
 
@@ -160,10 +186,13 @@ export function RideTrackingScreen({ route }: Props) {
         setLiveStatus(assignment.status === 'ACCEPTED' ? 'ASSIGNED' : 'ASSIGNING');
         if (assignment.driverProfile) {
           setAssignedDriver(assignment.driverProfile);
-          if (assignment.driverProfile.currentLatitude && assignment.driverProfile.currentLongitude) {
+          if (
+            assignment.driverProfile.currentLatitude &&
+            assignment.driverProfile.currentLongitude
+          ) {
             setDriverPoint({
               latitude: Number(assignment.driverProfile.currentLatitude),
-              longitude: Number(assignment.driverProfile.currentLongitude)
+              longitude: Number(assignment.driverProfile.currentLongitude),
             });
           }
         }
@@ -190,28 +219,29 @@ export function RideTrackingScreen({ route }: Props) {
   const pickup = useMemo(
     () => ({
       latitude: Number(ride?.pickupLatitude ?? 5.6508),
-      longitude: Number(ride?.pickupLongitude ?? -0.1668)
+      longitude: Number(ride?.pickupLongitude ?? -0.1668),
     }),
     [ride?.pickupLatitude, ride?.pickupLongitude]
   );
   const dropoff = useMemo(
     () => ({
       latitude: Number(ride?.dropoffLatitude ?? 5.556),
-      longitude: Number(ride?.dropoffLongitude ?? -0.1824)
+      longitude: Number(ride?.dropoffLongitude ?? -0.1824),
     }),
     [ride?.dropoffLatitude, ride?.dropoffLongitude]
   );
-  const latestPoint = driverPoint ?? ride?.trackingPoints?.[0]
-    ? {
-        latitude: Number((driverPoint ?? ride?.trackingPoints?.[0])?.latitude),
-        longitude: Number((driverPoint ?? ride?.trackingPoints?.[0])?.longitude)
-      }
-    : assignedDriver?.currentLatitude && assignedDriver?.currentLongitude
+  const latestPoint =
+    (driverPoint ?? ride?.trackingPoints?.[0])
       ? {
-          latitude: Number(assignedDriver.currentLatitude),
-          longitude: Number(assignedDriver.currentLongitude)
+          latitude: Number((driverPoint ?? ride?.trackingPoints?.[0])?.latitude),
+          longitude: Number((driverPoint ?? ride?.trackingPoints?.[0])?.longitude),
         }
-      : null;
+      : assignedDriver?.currentLatitude && assignedDriver?.currentLongitude
+        ? {
+            latitude: Number(assignedDriver.currentLatitude),
+            longitude: Number(assignedDriver.currentLongitude),
+          }
+        : null;
   const routePoints = ride?.metadata?.expectedRoute?.polyline?.length
     ? ride.metadata.expectedRoute.polyline
     : latestPoint
@@ -219,26 +249,35 @@ export function RideTrackingScreen({ route }: Props) {
       : [pickup, dropoff];
   const driverName = assignedDriver?.user?.name ?? assignedDriver?.user?.fullName ?? 'Driver';
   const vehicle = assignedDriver?.vehicle;
-  const vehicleLabel = [vehicle?.color, vehicle?.make, vehicle?.model, vehicle?.plateNumber].filter(Boolean).join(' ');
-  const isScheduledFuture = ride?.scheduledFor ? new Date(ride.scheduledFor).getTime() > Date.now() : false;
+  const vehicleLabel = [vehicle?.color, vehicle?.make, vehicle?.model, vehicle?.plateNumber]
+    .filter(Boolean)
+    .join(' ');
+  const isScheduledFuture = ride?.scheduledFor
+    ? new Date(ride.scheduledFor).getTime() > Date.now()
+    : false;
   const statusLabel =
     isScheduledFuture && !assignedDriver
       ? 'Scheduled'
       : liveStatus === 'NO_AVAILABLE_DRIVERS'
-      ? 'No drivers online'
-      : liveStatus === 'REQUESTED'
-        ? 'Matching driver'
-        : liveStatus === 'ASSIGNING'
-          ? 'Driver found'
-        : liveStatus.replaceAll('_', ' ').toLowerCase();
+        ? 'No drivers online'
+        : liveStatus === 'REQUESTED'
+          ? 'Matching driver'
+          : liveStatus === 'ASSIGNING'
+            ? 'Driver found'
+            : liveStatus.replaceAll('_', ' ').toLowerCase();
 
   function openDriverMap() {
     if (!latestPoint) {
-      Alert.alert('Driver location unavailable', 'The driver location will appear when the driver shares GPS.');
+      Alert.alert(
+        'Driver location unavailable',
+        'The driver location will appear when the driver shares GPS.'
+      );
       return;
     }
     const query = `${latestPoint.latitude},${latestPoint.longitude}`;
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`).catch(() => {
+    Linking.openURL(
+      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`
+    ).catch(() => {
       Alert.alert('Map unavailable', 'Could not open Google Maps on this device.');
     });
   }
@@ -247,16 +286,29 @@ export function RideTrackingScreen({ route }: Props) {
     <Screen scroll={false}>
       <View style={{ flex: 1, gap: 12 }}>
         <View style={{ gap: 8 }}>
-          <StatusPill label={statusLabel} tone={liveStatus === 'NO_AVAILABLE_DRIVERS' ? 'warning' : 'success'} />
-          <Text style={{ fontSize: 24, fontWeight: '900', color: theme.colors.ink }}>Live ride tracking</Text>
+          <StatusPill
+            label={statusLabel}
+            tone={liveStatus === 'NO_AVAILABLE_DRIVERS' ? 'warning' : 'success'}
+          />
+          <Text style={{ fontSize: 24, fontWeight: '900', color: theme.colors.ink }}>
+            Live ride tracking
+          </Text>
           <Text style={{ color: theme.colors.muted }}>
-            {ride?.tripCode ?? 'Trip'} from {ride?.pickupLabel ?? 'pickup'} to {ride?.dropoffLabel ?? 'destination'}.
+            {ride?.tripCode ?? 'Trip'} from {ride?.pickupLabel ?? 'pickup'} to{' '}
+            {ride?.dropoffLabel ?? 'destination'}.
           </Text>
         </View>
 
-        <LazyRideMap pickup={pickup} dropoff={dropoff} latestPoint={latestPoint} routePoints={routePoints} />
+        <LazyRideMap
+          pickup={pickup}
+          dropoff={dropoff}
+          latestPoint={latestPoint}
+          routePoints={routePoints}
+        />
 
-        <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 14, gap: 10 }}>
+        <View
+          style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 14, gap: 10 }}
+        >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Car size={18} color={theme.colors.primary} />
             <Text style={{ fontWeight: '900', color: theme.colors.ink }}>
@@ -276,15 +328,29 @@ export function RideTrackingScreen({ route }: Props) {
           </Text>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <Button label="Call" icon={<Phone size={18} color="#fff" />} onPress={() => callPhone(assignedDriver?.user?.phone ?? BENBAX_PHONE)} />
+              <Button
+                label="Call"
+                icon={<Phone size={18} color="#fff" />}
+                onPress={() => callPhone(assignedDriver?.user?.phone ?? BENBAX_PHONE)}
+              />
             </View>
             <View style={{ flex: 1 }}>
-              <Button label="WhatsApp" icon={<MessageSquareText size={18} color={theme.colors.ink} />} onPress={() => openWhatsApp(assignedDriver?.user?.phone ?? BENBAX_PHONE)} variant="secondary" />
+              <Button
+                label="WhatsApp"
+                icon={<MessageSquareText size={18} color={theme.colors.ink} />}
+                onPress={() => openWhatsApp(assignedDriver?.user?.phone ?? BENBAX_PHONE)}
+                variant="secondary"
+              />
             </View>
           </View>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View style={{ flex: 1 }}>
-              <Button label="Open map" icon={<MapPinned size={18} color={theme.colors.ink} />} onPress={openDriverMap} variant="secondary" />
+              <Button
+                label="Open map"
+                icon={<MapPinned size={18} color={theme.colors.ink} />}
+                onPress={openDriverMap}
+                variant="secondary"
+              />
             </View>
           </View>
         </View>

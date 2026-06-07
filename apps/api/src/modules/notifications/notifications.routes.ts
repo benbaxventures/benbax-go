@@ -11,8 +11,8 @@ export const notificationsRouter = Router();
 const tokenSchema = z.object({
   body: z.object({
     token: z.string().min(10),
-    platform: z.enum(['ios', 'android', 'web'])
-  })
+    platform: z.enum(['ios', 'android', 'web']),
+  }),
 });
 
 notificationsRouter.use(requireAuth);
@@ -26,12 +26,12 @@ notificationsRouter.post(
       create: {
         userId: req.user!.id,
         token: req.body.token,
-        platform: req.body.platform
+        platform: req.body.platform,
       },
       update: {
         userId: req.user!.id,
-        platform: req.body.platform
-      }
+        platform: req.body.platform,
+      },
     });
     return ok(res, token);
   })
@@ -43,7 +43,7 @@ notificationsRouter.get(
     const notifications = await prisma.notification.findMany({
       where: { userId: req.user!.id },
       orderBy: { createdAt: 'desc' },
-      take: 50
+      take: 50,
     });
     return ok(res, notifications);
   })

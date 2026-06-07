@@ -7,13 +7,13 @@ export function validate(schema: AnyZodObject) {
     const result = schema.safeParse({
       body: req.body,
       query: req.query,
-      params: req.params
+      params: req.params,
     });
 
     if (!result.success) {
       return next(
         badRequest('Validation failed', {
-          issues: result.error.flatten()
+          issues: result.error.flatten(),
         })
       );
     }

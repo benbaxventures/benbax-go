@@ -21,9 +21,7 @@ export function haversineKm(a: Point, b: Point) {
   const dLon = toRad(b.longitude - a.longitude);
   const lat1 = toRad(a.latitude);
   const lat2 = toRad(b.latitude);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return radiusKm * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
@@ -35,7 +33,10 @@ export function estimateDelivery(pickup: Point, dropoff: Point, category: Delive
   const serviceFee = 2.5;
   const surgeMultiplier = 1;
   const total = Number(
-    ((baseFare + distanceKm * 3.5 + estimatedMinutes * 0.35 + serviceFee) * categoryMultiplier).toFixed(2)
+    (
+      (baseFare + distanceKm * 3.5 + estimatedMinutes * 0.35 + serviceFee) *
+      categoryMultiplier
+    ).toFixed(2)
   );
 
   return {
@@ -44,7 +45,7 @@ export function estimateDelivery(pickup: Point, dropoff: Point, category: Delive
     baseFare,
     serviceFee,
     surgeMultiplier,
-    total
+    total,
   };
 }
 
@@ -58,7 +59,11 @@ export function estimateRide(pickup: Point, dropoff: Point, vehicleType = 'ECONO
   const surgeMultiplier = 1;
   const vehicleMultiplier = vehicleType === 'COMFORT' ? 1.25 : vehicleType === 'SUV' ? 1.45 : 1;
   const total = Number(
-    ((baseFare + distanceKm * perKmFare + estimatedMinutes * perMinuteFare + serviceFee) * surgeMultiplier * vehicleMultiplier).toFixed(2)
+    (
+      (baseFare + distanceKm * perKmFare + estimatedMinutes * perMinuteFare + serviceFee) *
+      surgeMultiplier *
+      vehicleMultiplier
+    ).toFixed(2)
   );
 
   return {
@@ -69,7 +74,7 @@ export function estimateRide(pickup: Point, dropoff: Point, vehicleType = 'ECONO
     perMinuteFare,
     surgeMultiplier,
     vehicleMultiplier,
-    total
+    total,
   };
 }
 
@@ -87,7 +92,7 @@ export function rankRiders(pickup: Point, candidates: CandidateRider[]) {
       return {
         riderId: rider.id,
         distanceKm,
-        score: Number(score.toFixed(2))
+        score: Number(score.toFixed(2)),
       };
     })
     .sort((a, b) => b.score - a.score);

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect } from 'react';
 import { apiRequest } from '../services/api';
 
 const ACTIVE_TRIP_KEY = 'benbax.driver.activeTripId';
@@ -32,7 +32,7 @@ export function useDriverLocation(tripId?: string, enabled = false) {
         {
           accuracy: Location.Accuracy.High,
           distanceInterval: 30,
-          timeInterval: 8_000
+          timeInterval: 8_000,
         },
         async (position) => {
           const batteryLevel = await readBatteryPercent();
@@ -44,12 +44,11 @@ export function useDriverLocation(tripId?: string, enabled = false) {
               heading: position.coords.heading ?? undefined,
               speedKph: position.coords.speed ? position.coords.speed * 3.6 : undefined,
               batteryLevel,
-              source: 'FOREGROUND_GPS'
-            })
+              source: 'FOREGROUND_GPS',
+            }),
           }).catch(console.warn);
         }
       );
-
     }
 
     start().catch(console.warn);

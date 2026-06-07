@@ -10,7 +10,7 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}): Pr
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
-    headers
+    headers,
   });
 
   const body = (await response.json()) as ApiResponse<T>;

@@ -1,4 +1,5 @@
-import { DeliveryCategory, DeliveryStatus, Prisma } from '@prisma/client';
+import type { DeliveryCategory } from '@prisma/client';
+import { DeliveryStatus, Prisma } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { notFound } from '../../utils/http';
@@ -29,11 +30,13 @@ type CreateDeliveryInput = {
   paymentMethod?: 'MTN_MOMO' | 'PAYSTACK_CARD' | 'WALLET' | 'CASH_ON_DELIVERY';
 };
 
-export async function quoteDelivery(input: Pick<CreateDeliveryInput, 'category' | 'pickup' | 'dropoff'>) {
+export async function quoteDelivery(
+  input: Pick<CreateDeliveryInput, 'category' | 'pickup' | 'dropoff'>
+) {
   const quote = estimateDelivery(input.pickup, input.dropoff, input.category);
   return {
     ...quote,
-    currency: 'GHS' as const
+    currency: 'GHS' as const,
   };
 }
 
@@ -81,17 +84,17 @@ export async function createDelivery(input: CreateDeliveryInput) {
               create: {
                 method: input.paymentMethod,
                 amount: quote.total,
-                currency: 'GHS'
-              }
-            }
+                currency: 'GHS',
+              },
+            },
           }
         : {}),
-      chatThread: { create: {} }
+      chatThread: { create: {} },
     },
     include: {
       payment: true,
-      assignments: true
-    }
+      assignments: true,
+    },
   });
 }
 
@@ -100,7 +103,7 @@ export async function listCustomerDeliveries(customerId: string) {
     where: { customerId },
     orderBy: { createdAt: 'desc' },
     take: 50,
-    include: { payment: true, assignments: { take: 1, orderBy: { offeredAt: 'desc' } } }
+    include: { payment: true, assignments: { take: 1, orderBy: { offeredAt: 'desc' } } },
   });
 }
 
@@ -110,8 +113,8 @@ export async function getDelivery(id: string, requesterId: string) {
       id,
       OR: [
         { customerId: requesterId },
-        { assignments: { some: { riderProfile: { userId: requesterId } } } }
-      ]
+        { assignments: { some: { riderProfile: { userId: requesterId } } } },
+      ],
     },
     include: {
       payment: true,
@@ -119,9 +122,9 @@ export async function getDelivery(id: string, requesterId: string) {
       trackingPoints: { orderBy: { capturedAt: 'desc' }, take: 25 },
       assignments: {
         include: { riderProfile: { include: { user: true, vehicle: true } } },
-        orderBy: { offeredAt: 'desc' }
-      }
-    }
+        orderBy: { offeredAt: 'desc' },
+      },
+    },
   });
 
   if (!delivery) throw notFound('Delivery not found');
@@ -131,6 +134,6 @@ export async function getDelivery(id: string, requesterId: string) {
 export async function updateDeliveryStatus(id: string, status: DeliveryStatus) {
   return prisma.delivery.update({
     where: { id },
-    data: { status }
+    data: { status },
   });
 }

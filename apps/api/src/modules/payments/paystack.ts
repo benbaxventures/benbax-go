@@ -25,13 +25,13 @@ export async function initializePaystackTransaction(input: {
       reference: input.reference,
       callback_url: input.callbackUrl,
       channels: ['card', 'mobile_money'],
-      metadata: input.metadata
+      metadata: input.metadata,
     },
     {
       headers: {
         Authorization: `Bearer ${getPaystackSecretKey()}`,
-        'Content-Type': 'application/json'
-      }
+        'Content-Type': 'application/json',
+      },
     }
   );
 
@@ -45,8 +45,8 @@ export async function initializePaystackTransaction(input: {
 export async function verifyPaystackTransaction(reference: string) {
   const response = await axios.get(`${PAYSTACK_BASE_URL}/transaction/verify/${reference}`, {
     headers: {
-      Authorization: `Bearer ${getPaystackSecretKey()}`
-    }
+      Authorization: `Bearer ${getPaystackSecretKey()}`,
+    },
   });
 
   return response.data.data;

@@ -22,12 +22,16 @@ export function ForgotPasswordScreen({ navigation }: any) {
       const response = await fetch(`${getApiBaseUrl()}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ phone }),
       });
 
       const body = await response.json();
       if (!response.ok || !body.ok) {
-        throw new ApiResponseError(body.error?.message || 'Request failed', response.status, body.error?.code);
+        throw new ApiResponseError(
+          body.error?.message || 'Request failed',
+          response.status,
+          body.error?.code
+        );
       }
 
       navigation.navigate('ResetPassword', { phone, resetToken: body.data.resetToken });
@@ -47,16 +51,27 @@ export function ForgotPasswordScreen({ navigation }: any) {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: theme.colors.canvas, justifyContent: 'center', padding: 20 }}
+      style={{
+        flex: 1,
+        backgroundColor: theme.colors.canvas,
+        justifyContent: 'center',
+        padding: 20,
+      }}
     >
       <View style={{ gap: 18 }}>
         <View style={{ gap: 8 }}>
-          <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Forgot password</Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>Enter your phone number to receive a 6-digit reset code.</Text>
+          <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>
+            Forgot password
+          </Text>
+          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>
+            Enter your phone number to receive a 6-digit reset code.
+          </Text>
         </View>
 
         <View style={{ gap: 8 }}>
-          <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>Phone number</Text>
+          <Text style={{ color: theme.colors.ink, fontSize: 14, fontWeight: '800' }}>
+            Phone number
+          </Text>
           <TextInput
             value={phone}
             onChangeText={setPhone}
@@ -64,8 +79,14 @@ export function ForgotPasswordScreen({ navigation }: any) {
             placeholder="+233 phone number"
             autoComplete="tel"
             style={{
-              backgroundColor: '#fff', borderRadius: 8, borderColor: theme.colors.border,
-              borderWidth: 1, color: theme.colors.ink, fontSize: 16, minHeight: 58, paddingHorizontal: 14
+              backgroundColor: '#fff',
+              borderRadius: 8,
+              borderColor: theme.colors.border,
+              borderWidth: 1,
+              color: theme.colors.ink,
+              fontSize: 16,
+              minHeight: 58,
+              paddingHorizontal: 14,
             }}
           />
         </View>

@@ -18,5 +18,5 @@ export const useRiderStore = create<RiderState>((set) => ({
   isOnline: false,
   currentOffer: null,
   setOnline: (isOnline) => set({ isOnline }),
-  setCurrentOffer: (currentOffer) => set({ currentOffer })
+  setCurrentOffer: (currentOffer) => set({ currentOffer }),
 }));

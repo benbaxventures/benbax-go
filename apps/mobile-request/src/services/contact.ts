@@ -1,11 +1,14 @@
-import { Alert, Linking, Platform } from 'react-native';
+import { Alert, Linking } from 'react-native';
 
 export function callPhone(phone: string) {
   const url = `tel:${phone}`;
   Linking.canOpenURL(url)
     .then((supported) => {
       if (supported) return Linking.openURL(url);
-      Alert.alert('Unable to call', `Phone calls are not supported on this device. Number: ${phone}`);
+      Alert.alert(
+        'Unable to call',
+        `Phone calls are not supported on this device. Number: ${phone}`
+      );
     })
     .catch(() => Alert.alert('Error', 'Could not initiate the call.'));
 }

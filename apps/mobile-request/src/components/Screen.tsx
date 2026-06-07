@@ -12,7 +12,14 @@ export function Screen({ children, scroll = true }: Props) {
   const paddingBottom = Math.max(theme.spacing.lg, insets.bottom + theme.spacing.md);
 
   const content = (
-    <View style={{ padding: theme.spacing.lg, gap: theme.spacing.lg, paddingBottom, flex: scroll ? undefined : 1 }}>
+    <View
+      style={{
+        padding: theme.spacing.lg,
+        gap: theme.spacing.lg,
+        paddingBottom,
+        flex: scroll ? undefined : 1,
+      }}
+    >
       {children}
     </View>
   );
@@ -20,7 +27,10 @@ export function Screen({ children, scroll = true }: Props) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.canvas }}>
       {scroll ? (
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: paddingBottom }}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: paddingBottom }}
+        >
           {content}
         </ScrollView>
       ) : (

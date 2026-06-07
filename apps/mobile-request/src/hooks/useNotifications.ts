@@ -1,6 +1,6 @@
+import * as Notifications from 'expo-notifications';
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
 import { apiRequest } from '../services/api';
 
 export function useNotifications(enabled: boolean) {
@@ -19,8 +19,8 @@ export function useNotifications(enabled: boolean) {
         method: 'POST',
         body: JSON.stringify({
           token: token.data,
-          platform: Platform.OS
-        })
+          platform: Platform.OS,
+        }),
       });
     }
 

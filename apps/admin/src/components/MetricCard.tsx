@@ -4,7 +4,7 @@ export function MetricCard({
   label,
   value,
   delta,
-  icon
+  icon,
 }: {
   label: string;
   value: string;

@@ -1,5 +1,5 @@
-import type { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import type { Server } from 'socket.io';
 import { env } from '../config/env';
 import { prisma } from '../config/prisma';
 import { realtimeEvents } from './events';
@@ -35,7 +35,9 @@ export function registerRealtimeHandlers(io: Server) {
       await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
     } catch {}
 
-    socket.to(`user:${user.id}`).emit(realtimeEvents.userPresence, { userId: user.id, online: true });
+    socket
+      .to(`user:${user.id}`)
+      .emit(realtimeEvents.userPresence, { userId: user.id, online: true });
     io.to('admins').emit(realtimeEvents.userPresence, { userId: user.id, online: true });
 
     socket.on('delivery:join', (deliveryId: string) => {
@@ -58,7 +60,7 @@ export function registerRealtimeHandlers(io: Server) {
       io.to(`delivery:${payload.deliveryId}`).emit(realtimeEvents.chatMessage, {
         ...payload,
         senderId: user.id,
-        sentAt: new Date().toISOString()
+        sentAt: new Date().toISOString(),
       });
     });
 
@@ -66,7 +68,10 @@ export function registerRealtimeHandlers(io: Server) {
       try {
         await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: new Date() } });
       } catch {}
-      io.to(`user:${user.id}`).emit(realtimeEvents.userPresence, { userId: user.id, online: false });
+      io.to(`user:${user.id}`).emit(realtimeEvents.userPresence, {
+        userId: user.id,
+        online: false,
+      });
       io.to('admins').emit(realtimeEvents.userPresence, { userId: user.id, online: false });
     });
   });

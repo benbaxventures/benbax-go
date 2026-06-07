@@ -19,13 +19,13 @@ export const useAdminSession = create<AdminSession>((set) => ({
     ? JSON.parse(localStorage.getItem('benbax.admin.user') as string)
     : null,
   async login(phone, password) {
-    const data = await apiRequest<{ user: AdminUser; tokens: { accessToken: string; refreshToken: string } }>(
-      '/auth/login',
-      {
-        method: 'POST',
-        body: JSON.stringify({ phone, password })
-      }
-    );
+    const data = await apiRequest<{
+      user: AdminUser;
+      tokens: { accessToken: string; refreshToken: string };
+    }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ phone, password }),
+    });
     localStorage.setItem('benbax.admin.accessToken', data.tokens.accessToken);
     localStorage.setItem('benbax.admin.refreshToken', data.tokens.refreshToken);
     localStorage.setItem('benbax.admin.user', JSON.stringify(data.user));
@@ -36,5 +36,5 @@ export const useAdminSession = create<AdminSession>((set) => ({
     localStorage.removeItem('benbax.admin.refreshToken');
     localStorage.removeItem('benbax.admin.user');
     set({ user: null });
-  }
+  },
 }));

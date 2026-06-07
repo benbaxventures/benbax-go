@@ -1,5 +1,5 @@
-import { Router } from 'express';
 import { UserRole } from '@prisma/client';
+import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
@@ -15,25 +15,27 @@ const registerSchema = z.object({
     phone: z.string().min(8),
     email: z.string().email().optional(),
     password: z.string().min(8),
-    role: z.nativeEnum(UserRole).optional()
-  })
+    role: z.nativeEnum(UserRole).optional(),
+  }),
 });
 
 const loginSchema = z.object({
   body: z.object({
     phone: z.string().min(8),
-    password: z.string().min(8)
-  })
+    password: z.string().min(8),
+  }),
 });
 
 const googleLoginSchema = z.object({
-  body: z.object({
-    accessToken: z.string().optional(),
-    idToken: z.string().optional(),
-    role: z.nativeEnum(UserRole).optional()
-  }).refine((body) => body.accessToken || body.idToken, {
-    message: 'Google access token or ID token is required'
-  })
+  body: z
+    .object({
+      accessToken: z.string().optional(),
+      idToken: z.string().optional(),
+      role: z.nativeEnum(UserRole).optional(),
+    })
+    .refine((body) => body.accessToken || body.idToken, {
+      message: 'Google access token or ID token is required',
+    }),
 });
 
 authRouter.post(
@@ -52,24 +54,27 @@ authRouter.post(
   '/google',
   validate(googleLoginSchema),
   asyncHandler(async (req, res) =>
-    ok(res, await service.googleLogin({
-      accessToken: req.body.accessToken,
-      idToken: req.body.idToken,
-      role: req.body.role
-    }))
+    ok(
+      res,
+      await service.googleLogin({
+        accessToken: req.body.accessToken,
+        idToken: req.body.idToken,
+        role: req.body.role,
+      })
+    )
   )
 );
 
 const forgotPasswordSchema = z.object({
-  body: z.object({ phone: z.string().min(8) })
+  body: z.object({ phone: z.string().min(8) }),
 });
 
 const resetPasswordSchema = z.object({
   body: z.object({
     phone: z.string().min(8),
     token: z.string().length(6),
-    newPassword: z.string().min(8)
-  })
+    newPassword: z.string().min(8),
+  }),
 });
 
 authRouter.post(
@@ -81,7 +86,9 @@ authRouter.post(
 authRouter.post(
   '/reset-password',
   validate(resetPasswordSchema),
-  asyncHandler(async (req, res) => ok(res, await service.resetPassword(req.body.phone, req.body.token, req.body.newPassword)))
+  asyncHandler(async (req, res) =>
+    ok(res, await service.resetPassword(req.body.phone, req.body.token, req.body.newPassword))
+  )
 );
 
 authRouter.get(

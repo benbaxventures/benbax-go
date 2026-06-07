@@ -11,7 +11,7 @@ export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?:
         padding: theme.spacing.lg,
         paddingBottom: theme.spacing.lg + insets.bottom,
         gap: theme.spacing.lg,
-        flex: scroll ? undefined : 1
+        flex: scroll ? undefined : 1,
       }}
     >
       {children}
@@ -19,8 +19,17 @@ export function Screen({ children, scroll = true }: PropsWithChildren<{ scroll?:
   );
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={{ flex: 1, backgroundColor: theme.colors.canvas }}>
-      {scroll ? <ScrollView contentContainerStyle={{ paddingBottom: theme.spacing.lg }}>{content}</ScrollView> : content}
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      style={{ flex: 1, backgroundColor: theme.colors.canvas }}
+    >
+      {scroll ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: theme.spacing.lg }}>
+          {content}
+        </ScrollView>
+      ) : (
+        content
+      )}
     </SafeAreaView>
   );
 }

@@ -1,6 +1,16 @@
+import {
+  Bell,
+  Bike,
+  ChartSpline,
+  CircleDollarSign,
+  Headphones,
+  Map,
+  PackageSearch,
+  Shield,
+  Users,
+} from 'lucide-react';
 import type { PropsWithChildren } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Bell, Bike, ChartSpline, CircleDollarSign, Headphones, Map, PackageSearch, Shield, Users } from 'lucide-react';
 import { useAdminSession } from '../state/adminSession';
 
 const navItems = [
@@ -11,7 +21,7 @@ const navItems = [
   { to: '/pricing', label: 'Pricing', icon: CircleDollarSign },
   { to: '/geofences', label: 'Geofences', icon: Map },
   { to: '/support', label: 'Support', icon: Headphones },
-  { to: '/risk', label: 'Risk', icon: Shield }
+  { to: '/risk', label: 'Risk', icon: Shield },
 ];
 
 export function Shell({ children }: PropsWithChildren) {

@@ -22,24 +22,27 @@ export async function getAccessToken() {
   }
 }
 
-export async function saveAuthSession(input: {
-  accessToken: string;
-  refreshToken: string;
-  user: StoredUser;
-}, rememberMe = true) {
+export async function saveAuthSession(
+  input: {
+    accessToken: string;
+    refreshToken: string;
+    user: StoredUser;
+  },
+  rememberMe = true
+) {
   try {
     await Promise.all([
       SecureStore.setItemAsync(ACCESS_TOKEN_KEY, input.accessToken),
       SecureStore.setItemAsync(REFRESH_TOKEN_KEY, input.refreshToken),
       AsyncStorage.setItem(USER_KEY, JSON.stringify(input.user)),
-      AsyncStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false')
+      AsyncStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false'),
     ]);
   } catch {
     await Promise.all([
       AsyncStorage.setItem(ACCESS_TOKEN_KEY, input.accessToken),
       AsyncStorage.setItem(REFRESH_TOKEN_KEY, input.refreshToken),
       AsyncStorage.setItem(USER_KEY, JSON.stringify(input.user)),
-      AsyncStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false')
+      AsyncStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false'),
     ]);
   }
 }
@@ -48,7 +51,7 @@ export async function clearAuthSession() {
   try {
     await Promise.all([
       SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
-      SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY)
+      SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY),
     ]);
   } catch {
     // fall through
@@ -57,7 +60,7 @@ export async function clearAuthSession() {
     AsyncStorage.removeItem(ACCESS_TOKEN_KEY),
     AsyncStorage.removeItem(REFRESH_TOKEN_KEY),
     AsyncStorage.removeItem(USER_KEY),
-    AsyncStorage.removeItem(REMEMBER_ME_KEY)
+    AsyncStorage.removeItem(REMEMBER_ME_KEY),
   ]);
 }
 
@@ -65,7 +68,7 @@ export async function getStoredUser() {
   try {
     const [userRaw, rememberMe] = await Promise.all([
       AsyncStorage.getItem(USER_KEY),
-      AsyncStorage.getItem(REMEMBER_ME_KEY)
+      AsyncStorage.getItem(REMEMBER_ME_KEY),
     ]);
     if (rememberMe === 'false' || !userRaw) return null;
     const parsed = JSON.parse(userRaw);

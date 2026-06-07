@@ -34,7 +34,11 @@ export function LoginPage() {
         </label>
         <label>
           Password
-          <input value={password} type="password" onChange={(event) => setPassword(event.target.value)} />
+          <input
+            value={password}
+            type="password"
+            onChange={(event) => setPassword(event.target.value)}
+          />
         </label>
         {error ? <p className="form-error">{error}</p> : null}
         <button type="submit" disabled={loading}>

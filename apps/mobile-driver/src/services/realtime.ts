@@ -15,7 +15,7 @@ export async function createRealtimeClient(onReady?: SocketHandler) {
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 10000,
-    timeout: 10000
+    timeout: 10000,
   });
 
   socket.on('connect_error', (err) => {

@@ -7,7 +7,7 @@ export function Button({
   onPress,
   icon,
   loading,
-  variant = 'primary'
+  variant = 'primary',
 }: {
   label: string;
   onPress: () => void;
@@ -16,7 +16,11 @@ export function Button({
   variant?: 'primary' | 'secondary' | 'danger';
 }) {
   const backgroundColor =
-    variant === 'primary' ? theme.colors.primary : variant === 'danger' ? theme.colors.danger : theme.colors.surface;
+    variant === 'primary'
+      ? theme.colors.primary
+      : variant === 'danger'
+        ? theme.colors.danger
+        : theme.colors.surface;
   const isLight = variant === 'secondary';
 
   return (
@@ -34,11 +38,13 @@ export function Button({
         justifyContent: 'center',
         flexDirection: 'row',
         gap: 8,
-        opacity: loading ? 0.72 : 1
+        opacity: loading ? 0.72 : 1,
       }}
     >
       {loading ? <ActivityIndicator color={isLight ? theme.colors.primary : '#fff'} /> : icon}
-      <Text style={{ color: isLight ? theme.colors.ink : '#fff', fontSize: 16, fontWeight: '800' }}>{label}</Text>
+      <Text style={{ color: isLight ? theme.colors.ink : '#fff', fontSize: 16, fontWeight: '800' }}>
+        {label}
+      </Text>
     </Pressable>
   );
 }

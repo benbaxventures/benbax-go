@@ -1,5 +1,5 @@
-import type { AddressPoint, DeliveryCategory, DeliveryQuote } from '../shared';
 import { create } from 'zustand';
+import type { AddressPoint, DeliveryCategory, DeliveryQuote } from '../shared';
 
 type DeliveryDraft = {
   category: DeliveryCategory;
@@ -19,7 +19,7 @@ type DeliveryState = {
 };
 
 const initialDraft: DeliveryDraft = {
-  category: 'PARCEL'
+  category: 'PARCEL',
 };
 
 export const useDeliveryStore = create<DeliveryState>((set) => ({
@@ -28,5 +28,5 @@ export const useDeliveryStore = create<DeliveryState>((set) => ({
   setPickup: (pickup) => set((state) => ({ draft: { ...state.draft, pickup } })),
   setDropoff: (dropoff) => set((state) => ({ draft: { ...state.draft, dropoff } })),
   setQuote: (quote) => set((state) => ({ draft: { ...state.draft, quote } })),
-  reset: () => set({ draft: initialDraft })
+  reset: () => set({ draft: initialDraft }),
 }));

@@ -69,7 +69,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   try {
     response = await fetch(`${getApiBaseUrlCached()}${path}`, {
       ...options,
-      headers
+      headers,
     });
   } catch {
     throw new ApiConnectionError();
@@ -83,9 +83,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   if (!response.ok || !body.ok) {
-    const message = body && !body.ok && body.error && body.error.message ? body.error.message : response.statusText || 'Request failed';
+    const message =
+      body && !body.ok && body.error && body.error.message
+        ? body.error.message
+        : response.statusText || 'Request failed';
     const code = body && !body.ok && body.error && body.error.code ? body.error.code : null;
-    const details = body && !body.ok && body.error && body.error.details ? body.error.details : undefined;
+    const details =
+      body && !body.ok && body.error && body.error.details ? body.error.details : undefined;
     throw new ApiResponseError(message, response.status, code, details);
   }
 

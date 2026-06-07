@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect } from 'react';
 import { apiRequest } from '../services/api';
 
 const ACTIVE_DELIVERY_KEY = 'benbax.rider.activeDeliveryId';
@@ -32,7 +32,7 @@ export function useRiderLocation(deliveryId?: string, enabled = false) {
         {
           accuracy: Location.Accuracy.High,
           distanceInterval: 30,
-          timeInterval: 8_000
+          timeInterval: 8_000,
         },
         (position) => {
           apiRequest(`/tracking/deliveries/${activeDeliveryId}/points`, {
@@ -42,8 +42,8 @@ export function useRiderLocation(deliveryId?: string, enabled = false) {
               longitude: position.coords.longitude,
               heading: position.coords.heading ?? undefined,
               speedKph: position.coords.speed ? position.coords.speed * 3.6 : undefined,
-              source: 'FOREGROUND_GPS'
-            })
+              source: 'FOREGROUND_GPS',
+            }),
           }).catch(console.warn);
         }
       );

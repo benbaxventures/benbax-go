@@ -1,11 +1,12 @@
-import { NavigationProp, useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import * as Updates from 'expo-updates';
 import { DownloadCloud, LogOut, MapPinned, ShieldCheck } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 import { Button } from '../components/Button';
-import type { RootStackParamList } from '../navigation/types';
 import { Screen } from '../components/Screen';
+import type { RootStackParamList } from '../navigation/types';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -27,7 +28,10 @@ export function ProfileScreen() {
 
   async function handleUpdatePress() {
     if (!Updates.isEnabled) {
-      Alert.alert('Updates unavailable', 'Remote updates are only available in installed preview or production builds.');
+      Alert.alert(
+        'Updates unavailable',
+        'Remote updates are only available in installed preview or production builds.'
+      );
       return;
     }
 
@@ -35,7 +39,10 @@ export function ProfileScreen() {
     try {
       const update = await Updates.checkForUpdateAsync();
       if (!update.isAvailable) {
-        Alert.alert('No update available', 'You already have the latest available version for this build.');
+        Alert.alert(
+          'No update available',
+          'You already have the latest available version for this build.'
+        );
         return;
       }
 
@@ -45,10 +52,13 @@ export function ProfileScreen() {
           text: 'Restart',
           onPress: () => {
             Updates.reloadAsync().catch((error) => {
-              Alert.alert('Restart failed', error instanceof Error ? error.message : 'Restart the app to apply the update.');
+              Alert.alert(
+                'Restart failed',
+                error instanceof Error ? error.message : 'Restart the app to apply the update.'
+              );
             });
-          }
-        }
+          },
+        },
       ]);
     } catch (error) {
       Alert.alert('Update check failed', getUpdateErrorMessage(error));
@@ -61,12 +71,24 @@ export function ProfileScreen() {
     <Screen>
       <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Profile</Text>
       <View style={{ backgroundColor: theme.colors.surface, borderRadius: 8, padding: 16, gap: 6 }}>
-        <Text style={{ color: theme.colors.ink, fontSize: 20, fontWeight: '900' }}>{user?.name}</Text>
+        <Text style={{ color: theme.colors.ink, fontSize: 20, fontWeight: '900' }}>
+          {user?.name}
+        </Text>
         <Text style={{ color: theme.colors.muted }}>{user?.phone}</Text>
         <Text style={{ color: theme.colors.muted }}>{user?.email ?? 'No email'}</Text>
       </View>
-      <Button label="Edit profile" icon={<MapPinned size={18} color={theme.colors.ink} />} onPress={() => navigation.navigate('EditProfile')} variant="secondary" />
-      <Button label="Saved locations" icon={<MapPinned size={18} color={theme.colors.ink} />} onPress={() => undefined} variant="secondary" />
+      <Button
+        label="Edit profile"
+        icon={<MapPinned size={18} color={theme.colors.ink} />}
+        onPress={() => navigation.navigate('EditProfile')}
+        variant="secondary"
+      />
+      <Button
+        label="Saved locations"
+        icon={<MapPinned size={18} color={theme.colors.ink} />}
+        onPress={() => undefined}
+        variant="secondary"
+      />
       <Button
         label="Privacy protection"
         icon={<ShieldCheck size={18} color={theme.colors.ink} />}

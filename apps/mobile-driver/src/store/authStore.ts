@@ -14,8 +14,16 @@ type AuthState = {
   user: DriverUser | null;
   isHydrating: boolean;
   login: (phone: string, password: string, rememberMe?: boolean) => Promise<void>;
-  loginWithGoogle: (tokens: { accessToken?: string; idToken?: string; role?: 'RIDER' | 'DRIVER' }, rememberMe?: boolean) => Promise<void>;
-  register: (input: { name: string; phone: string; password: string; role: 'RIDER' | 'DRIVER' }) => Promise<void>;
+  loginWithGoogle: (
+    tokens: { accessToken?: string; idToken?: string; role?: 'RIDER' | 'DRIVER' },
+    rememberMe?: boolean
+  ) => Promise<void>;
+  register: (input: {
+    name: string;
+    phone: string;
+    password: string;
+    role: 'RIDER' | 'DRIVER';
+  }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
   updateUser: (updated: Partial<DriverUser>) => Promise<void>;
@@ -25,53 +33,53 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isHydrating: true,
   async login(phone, password, rememberMe = true) {
-    const data = await apiRequest<{ user: DriverUser; tokens: { accessToken: string; refreshToken: string } }>(
-      '/auth/login',
-      {
-        method: 'POST',
-        body: JSON.stringify({ phone, password }),
-        skipAuth: true
-      }
-    );
+    const data = await apiRequest<{
+      user: DriverUser;
+      tokens: { accessToken: string; refreshToken: string };
+    }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ phone, password }),
+      skipAuth: true,
+    });
     await AsyncStorage.multiSet([
       ['benbax.driver.accessToken', data.tokens.accessToken],
       ['benbax.driver.refreshToken', data.tokens.refreshToken],
       ['benbax.driver.user', JSON.stringify(data.user)],
-      ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false']
+      ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false'],
     ]);
     set({ user: data.user });
   },
   async loginWithGoogle(tokens, rememberMe = true) {
-    const data = await apiRequest<{ user: DriverUser; tokens: { accessToken: string; refreshToken: string } }>(
-      '/auth/google',
-      {
-        method: 'POST',
-        body: JSON.stringify({ ...tokens, role: tokens.role ?? 'DRIVER' }),
-        skipAuth: true
-      }
-    );
+    const data = await apiRequest<{
+      user: DriverUser;
+      tokens: { accessToken: string; refreshToken: string };
+    }>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ ...tokens, role: tokens.role ?? 'DRIVER' }),
+      skipAuth: true,
+    });
     await AsyncStorage.multiSet([
       ['benbax.driver.accessToken', data.tokens.accessToken],
       ['benbax.driver.refreshToken', data.tokens.refreshToken],
       ['benbax.driver.user', JSON.stringify(data.user)],
-      ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false']
+      ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false'],
     ]);
     set({ user: data.user });
   },
   async register(input) {
-    const data = await apiRequest<{ user: DriverUser; tokens: { accessToken: string; refreshToken: string } }>(
-      '/auth/register',
-      {
-        method: 'POST',
-        body: JSON.stringify(input),
-        skipAuth: true
-      }
-    );
+    const data = await apiRequest<{
+      user: DriverUser;
+      tokens: { accessToken: string; refreshToken: string };
+    }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      skipAuth: true,
+    });
     await AsyncStorage.multiSet([
       ['benbax.driver.accessToken', data.tokens.accessToken],
       ['benbax.driver.refreshToken', data.tokens.refreshToken],
       ['benbax.driver.user', JSON.stringify(data.user)],
-      ['benbax.driver.rememberMe', 'true']
+      ['benbax.driver.rememberMe', 'true'],
     ]);
     set({ user: data.user });
   },
@@ -84,7 +92,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   async logout() {
-    await AsyncStorage.multiRemove(['benbax.driver.accessToken', 'benbax.driver.refreshToken', 'benbax.driver.user', 'benbax.driver.rememberMe']);
+    await AsyncStorage.multiRemove([
+      'benbax.driver.accessToken',
+      'benbax.driver.refreshToken',
+      'benbax.driver.user',
+      'benbax.driver.rememberMe',
+    ]);
     set({ user: null });
   },
   async updateUser(updated) {
@@ -93,5 +106,5 @@ export const useAuthStore = create<AuthState>((set) => ({
     const nextUser = { ...currentUser, ...updated };
     await AsyncStorage.setItem('benbax.driver.user', JSON.stringify(nextUser));
     set({ user: nextUser });
-  }
+  },
 }));

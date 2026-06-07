@@ -1,6 +1,6 @@
 import { io, type Socket } from 'socket.io-client';
-import { resolveSocketUrl } from './network';
 import { getAccessToken } from './authStorage';
+import { resolveSocketUrl } from './network';
 
 type SocketHandler = (socket: Socket) => void;
 
@@ -13,7 +13,7 @@ export async function createRealtimeClient(onReady?: SocketHandler) {
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 10000,
-    timeout: 10000
+    timeout: 10000,
   });
 
   socket.on('connect_error', (err) => {
