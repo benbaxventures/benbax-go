@@ -7,5 +7,6 @@ declare const process: {
     EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?: string;
     EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?: string;
     EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID?: string;
+    EXPO_PUBLIC_USE_LOCAL_API?: string;
   };
 };

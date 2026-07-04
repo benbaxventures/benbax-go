@@ -18,7 +18,8 @@ import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../servic
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
-import type GoogleSignInModule from '@react-native-google-signin/google-signin';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import * as GoogleSignIn from '@react-native-google-signin/google-signin';
 
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -284,7 +285,7 @@ function GoogleSignInButton({
   async function signInWithGoogle() {
     setGoogleLoading(true);
     onError(null);
-    let googleStatusCodes: GoogleSignInModule['statusCodes'] | null = null;
+    let googleStatusCodes: typeof GoogleSignIn.statusCodes | null = null;
     try {
       const googleModule = await loadGoogleSignIn().catch(() => null);
 
@@ -434,8 +435,8 @@ function GoogleSignInButton({
   );
 }
 
-async function loadGoogleSignIn(): Promise<GoogleSignInModule> {
-  return import('@react-native-google-signin/google-signin');
+async function loadGoogleSignIn(): Promise<typeof GoogleSignIn> {
+  return GoogleSignIn;
 }
 
 function isGoogleSignInError(error: unknown, code: string) {
