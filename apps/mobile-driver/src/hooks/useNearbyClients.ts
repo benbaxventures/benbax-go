@@ -34,13 +34,17 @@ function normalizeClient(raw: unknown): NearbyClient | null {
   const latitude = Number(c.latitude ?? c.lat);
   const longitude = Number(c.longitude ?? c.lng);
   if (id == null || Number.isNaN(latitude) || Number.isNaN(longitude)) return null;
+  const serviceClass =
+    c.serviceClass === 'economy' || c.serviceClass === 'comfort' || c.serviceClass === 'premium'
+      ? c.serviceClass
+      : undefined;
   return {
     id: String(id),
     latitude,
     longitude,
-    serviceClass: c.serviceClass as NearbyClient['serviceClass'],
-    name: typeof c.name === 'string' ? c.name : undefined,
-    distanceKm: c.distanceKm != null ? Number(c.distanceKm) : undefined,
+    ...(serviceClass ? { serviceClass } : {}),
+    ...(typeof c.name === 'string' ? { name: c.name } : {}),
+    ...(c.distanceKm != null ? { distanceKm: Number(c.distanceKm) } : {}),
     since: typeof c.since === 'string' ? c.since : new Date().toISOString(),
   };
 }

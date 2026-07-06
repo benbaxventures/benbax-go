@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import type { AddressPoint, TripQuote } from '../shared';
+import type { AddressPoint, CarTripQuote } from '../shared';
 
 type TripDraft = {
   vehicleType: string;
   pickup?: AddressPoint;
   dropoff?: AddressPoint;
-  quote?: TripQuote;
+  quote?: CarTripQuote;
 };
 
 type TripState = {
@@ -13,7 +13,7 @@ type TripState = {
   setVehicleType: (vehicleType: string) => void;
   setPickup: (pickup: AddressPoint) => void;
   setDropoff: (dropoff: AddressPoint) => void;
-  setQuote: (quote: TripQuote) => void;
+  setQuote: (quote: CarTripQuote) => void;
   reset: () => void;
 };
 

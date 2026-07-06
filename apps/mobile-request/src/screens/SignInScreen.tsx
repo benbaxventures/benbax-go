@@ -27,7 +27,7 @@ import { getHasRegisteredBefore } from '../services/authStorage';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
-import type GoogleSignInModule from '@react-native-google-signin/google-signin';
+type GoogleSignInModule = Awaited<ReturnType<typeof loadGoogleSignIn>>;
 
 const GOOGLE_ANDROID_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
@@ -473,7 +473,7 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
   );
 }
 
-async function loadGoogleSignIn(): Promise<GoogleSignInModule> {
+async function loadGoogleSignIn() {
   return import('@react-native-google-signin/google-signin');
 }
 
