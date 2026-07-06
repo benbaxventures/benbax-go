@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { apiRequest } from '../services/api';
-import { clearAuthSession, getStoredUser, saveAuthSession } from '../services/authStorage';
+import {
+  clearAuthSession,
+  getBiometricEnabled,
+  getStoredUser,
+  saveAuthSession,
+  setBiometricEnabled,
+  setHasRegisteredBefore,
+} from '../services/authStorage';
 
 type User = {
   id: string;
@@ -13,6 +20,8 @@ type User = {
 type AuthState = {
   user: User | null;
   isHydrating: boolean;
+  biometricEnabled: boolean;
+  setBiometricEnabled: (enabled: boolean) => Promise<void>;
   login: (phone: string, password: string, rememberMe?: boolean) => Promise<void>;
   loginWithGoogle: (
     tokens: { accessToken?: string; idToken?: string },
@@ -26,6 +35,11 @@ type AuthState = {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isHydrating: true,
+  biometricEnabled: false,
+  async setBiometricEnabled(enabled) {
+    await setBiometricEnabled(enabled);
+    set({ biometricEnabled: enabled });
+  },
   async login(phone, password, rememberMe = true) {
     const data = await apiRequest<{
       user: User;
@@ -36,6 +50,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       skipAuth: true,
     });
     await saveAuthSession({ ...data.tokens, user: data.user }, rememberMe);
+    await setHasRegisteredBefore();
     set({ user: data.user });
   },
   async loginWithGoogle(tokens, rememberMe = true) {
@@ -48,6 +63,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       skipAuth: true,
     });
     await saveAuthSession({ ...data.tokens, user: data.user }, rememberMe);
+    await setHasRegisteredBefore();
     set({ user: data.user });
   },
   async register(input) {
@@ -60,14 +76,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       skipAuth: true,
     });
     await saveAuthSession({ ...data.tokens, user: data.user }, true);
+    await setHasRegisteredBefore();
     set({ user: data.user });
   },
   async logout() {
     await clearAuthSession();
-    set({ user: null });
+    set({ user: null, biometricEnabled: false });
   },
   async hydrate() {
-    const user = await getStoredUser();
-    set({ user, isHydrating: false });
+    const [user, biometricEnabled] = await Promise.all([getStoredUser(), getBiometricEnabled()]);
+    set({ user, biometricEnabled, isHydrating: false });
   },
 }));

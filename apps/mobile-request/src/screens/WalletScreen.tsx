@@ -1,5 +1,5 @@
-import type { NavigationProp, NavigationProp } from '@react-navigation/native';
-import { useNavigation, useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { CreditCard, Smartphone } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';

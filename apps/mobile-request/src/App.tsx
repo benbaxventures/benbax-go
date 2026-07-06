@@ -1,14 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, type AppStateStatus, Text, View } from 'react-native';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AnimatedSplashScreen } from './components/AnimatedSplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useOTAUpdates } from './hooks/useOTAUpdates';
 import { RootNavigator } from './navigation/RootNavigator';
 import { theme } from './theme/tokens';
+
+// Keep the splash screen visible while we load the app
+void SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,7 +52,12 @@ function FatalErrorFallback() {
 
 export default function App() {
   useOTAUpdates();
+  const [splashDone, setSplashDone] = useState(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+
+  const handleSplashReady = useCallback(() => {
+    setSplashDone(true);
+  }, []);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -58,6 +68,10 @@ export default function App() {
     });
     return () => subscription.remove();
   }, []);
+
+  if (!splashDone) {
+    return <AnimatedSplashScreen onReady={handleSplashReady} />;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

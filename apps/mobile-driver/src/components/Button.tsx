@@ -7,14 +7,17 @@ export function Button({
   onPress,
   icon,
   loading,
+  disabled,
   variant = 'primary',
 }: {
   label: string;
   onPress: () => void;
   icon?: ReactNode;
   loading?: boolean;
+  disabled?: boolean;
   variant?: 'primary' | 'secondary' | 'danger';
 }) {
+  const isDisabled = loading || disabled;
   const backgroundColor =
     variant === 'primary'
       ? theme.colors.primary
@@ -26,7 +29,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={loading}
+      disabled={isDisabled}
       onPress={onPress}
       style={{
         minHeight: 52,
@@ -38,11 +41,18 @@ export function Button({
         justifyContent: 'center',
         flexDirection: 'row',
         gap: 8,
-        opacity: loading ? 0.72 : 1,
+        opacity: isDisabled ? 0.5 : 1,
       }}
     >
       {loading ? <ActivityIndicator color={isLight ? theme.colors.primary : '#fff'} /> : icon}
-      <Text style={{ color: isLight ? theme.colors.ink : '#fff', fontSize: 16, fontWeight: '800' }}>
+      <Text
+        style={{
+          color: isLight ? theme.colors.ink : '#fff',
+          fontSize: 16,
+          fontWeight: '800',
+          opacity: disabled && !loading ? 0.6 : 1,
+        }}
+      >
         {label}
       </Text>
     </Pressable>

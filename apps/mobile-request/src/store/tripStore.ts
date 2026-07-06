@@ -1,27 +1,27 @@
 import { create } from 'zustand';
-import type { AddressPoint, RideQuote } from '../shared';
+import type { AddressPoint, TripQuote } from '../shared';
 
-type RideDraft = {
+type TripDraft = {
   vehicleType: string;
   pickup?: AddressPoint;
   dropoff?: AddressPoint;
-  quote?: RideQuote;
+  quote?: TripQuote;
 };
 
-type RideState = {
-  draft: RideDraft;
+type TripState = {
+  draft: TripDraft;
   setVehicleType: (vehicleType: string) => void;
   setPickup: (pickup: AddressPoint) => void;
   setDropoff: (dropoff: AddressPoint) => void;
-  setQuote: (quote: RideQuote) => void;
+  setQuote: (quote: TripQuote) => void;
   reset: () => void;
 };
 
-const initialDraft: RideDraft = {
+const initialDraft: TripDraft = {
   vehicleType: 'ECONOMY',
 };
 
-export const useRideStore = create<RideState>((set) => ({
+export const useTripStore = create<TripState>((set) => ({
   draft: initialDraft,
   setVehicleType: (vehicleType) => set((state) => ({ draft: { ...state.draft, vehicleType } })),
   setPickup: (pickup) => set((state) => ({ draft: { ...state.draft, pickup } })),

@@ -5,10 +5,14 @@
     "scheme": "benbax",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0E7C66"
+    },
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.benbax.customer",
@@ -35,7 +39,8 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#0E7C66"
+        "backgroundColor": "#0E7C66",
+        "foregroundImage": "./assets/logo.png"
       }
     },
     "plugins": [
@@ -45,7 +50,8 @@
       "expo-secure-store",
       "expo-local-authentication",
       "expo-updates",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-splash-screen"
     ],
     "extra": {
       "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",
@@ -59,7 +65,9 @@
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "owner": "a16-0s-organization"
   }
 }

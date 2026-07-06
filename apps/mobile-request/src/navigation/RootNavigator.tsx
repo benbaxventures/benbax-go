@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setGlobalErrorFallback } from '../components/ErrorBoundary';
+import { BiometricGateScreen } from '../screens/BiometricGateScreen';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -14,10 +15,10 @@ import { PaymentCheckoutScreen } from '../screens/PaymentCheckoutScreen';
 import { PrivacyProtectionScreen } from '../screens/PrivacyProtectionScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
-import { RideTrackingScreen } from '../screens/RideTrackingScreen';
 import { SignInScreen } from '../screens/SignInScreen';
 import { SupportScreen } from '../screens/SupportScreen';
 import { TrackingScreen } from '../screens/TrackingScreen';
+import { TripTrackingScreen } from '../screens/TripTrackingScreen';
 import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { useAuthStore } from '../store/authStore';
@@ -74,9 +75,19 @@ function MainTabs() {
 }
 
 export function RootNavigator() {
-  const { user, isHydrating, hydrate } = useAuthStore();
+  const { user, isHydrating, biometricEnabled, hydrate } = useAuthStore();
   const [hydrateError, setHydrateError] = useState<string | null>(null);
+  const [biometricGatePassed, setBiometricGatePassed] = useState(false);
   const hydrateAttempted = useRef(false);
+  const prevUserId = useRef(user?.id);
+
+  // Reset biometric gate when user changes (e.g., login after logout)
+  useEffect(() => {
+    if (user && user.id !== prevUserId.current) {
+      setBiometricGatePassed(false);
+      prevUserId.current = user.id;
+    }
+  }, [user]);
 
   const doHydrate = useCallback(async () => {
     if (hydrateAttempted.current) return;
@@ -142,6 +153,10 @@ export function RootNavigator() {
     );
   }
 
+  if (user && biometricEnabled && !biometricGatePassed) {
+    return <BiometricGateScreen onSuccess={() => setBiometricGatePassed(true)} />;
+  }
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -149,7 +164,7 @@ export function RootNavigator() {
           <>
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="Tracking" component={TrackingScreen} />
-            <Stack.Screen name="RideTracking" component={RideTrackingScreen} />
+            <Stack.Screen name="TripTracking" component={TripTrackingScreen} />
             <Stack.Screen name="PaymentCheckout" component={PaymentCheckoutScreen} />
             <Stack.Screen name="WalletCheckout" component={WalletCheckoutScreen} />
             <Stack.Screen name="PrivacyProtection" component={PrivacyProtectionScreen} />

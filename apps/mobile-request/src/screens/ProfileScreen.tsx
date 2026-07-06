@@ -1,9 +1,10 @@
 import type { NavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
+import * as LocalAuthentication from 'expo-local-authentication';
 import * as Updates from 'expo-updates';
-import { DownloadCloud, LogOut, MapPinned, ShieldCheck } from 'lucide-react-native';
-import { useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { DownloadCloud, Fingerprint, LogOut, MapPinned, ShieldCheck } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Switch, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import type { RootStackParamList } from '../navigation/types';
@@ -12,8 +13,51 @@ import { theme } from '../theme/tokens';
 
 export function ProfileScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const { user, logout } = useAuthStore();
+  const { user, logout, biometricEnabled, setBiometricEnabled } = useAuthStore();
   const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState<boolean | null>(null);
+  const [togglingBiometric, setTogglingBiometric] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      const [hasHardware, isEnrolled] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+      ]);
+      setBiometricAvailable(hasHardware && isEnrolled);
+    })();
+  }, []);
+
+  async function handleBiometricToggle(enabled: boolean) {
+    if (enabled && biometricAvailable === false) {
+      Alert.alert(
+        'Biometrics unavailable',
+        'This device does not support biometric authentication, or no fingerprints/face data are registered. Add biometrics in your device settings first.'
+      );
+      return;
+    }
+
+    setTogglingBiometric(true);
+    try {
+      if (enabled) {
+        // Verify biometrics work before enabling
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Enable biometric authentication',
+          fallbackLabel: 'Use passcode',
+          disableDeviceFallback: false,
+        });
+        if (!result.success) {
+          Alert.alert('Verification failed', 'Could not verify your identity. Please try again.');
+          return;
+        }
+      }
+      await setBiometricEnabled(enabled);
+    } catch {
+      Alert.alert('Error', 'Could not update biometric settings.');
+    } finally {
+      setTogglingBiometric(false);
+    }
+  }
 
   function getUpdateErrorMessage(error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -76,6 +120,39 @@ export function ProfileScreen() {
         </Text>
         <Text style={{ color: theme.colors.muted }}>{user?.phone}</Text>
         <Text style={{ color: theme.colors.muted }}>{user?.email ?? 'No email'}</Text>
+      </View>
+      <View
+        style={{
+          backgroundColor: theme.colors.surface,
+          borderRadius: 8,
+          padding: 16,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Fingerprint size={20} color={theme.colors.primary} />
+          <View>
+            <Text style={{ color: theme.colors.ink, fontWeight: '700' }}>
+              Fingerprint / Face ID
+            </Text>
+            <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
+              {biometricAvailable === null
+                ? 'Checking...'
+                : biometricAvailable
+                  ? 'Use biometrics to unlock the app'
+                  : 'Not available on this device'}
+            </Text>
+          </View>
+        </View>
+        <Switch
+          value={biometricEnabled}
+          onValueChange={handleBiometricToggle}
+          disabled={togglingBiometric || biometricAvailable === null}
+          trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
+          thumbColor="#fff"
+        />
       </View>
       <Button
         label="Edit profile"

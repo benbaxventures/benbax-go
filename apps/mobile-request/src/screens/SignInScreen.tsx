@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,6 +23,7 @@ import {
   getApiBaseUrl,
   isApiConnectionError,
 } from '../services/api';
+import { getHasRegisteredBefore } from '../services/authStorage';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -56,6 +58,12 @@ export function SignInScreen() {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
+    void (async () => {
+      const hasRegistered = await getHasRegisteredBefore();
+      if (!hasRegistered) {
+        setMode('register');
+      }
+    })();
     void refreshApiStatus();
   }, []);
 
@@ -116,13 +124,27 @@ export function SignInScreen() {
       }}
     >
       <View style={{ gap: 18 }}>
-        <View style={{ gap: 8 }}>
-          <Text style={{ fontSize: 32, fontWeight: '900', color: theme.colors.ink }}>
-            Benbax Request
-          </Text>
-          <Text style={{ color: theme.colors.muted, fontSize: 16 }}>
-            Fast delivery and logistics built for Ghana.
-          </Text>
+        <View style={{ alignItems: 'center', gap: 12 }}>
+          <Image
+            source={require('../../assets/logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+            style={{ width: 80, height: 80, borderRadius: 16 }}
+            resizeMode="contain"
+          />
+          <View style={{ gap: 4, alignItems: 'center' }}>
+            <Text
+              style={{
+                fontSize: 28,
+                fontWeight: '900',
+                color: theme.colors.ink,
+                textAlign: 'center',
+              }}
+            >
+              BENBAX COMPANY LTD
+            </Text>
+            <Text style={{ color: theme.colors.muted, fontSize: 15, textAlign: 'center' }}>
+              Fast delivery and logistics built for Ghana.
+            </Text>
+          </View>
         </View>
 
         {apiStatus === 'api_offline' || apiStatus === 'database_offline' ? (

@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { BadgeCheck, Bike, Car, User, Wallet } from 'lucide-react-native';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActiveDeliveryScreen } from '../screens/ActiveDeliveryScreen';
@@ -14,11 +14,16 @@ import { EarningsScreen } from '../screens/EarningsScreen';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { KycScreen } from '../screens/KycScreen';
+import { NewsScreen } from '../screens/NewsScreen';
+import { OnboardingFlow } from '../screens/OnboardingFlow';
+import { PriorityDetailsScreen } from '../screens/PriorityDetailsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
+import { ShiftScheduleScreen } from '../screens/ShiftScheduleScreen';
 import { SignInScreen } from '../screens/SignInScreen';
 import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { WalletScreen } from '../screens/WalletScreen';
+import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { createRealtimeClient } from '../services/realtime';
 import { useAuthStore } from '../store/authStore';
 import { useDriverStore } from '../store/driverStore';
@@ -146,12 +151,48 @@ function MainTabs() {
   );
 }
 
+/** Wraps OnboardingFlow and handles redirect to MainTabs when onboarding is complete. */
+function OnboardingFlowWrapper({ navigation }: any) {
+  const onboardingComplete = useAuthStore((s) => s.onboardingComplete);
+  const hasRedirected = useRef(false);
+
+  const handleComplete = useCallback(() => {
+    hasRedirected.current = true;
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'MainTabs' }],
+    });
+  }, [navigation]);
+
+  // If onboarding is already complete (e.g. returning user), redirect immediately
+  useEffect(() => {
+    if (onboardingComplete && !hasRedirected.current) {
+      hasRedirected.current = true;
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    }
+  }, [onboardingComplete, navigation]);
+
+  if (onboardingComplete) return null;
+
+  return <OnboardingFlow onComplete={handleComplete} />;
+}
+
 export function RootNavigator() {
-  const { user, isHydrating, hydrate } = useAuthStore();
+  const { user, isHydrating, hydrate, hasSeenWelcome } = useAuthStore();
+  const hydratePreferences = useDriverStore((s) => s.hydratePreferences);
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    if (user) {
+      hydratePreferences();
+    }
+  }, [user, hydratePreferences]);
 
   if (isHydrating) {
     return (
@@ -174,19 +215,25 @@ export function RootNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <>
+            {/* Always render OnboardingFlow — the wrapper handles showing/hiding */}
+            <Stack.Screen name="OnboardingFlow" component={OnboardingFlowWrapper} />
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="ActiveTrip" component={ActiveTripScreen} />
             <Stack.Screen name="ActiveDelivery" component={ActiveDeliveryScreen} />
             <Stack.Screen name="WalletCheckout" component={WalletCheckoutScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Wallet" component={WalletScreen} />
+            <Stack.Screen name="PriorityDetails" component={PriorityDetailsScreen} />
+            <Stack.Screen name="ShiftSchedule" component={ShiftScheduleScreen} />
+            <Stack.Screen name="News" component={NewsScreen} />
           </>
         ) : (
-          <>
+          <Stack.Group screenOptions={{ headerShown: false }}>
+            {!hasSeenWelcome ? <Stack.Screen name="Welcome" component={WelcomeScreen} /> : null}
             <Stack.Screen name="SignIn" component={SignInScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-          </>
+          </Stack.Group>
         )}
       </Stack.Navigator>
     </NavigationContainer>

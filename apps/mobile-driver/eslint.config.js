@@ -6,8 +6,8 @@ import reactNativePlugin from 'eslint-plugin-react-native';
 import tseslint from 'typescript-eslint';
 
 const reactHooksRules = {
-  'react-hooks/rules-of-hooks': reactHooksPlugin.rules['rules-of-hooks'],
-  'react-hooks/exhaustive-deps': reactHooksPlugin.rules['exhaustive-deps'],
+  'react-hooks/rules-of-hooks': 'error',
+  'react-hooks/exhaustive-deps': 'warn',
 };
 
 export default [

@@ -1,12 +1,16 @@
-import type { NavigationProp, NavigationProp } from '@react-navigation/native';
-import { useNavigation, useNavigation } from '@react-navigation/native';
-import { CreditCard, History, Smartphone } from 'lucide-react-native';
+import type { NavigationProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
+import { CreditCard, History, Smartphone, Zap } from 'lucide-react-native';
 import { useState } from 'react';
+import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
+import { ErrorState } from '../components/ErrorState';
+import { OfflineBanner } from '../components/OfflineBanner';
 import { Screen } from '../components/Screen';
+import { SkeletonBlock } from '../components/SkeletonBlock';
 import { useWallet, useWalletTopup } from '../hooks/usePayments';
 import type { RootStackParamList } from '../navigation/types';
-import { ApiConnectionError, ApiResponseError } from '../services/api';
+import { ApiConnectionError, ApiResponseError, apiRequest } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -14,8 +18,8 @@ export function WalletScreen() {
   const [amount, setAmount] = useState('10.00');
   const topup = useWalletTopup();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
-  const user = useAuthStore((s) => s.user as any);
-  const { data: wallet, isLoading: walletLoading } = useWallet();
+  const user = useAuthStore((s) => s.user);
+  const { data: wallet, isLoading: walletLoading, isError, error, refetch } = useWallet();
   const transactions = wallet?.transactions ?? [];
 
   async function handleTopup() {
@@ -43,7 +47,7 @@ export function WalletScreen() {
         navigation.navigate('WalletCheckout', {
           authorizationUrl: result.checkout.authorizationUrl,
           reference: result.checkout.reference,
-          walletTransactionId: result.walletTransaction?.id,
+          walletTransactionId: result.walletTransaction?.id ?? undefined,
         } as any);
         return;
       }
@@ -72,14 +76,89 @@ export function WalletScreen() {
     }
   }
 
+  async function handleInstantPayout() {
+    const balance = wallet?.balance ? Number(wallet.balance) : 0;
+    if (balance <= 0) {
+      Alert.alert('No balance', 'You need funds in your wallet to withdraw.');
+      return;
+    }
+
+    Alert.alert(
+      'Instant Payout',
+      `Withdraw GHS ${balance.toFixed(2)} to your registered MoMo number instantly?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Withdraw now',
+          onPress: async () => {
+            try {
+              await apiRequest('/payments/instant-payout', {
+                method: 'POST',
+                body: JSON.stringify({ amount: balance }),
+              });
+              Alert.alert('Payout initiated', 'Your withdrawal is being processed.');
+              refetch();
+            } catch (err) {
+              Alert.alert(
+                'Payout failed',
+                err instanceof Error ? err.message : 'Could not process payout.'
+              );
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // ---- Loading skeleton ----
+  if (walletLoading) {
+    return (
+      <Screen>
+        <SkeletonBlock width={100} height={28} />
+        <SkeletonBlock height={110} borderRadius={10} />
+        <SkeletonBlock height={44} borderRadius={8} />
+        <SkeletonBlock height={52} borderRadius={8} />
+        <SkeletonBlock height={52} borderRadius={8} />
+        <SkeletonBlock height={40} borderRadius={8} />
+        <View style={{ marginTop: 12 }}>
+          <SkeletonBlock width={140} height={16} />
+          <View style={{ marginTop: 8, gap: 8 }}>
+            <SkeletonBlock height={56} borderRadius={8} />
+            <SkeletonBlock height={56} borderRadius={8} />
+            <SkeletonBlock height={56} borderRadius={8} />
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
+  // ---- Error state ----
+  if (isError) {
+    return (
+      <Screen>
+        <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Wallet</Text>
+        <OfflineBanner />
+        <ErrorState
+          title="Could not load wallet"
+          message={
+            error instanceof Error ? error.message : 'Please check your connection and try again.'
+          }
+          onRetry={() => refetch()}
+        />
+      </Screen>
+    );
+  }
+
   return (
     <Screen>
+      <OfflineBanner />
+
       <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Wallet</Text>
 
       <View style={{ backgroundColor: theme.colors.primary, borderRadius: 8, padding: 18, gap: 8 }}>
         <Text style={{ color: '#D7FFF5', fontWeight: '700' }}>Available balance</Text>
         <Text style={{ color: '#fff', fontSize: 34, fontWeight: '900' }}>
-          GHS {walletLoading ? '--' : wallet?.balance ? Number(wallet.balance).toFixed(2) : '0.00'}
+          GHS {wallet?.balance ? Number(wallet.balance).toFixed(2) : '0.00'}
         </Text>
       </View>
 
@@ -112,6 +191,13 @@ export function WalletScreen() {
         variant="secondary"
         loading={topup.isPending}
       />
+      {(wallet?.balance ? Number(wallet.balance) : 0) > 0 && (
+        <Button
+          label="Instant payout"
+          icon={<Zap size={18} color="#fff" />}
+          onPress={handleInstantPayout}
+        />
+      )}
       <Text style={{ color: theme.colors.muted }}>
         Supports MTN Mobile Money, Paystack cards, wallet balance, and cash-on-delivery.
       </Text>
@@ -121,9 +207,7 @@ export function WalletScreen() {
         <Text style={{ color: theme.colors.muted, fontWeight: '700' }}>Transaction history</Text>
       </View>
 
-      {walletLoading ? (
-        <Text style={{ color: theme.colors.muted }}>Loading transactions...</Text>
-      ) : transactions.length === 0 ? (
+      {transactions.length === 0 ? (
         <View
           style={{
             backgroundColor: theme.colors.surface,
@@ -150,6 +234,7 @@ export function WalletScreen() {
                 flexDirection: 'row',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                marginBottom: 6,
               }}
             >
               <View style={{ flex: 1 }}>

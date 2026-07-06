@@ -1,4 +1,4 @@
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
 import { Eye, EyeOff } from 'lucide-react-native';
@@ -18,7 +18,6 @@ import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../servic
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import * as GoogleSignIn from '@react-native-google-signin/google-signin';
 
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
@@ -43,8 +42,11 @@ const inputStyle = {
 };
 
 export function SignInScreen() {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [partnerRole, setPartnerRole] = useState<'DRIVER' | 'RIDER'>('DRIVER');
+  const route = useRoute<RouteProp<RootStackParamList, 'SignIn'>>();
+  const [mode, setMode] = useState<'login' | 'register'>(route.params?.mode ?? 'login');
+  const [partnerRole, setPartnerRole] = useState<'DRIVER' | 'RIDER'>(
+    route.params?.role ?? 'DRIVER'
+  );
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
@@ -117,8 +119,8 @@ export function SignInScreen() {
                 }}
               >
                 {[
-                  { role: 'DRIVER' as const, label: 'Ride driver' },
-                  { role: 'RIDER' as const, label: 'Delivery rider' },
+                  { role: 'RIDER' as const, label: 'Delivery Rider' },
+                  { role: 'DRIVER' as const, label: 'Driver' },
                 ].map((item) => {
                   const selected = partnerRole === item.role;
                   return (
@@ -225,7 +227,7 @@ export function SignInScreen() {
             mode === 'login'
               ? 'Sign in'
               : partnerRole === 'DRIVER'
-                ? 'Create ride driver account'
+                ? 'Create driver account'
                 : 'Create delivery rider account'
           }
           onPress={submit}

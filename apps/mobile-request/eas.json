@@ -13,11 +13,27 @@
       "distribution": "internal",
       "channel": "preview",
       "autoIncrement": true,
-      "node": "20.19.0"
+      "node": "20.19.0",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://benbaxapi-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_SOCKET_URL": "https://benbaxapi-production.up.railway.app",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCwKZjtvca6frTQtK_dtOH5aajalTkQa6Y",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "227842274371-0cpmprbna9se4tsl3v53n3tgrergnb5r.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com"
+      }
     },
     "production": {
       "channel": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://benbaxapi-production.up.railway.app/api/v1",
+        "EXPO_PUBLIC_SOCKET_URL": "https://benbaxapi-production.up.railway.app",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCwKZjtvca6frTQtK_dtOH5aajalTkQa6Y",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "227842274371-0cpmprbna9se4tsl3v53n3tgrergnb5r.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com"
+      }
     }
   },
   "submit": {

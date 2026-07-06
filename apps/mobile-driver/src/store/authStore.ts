@@ -13,6 +13,9 @@ type DriverUser = {
 type AuthState = {
   user: DriverUser | null;
   isHydrating: boolean;
+  onboardingComplete: boolean;
+  hasSeenWelcome: boolean;
+  completeWelcome: () => Promise<void>;
   login: (phone: string, password: string, rememberMe?: boolean) => Promise<void>;
   loginWithGoogle: (
     tokens: { accessToken?: string; idToken?: string; role?: 'RIDER' | 'DRIVER' },
@@ -27,11 +30,23 @@ type AuthState = {
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
   updateUser: (updated: Partial<DriverUser>) => Promise<void>;
+  completeOnboarding: () => Promise<void>;
 };
+
+const ONBOARDING_KEY = 'benbax.driver.onboardingComplete';
+const WELCOME_KEY = 'benbax.driver.hasSeenWelcome';
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isHydrating: true,
+  onboardingComplete: false,
+  hasSeenWelcome: false,
+
+  async completeWelcome() {
+    await AsyncStorage.setItem(WELCOME_KEY, 'true');
+    set({ hasSeenWelcome: true });
+  },
+
   async login(phone, password, rememberMe = true) {
     const data = await apiRequest<{
       user: DriverUser;
@@ -47,8 +62,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       ['benbax.driver.user', JSON.stringify(data.user)],
       ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false'],
     ]);
-    set({ user: data.user });
+    // Check if onboarding was already completed for this user
+    const storedOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
+    const onboardingComplete = storedOnboarding === 'true';
+    set({ user: data.user, onboardingComplete });
   },
+
   async loginWithGoogle(tokens, rememberMe = true) {
     const data = await apiRequest<{
       user: DriverUser;
@@ -64,8 +83,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       ['benbax.driver.user', JSON.stringify(data.user)],
       ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false'],
     ]);
-    set({ user: data.user });
+    const storedOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
+    const onboardingComplete = storedOnboarding === 'true';
+    set({ user: data.user, onboardingComplete });
   },
+
   async register(input) {
     const data = await apiRequest<{
       user: DriverUser;
@@ -81,14 +103,29 @@ export const useAuthStore = create<AuthState>((set) => ({
       ['benbax.driver.user', JSON.stringify(data.user)],
       ['benbax.driver.rememberMe', 'true'],
     ]);
-    set({ user: data.user });
+    // New registration → onboarding not yet completed
+    set({ user: data.user, onboardingComplete: false });
   },
+
   async hydrate() {
-    const entries = await AsyncStorage.multiGet(['benbax.driver.user', 'benbax.driver.rememberMe']);
+    const entries = await AsyncStorage.multiGet([
+      'benbax.driver.user',
+      'benbax.driver.rememberMe',
+      ONBOARDING_KEY,
+      WELCOME_KEY,
+    ]);
     const rawUser = entries[0]?.[1];
     const rememberMe = entries[1]?.[1];
+    const storedOnboarding = entries[2]?.[1];
+    const storedWelcome = entries[3]?.[1];
     const shouldRestore = rememberMe !== 'false';
-    set({ user: shouldRestore && rawUser ? JSON.parse(rawUser) : null, isHydrating: false });
+    const onboardingComplete = storedOnboarding === 'true';
+    set({
+      user: shouldRestore && rawUser ? JSON.parse(rawUser) : null,
+      isHydrating: false,
+      onboardingComplete: shouldRestore ? onboardingComplete : false,
+      hasSeenWelcome: storedWelcome === 'true',
+    });
   },
 
   async logout() {
@@ -97,14 +134,21 @@ export const useAuthStore = create<AuthState>((set) => ({
       'benbax.driver.refreshToken',
       'benbax.driver.user',
       'benbax.driver.rememberMe',
+      ONBOARDING_KEY,
     ]);
-    set({ user: null });
+    set({ user: null, onboardingComplete: false });
   },
+
   async updateUser(updated) {
     const currentUser = useAuthStore.getState().user;
     if (!currentUser) return;
     const nextUser = { ...currentUser, ...updated };
     await AsyncStorage.setItem('benbax.driver.user', JSON.stringify(nextUser));
     set({ user: nextUser });
+  },
+
+  async completeOnboarding() {
+    await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+    set({ onboardingComplete: true });
   },
 }));
