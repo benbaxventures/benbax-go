@@ -9,6 +9,10 @@ import { AnimatedSplashScreen } from './components/AnimatedSplashScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useOTAUpdates } from './hooks/useOTAUpdates';
 import { RootNavigator } from './navigation/RootNavigator';
+import { initSentry, wrapWithSentry } from './services/sentry';
+
+// Initialize crash reporting before anything else so early errors are captured.
+initSentry();
 
 // Keep the splash screen visible while we load the app
 void SplashScreen.preventAutoHideAsync();
@@ -22,7 +26,7 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function App() {
+function App() {
   useOTAUpdates();
   const [splashDone, setSplashDone] = useState(false);
   const handleSplashReady = useCallback(() => {
@@ -46,3 +50,5 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+export default wrapWithSentry(App);

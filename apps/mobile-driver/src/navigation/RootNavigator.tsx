@@ -6,6 +6,7 @@ import { BadgeCheck, Bike, Car, User, Wallet } from 'lucide-react-native';
 import { useCallback, useEffect, useRef } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import { ActiveDeliveryScreen } from '../screens/ActiveDeliveryScreen';
 import { ActiveTripScreen } from '../screens/ActiveTripScreen';
 import { DeliveryDispatchScreen } from '../screens/DeliveryDispatchScreen';
@@ -24,7 +25,9 @@ import { SignInScreen } from '../screens/SignInScreen';
 import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
+import { presentLocalOffer } from '../services/notifications';
 import { createRealtimeClient } from '../services/realtime';
+import { setSentryUser } from '../services/sentry';
 import { useAuthStore } from '../store/authStore';
 import { useDriverStore } from '../store/driverStore';
 import { useRiderStore } from '../store/riderStore';
@@ -35,9 +38,16 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabsParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
+function goToDispatch() {
+  if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
+}
+
 function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
   const setCurrentRideOffer = useDriverStore((state) => state.setCurrentOffer);
   const setCurrentDeliveryOffer = useRiderStore((state) => state.setCurrentOffer);
+
+  // Register the Expo push token once authenticated and route taps to Dispatch.
+  usePushNotifications({ enabled, onNotificationResponse: goToDispatch });
 
   useEffect(() => {
     if (!enabled) return;
@@ -51,15 +61,18 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
           score: Number(offer.score),
           expiresAt: offer.expiresAt,
         });
+        void presentLocalOffer({
+          title: 'New ride request',
+          body: 'A nearby passenger is waiting. Tap to accept or reject.',
+          data: { type: 'ride-offer', tripId: offer.tripId },
+        });
         Alert.alert(
           'New ride request',
           'A nearby passenger is waiting. Open Dispatch to accept or reject.',
           [
             {
               text: 'View',
-              onPress: () => {
-                if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
-              },
+              onPress: goToDispatch,
             },
             { text: 'Later', style: 'cancel' },
           ]
@@ -72,15 +85,18 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
           score: Number(offer.score),
           expiresAt: offer.expiresAt,
         });
+        void presentLocalOffer({
+          title: 'New delivery offer',
+          body: 'A nearby customer delivery is waiting. Tap to accept or reject.',
+          data: { type: 'delivery-offer', deliveryId: offer.deliveryId },
+        });
         Alert.alert(
           'New delivery offer',
           'A nearby customer delivery is waiting. Open Delivery Dispatch to accept or reject.',
           [
             {
               text: 'View',
-              onPress: () => {
-                if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
-              },
+              onPress: goToDispatch,
             },
             { text: 'Later', style: 'cancel' },
           ]
@@ -189,6 +205,7 @@ export function RootNavigator() {
   }, [hydrate]);
 
   useEffect(() => {
+    setSentryUser(user ? { id: user.id, phone: user.phone } : null);
     if (user) {
       hydratePreferences();
     }

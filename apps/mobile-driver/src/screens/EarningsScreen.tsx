@@ -1,12 +1,15 @@
+import type { NavigationProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { DollarSign, TrendingUp, WalletCards } from 'lucide-react-native';
-import { Alert, Linking, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { BonusTargetCard } from '../components/BonusTargetCard';
 import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
 import { OfflineBanner } from '../components/OfflineBanner';
 import { Screen } from '../components/Screen';
 import { SkeletonBlock } from '../components/SkeletonBlock';
+import type { RootStackParamList } from '../navigation/types';
 import { apiRequest } from '../services/api';
 import { theme } from '../theme/tokens';
 
@@ -30,6 +33,8 @@ type BonusGoal = {
 };
 
 export function EarningsScreen() {
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+
   const {
     data: earnings,
     isLoading,
@@ -47,24 +52,9 @@ export function EarningsScreen() {
   });
 
   function handleWithdraw() {
-    Alert.alert(
-      'Withdraw to MoMo',
-      'Withdrawals are processed via MTN Mobile Money. You will receive a prompt on your phone to confirm.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Withdraw now',
-          onPress: () => {
-            Linking.openURL('tel:*170#').catch(() =>
-              Alert.alert(
-                'Unable to initiate withdrawal',
-                'Please dial *170# on your phone to access MTN MoMo and transfer from your Benbax wallet.'
-              )
-            );
-          },
-        },
-      ]
-    );
+    // Withdrawals live on the Wallet screen, which shows the withdrawable
+    // balance and drives the real /payments/instant-payout flow.
+    navigation.navigate('Wallet');
   }
 
   if (isLoading) {

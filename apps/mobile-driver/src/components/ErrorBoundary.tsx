@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import { captureException } from '../services/sentry';
 import { theme } from '../theme/tokens';
 import { Button } from './Button';
 
@@ -23,8 +24,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error) {
+  componentDidCatch(error: Error, errorInfo: { componentStack?: string }) {
     console.warn('[ErrorBoundary] Caught render error:', error?.message ?? error);
+    captureException(error, { componentStack: errorInfo.componentStack });
   }
 
   handleReset = () => {

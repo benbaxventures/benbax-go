@@ -143,6 +143,7 @@ model User {
   supportCases      SupportTicket[]    @relation("TicketRequester")
   auditLogs         AuditLog[]         @relation("AuditActor")
   notifications Notification[]
+  payouts       Payout[]           @relation("UserPayouts")
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 }
@@ -665,4 +666,39 @@ model SuspiciousActivity {
   riderProfile   RiderProfile? @relation(fields: [riderProfileId], references: [id], onDelete: SetNull)
   delivery       Delivery?     @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  CANCELLED
+}
+
+enum PayoutMethod {
+  MTN_MOMO
+  BANK
+}
+
+model Payout {
+  id            String       @id @default(cuid())
+  userId        String
+  amount        Decimal      @db.Decimal(10, 2)
+  currency      String       @default("GHS")
+  status        PayoutStatus @default(PENDING)
+  method        PayoutMethod @default(MTN_MOMO)
+  destination   String
+  accountName   String?
+  bankCode      String?
+  provider      String?
+  providerRef   String?
+  failureReason String?
+  processedAt   DateTime?
+  user          User         @relation("UserPayouts", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
 }
