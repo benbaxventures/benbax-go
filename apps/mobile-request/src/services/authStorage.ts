@@ -5,6 +5,8 @@ const ACCESS_TOKEN_KEY = 'benbax.accessToken';
 const REFRESH_TOKEN_KEY = 'benbax.refreshToken';
 const USER_KEY = 'benbax.user';
 const REMEMBER_ME_KEY = 'benbax.rememberMe';
+const HAS_REGISTERED_KEY = 'benbax.hasRegisteredBefore';
+const BIOMETRIC_ENABLED_KEY = 'benbax.biometricEnabled';
 
 type StoredUser = {
   id: string;
@@ -85,4 +87,28 @@ export async function getStoredUser() {
 
 export async function updateStoredUser(user: StoredUser) {
   await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+export async function getHasRegisteredBefore(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(HAS_REGISTERED_KEY)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function setHasRegisteredBefore(): Promise<void> {
+  await AsyncStorage.setItem(HAS_REGISTERED_KEY, 'true');
+}
+
+export async function getBiometricEnabled(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(BIOMETRIC_ENABLED_KEY)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function setBiometricEnabled(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(BIOMETRIC_ENABLED_KEY, enabled ? 'true' : 'false');
 }

@@ -1,22 +1,22 @@
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '../services/api';
-import type { AddressPoint, RideQuote, RideTripSummary } from '../shared';
+import type { AddressPoint, CarTripQuote, CarTripSummary } from '../shared';
 
-export function useRideQuote() {
+export function useTripQuote() {
   return useMutation({
     mutationFn: (input: {
       pickup: AddressPoint;
       dropoff: AddressPoint;
       requestedVehicleType?: string;
     }) =>
-      apiRequest<RideQuote>('/rides/quote', {
+      apiRequest<CarTripQuote>('/trips/quote', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
   });
 }
 
-export function useCreateRide() {
+export function useCreateTrip() {
   return useMutation({
     mutationFn: (input: {
       pickup: AddressPoint;
@@ -25,7 +25,7 @@ export function useCreateRide() {
       scheduledFor?: string;
       paymentMethod?: 'MTN_MOMO' | 'PAYSTACK_CARD' | 'WALLET' | 'CASH_ON_DELIVERY';
     }) =>
-      apiRequest<RideTripSummary>('/rides', {
+      apiRequest<CarTripSummary>('/trips', {
         method: 'POST',
         body: JSON.stringify(input),
       }),

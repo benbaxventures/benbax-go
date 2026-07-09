@@ -1,12 +1,7 @@
 export type UserRole = 'CUSTOMER' | 'RIDER' | 'DRIVER' | 'ADMIN' | 'SUPPORT' | 'OPERATIONS';
 
 export type DeliveryCategory =
-  | 'FOOD'
-  | 'PARCEL'
-  | 'COURIER'
-  | 'GROCERY'
-  | 'PHARMACY'
-  | 'TRANSPORT_READY';
+  'FOOD' | 'PARCEL' | 'COURIER' | 'GROCERY' | 'PHARMACY' | 'TRANSPORT_READY';
 
 export type DeliveryStatus =
   | 'DRAFT'
@@ -22,9 +17,9 @@ export type DeliveryStatus =
 
 export type RiderStatus = 'PENDING_KYC' | 'ACTIVE' | 'SUSPENDED' | 'OFFLINE' | 'ON_DELIVERY';
 
-export type DriverStatus = 'PENDING_KYC' | 'ACTIVE' | 'SUSPENDED' | 'OFFLINE' | 'ON_TRIP';
+export type DriverStatus = 'PENDING_KYC' | 'ACTIVE' | 'SUSPENDED' | 'OFFLINE' | 'ON_CAR_TRIP';
 
-export type RideTripStatus =
+export type CarTripStatus =
   | 'REQUESTED'
   | 'ASSIGNING'
   | 'ASSIGNED'
@@ -92,7 +87,7 @@ export type RiderAssignment = {
   expiresAt: string;
 };
 
-export type RideQuote = {
+export type CarTripQuote = {
   distanceKm: number;
   estimatedMinutes: number;
   baseFare: number;
@@ -105,10 +100,10 @@ export type RideQuote = {
   currency: 'GHS';
 };
 
-export type RideTripSummary = {
+export type CarTripSummary = {
   id: string;
   tripCode: string;
-  status: RideTripStatus;
+  status: CarTripStatus;
   pickup: AddressPoint;
   dropoff: AddressPoint;
   requestedVehicleType?: string;

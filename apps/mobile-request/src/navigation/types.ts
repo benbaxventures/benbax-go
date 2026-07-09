@@ -4,7 +4,7 @@ export type RootStackParamList = {
   ResetPassword: { phone: string; resetToken: string };
   MainTabs: undefined;
   Tracking: { deliveryId: string };
-  RideTracking: { tripId: string };
+  TripTracking: { tripId: string };
   PaymentCheckout: {
     deliveryId: string;
     authorizationUrl: string;

@@ -1,15 +1,29 @@
-import { PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
+import {
+  PaymentMethod,
+  PaymentStatus,
+  PayoutMethod,
+  PayoutStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import crypto from 'crypto';
 import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
-import { requireAuth } from '../../middleware/auth';
+import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { badRequest, notFound, unauthorized } from '../../utils/http';
 import { ok } from '../../utils/response';
-import { initializePaystackTransaction, verifyPaystackTransaction } from './paystack';
+import {
+  createTransferRecipient,
+  initializePaystackTransaction,
+  initiateTransfer,
+  isPaystackTransfersEnabled,
+  verifyPaystackTransaction,
+} from './paystack';
+import { WalletTxType } from './settlement';
 
 export const paymentsRouter = Router();
 
@@ -355,5 +369,124 @@ paymentsRouter.get(
     }
 
     return ok(res, wallet);
+  })
+);
+
+const instantPayoutSchema = z.object({ body: z.object({ amount: z.number().positive() }) });
+
+paymentsRouter.post(
+  '/instant-payout',
+  requireRoles(UserRole.DRIVER),
+  validate(instantPayoutSchema),
+  asyncHandler(async (req, res) => {
+    const amount = req.body.amount as number;
+
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user) throw notFound('User not found');
+    if (!user.phone) throw badRequest('A registered phone number is required for MoMo payouts');
+
+    const wallet = await prisma.wallet.findUnique({ where: { userId: user.id } });
+    const balance = wallet ? Number(wallet.balance) : 0;
+    if (!wallet || balance <= 0) throw badRequest('No wallet balance available to withdraw');
+    if (amount > balance) throw badRequest('Withdrawal amount exceeds your available balance');
+
+    const amountDec = new Prisma.Decimal(amount);
+
+    // Atomically reserve funds: create the payout and debit the wallet.
+    const payout = await prisma.$transaction(async (tx) => {
+      const created = await tx.payout.create({
+        data: {
+          userId: user.id,
+          amount: amountDec,
+          currency: wallet.currency,
+          method: PayoutMethod.MTN_MOMO,
+          destination: user.phone,
+          accountName: user.name,
+          status: PayoutStatus.PENDING,
+        },
+      });
+      await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: { decrement: amountDec } },
+      });
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: WalletTxType.WITHDRAWAL,
+          amount: amountDec.neg(),
+          reference: `PAYOUT-${created.id}`,
+          metadata: { payoutId: created.id },
+        },
+      });
+      return created;
+    });
+
+    // Try an automated transfer when enabled; otherwise leave PENDING for an
+    // admin to process manually.
+    if (isPaystackTransfersEnabled()) {
+      try {
+        const recipient = await createTransferRecipient({
+          type: 'mobile_money',
+          name: user.name,
+          accountNumber: user.phone,
+          bankCode: env.PAYSTACK_MOMO_BANK_CODE,
+        });
+        const transfer = await initiateTransfer({
+          amountPesewas: toPesewas(amountDec),
+          recipient: recipient.recipient_code,
+          reason: 'Benbax driver payout',
+          reference: `PAYOUT-${payout.id}`,
+        });
+        const updated = await prisma.payout.update({
+          where: { id: payout.id },
+          data: {
+            status: transfer.status === 'success' ? PayoutStatus.PAID : PayoutStatus.PROCESSING,
+            provider: 'PAYSTACK',
+            providerRef: transfer.transfer_code,
+            ...(transfer.status === 'success' ? { processedAt: new Date() } : {}),
+          },
+        });
+        return ok(res, { payout: updated, autoProcessed: true });
+      } catch (error) {
+        // Refund the wallet and mark the payout failed so no funds are lost.
+        await prisma.$transaction(async (tx) => {
+          await tx.wallet.update({
+            where: { id: wallet.id },
+            data: { balance: { increment: amountDec } },
+          });
+          await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: WalletTxType.WITHDRAWAL_REVERSAL,
+              amount: amountDec,
+              reference: `PAYOUT-${payout.id}-REVERSAL`,
+              metadata: { payoutId: payout.id },
+            },
+          });
+          await tx.payout.update({
+            where: { id: payout.id },
+            data: {
+              status: PayoutStatus.FAILED,
+              failureReason: error instanceof Error ? error.message : 'Transfer failed',
+            },
+          });
+        });
+        throw badRequest('Automated payout failed. Please try again or contact support.');
+      }
+    }
+
+    return ok(res, { payout, autoProcessed: false });
+  })
+);
+
+paymentsRouter.get(
+  '/payouts',
+  asyncHandler(async (req, res) => {
+    const payouts = await prisma.payout.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return ok(res, payouts);
   })
 );

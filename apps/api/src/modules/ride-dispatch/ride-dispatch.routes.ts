@@ -7,6 +7,7 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { badRequest, notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
 import { rankRiders } from '../dispatch/dispatch.engine';
+import { sendExpoPushToUser } from '../notifications/push';
 
 export const rideDispatchRouter = Router();
 
@@ -82,6 +83,13 @@ rideDispatchRouter.post(
     io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, updatedTrip);
     io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, updatedTrip);
     io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);
+
+    // Push the offer so the driver is alerted even with the app backgrounded.
+    void sendExpoPushToUser(assignment.driverProfile.userId, {
+      title: 'New ride request',
+      body: 'A nearby passenger is waiting. Tap to accept or reject.',
+      data: { type: 'ride-offer', assignmentId: assignment.id, tripId: trip.id },
+    });
 
     return ok(res, { assignment, ranked });
   })

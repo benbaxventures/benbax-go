@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { Server } from 'socket.io';
 import { prisma } from '../../config/prisma';
 import { realtimeEvents } from '../../realtime/events';
+import { sendExpoPushToUser } from '../notifications/push';
 import { rankRiders } from './dispatch.engine';
 
 export async function dispatchRide(tripId: string, io?: Server) {
@@ -72,6 +73,13 @@ export async function dispatchRide(tripId: string, io?: Server) {
   io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, updatedTrip);
   io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, updatedTrip);
   io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);
+
+  // Push the offer so the driver is alerted even with the app backgrounded.
+  void sendExpoPushToUser(assignment.driverProfile.userId, {
+    title: 'New ride request',
+    body: 'A nearby passenger is waiting. Tap to accept or reject.',
+    data: { type: 'ride-offer', assignmentId: assignment.id, tripId: trip.id },
+  });
 }
 
 export async function dispatchDelivery(deliveryId: string, io?: Server) {
@@ -130,4 +138,11 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
 
   io?.to(`rider:${assignment.riderProfile.userId}`).emit(realtimeEvents.riderOffer, assignment);
   io?.to('admins').emit(realtimeEvents.deliveryAssigned, assignment);
+
+  // Push the offer so the rider is alerted even with the app backgrounded.
+  void sendExpoPushToUser(assignment.riderProfile.userId, {
+    title: 'New delivery offer',
+    body: 'A nearby customer delivery is waiting. Tap to accept or reject.',
+    data: { type: 'delivery-offer', assignmentId: assignment.id, deliveryId: delivery.id },
+  });
 }

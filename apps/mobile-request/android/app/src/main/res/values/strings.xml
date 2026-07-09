@@ -1,5 +1,4 @@
 <resources>
-  <string name="app_name">Benbax</string>
-  <string name="expo_runtime_version">1.0.0</string>
-  <string name="google_maps_api_key">AIzaSyBtqOZr9EptptoFif0PSd7Mdb8RAkR09Lc</string>
+  <string name="app_name">Benbax Request</string>
+  <string name="expo_runtime_version">file:fingerprint</string>
 </resources>

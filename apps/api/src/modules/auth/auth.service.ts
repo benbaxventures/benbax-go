@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
 import jwt, { type SignOptions } from 'jsonwebtoken';
+import { randomInt } from 'node:crypto';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
 import { badRequest, notFound, unauthorized } from '../../utils/http';
@@ -207,7 +208,7 @@ export async function forgotPassword(phone: string) {
   const user = await prisma.user.findUnique({ where: { phone } });
   if (!user) throw notFound('No account found with this phone number');
 
-  const token = crypto.randomInt(100000, 999999).toString();
+  const token = randomInt(100000, 999999).toString();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
   await prisma.passwordResetToken.create({

@@ -2,8 +2,8 @@ import Constants from 'expo-constants';
 
 const API_PORT = 4000;
 const DEFAULT_API_BASE_URL = 'http://localhost:4000/api/v1';
-const DEFAULT_SOCKET_URL = 'http://localhost:4000/api/v1';
-const RAILWAY_HOST = 'localhost:4000';
+const DEFAULT_SOCKET_URL = 'http://localhost:4000';
+const REMOTE_API_HOST = 'localhost:4000';
 
 function getExpoHost() {
   try {
@@ -53,7 +53,7 @@ function normalizeRemoteUrl(url: string) {
 
     if (
       parsedUrl.protocol === 'https:' &&
-      parsedUrl.hostname === RAILWAY_HOST &&
+      parsedUrl.hostname === REMOTE_API_HOST &&
       parsedUrl.port === '8080'
     ) {
       parsedUrl.port = '';

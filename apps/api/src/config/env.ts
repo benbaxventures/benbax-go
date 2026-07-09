@@ -15,6 +15,8 @@ const envSchema = z.object({
     .string()
     .default('http://localhost:5173,http://localhost:19006,http://localhost:8081'),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
+  // Optional Expo access token for authenticated push sends (recommended in prod).
+  EXPO_ACCESS_TOKEN: z.string().optional(),
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
   FIREBASE_PRIVATE_KEY: z.string().optional(),
@@ -24,6 +26,16 @@ const envSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().optional(),
   PAYSTACK_PUBLIC_KEY: z.string().optional(),
   PAYSTACK_CALLBACK_URL: z.string().optional(),
+  // Platform commission taken from each fare (0.10 = 10%). Driver keeps the rest.
+  PLATFORM_COMMISSION_RATE: z.coerce.number().min(0).max(1).default(0.1),
+  // Enable automated Paystack Transfers for driver payouts. When false (default),
+  // withdrawals are created as PENDING for manual admin processing.
+  PAYSTACK_TRANSFERS_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value === 'true'),
+  // Paystack Ghana mobile-money bank code used for MoMo payout recipients (MTN | VOD | ATL).
+  PAYSTACK_MOMO_BANK_CODE: z.string().default('MTN'),
   MTN_MOMO_BASE_URL: z.string().optional(),
   MTN_MOMO_SUBSCRIPTION_KEY: z.string().optional(),
   MTN_MOMO_API_USER: z.string().optional(),

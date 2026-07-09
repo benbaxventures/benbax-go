@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { notFound } from '../../utils/http';
 import { estimateRide } from '../dispatch/dispatch.engine';
+import { settleRideTrip } from '../payments/settlement';
 import { buildExpectedRoute } from '../tracking/routeSafety';
 
 type CoordinateInput = {
@@ -120,8 +121,19 @@ export async function getRide(id: string, requesterId: string) {
 }
 
 export async function updateRideStatus(id: string, status: RideTripStatus) {
-  return prisma.rideTrip.update({
+  await prisma.rideTrip.update({
     where: { id },
     data: { status },
+  });
+
+  // Completing a trip settles the fare: credits the driver's wallet (digital)
+  // or records commission owed (cash), and releases the driver back to ACTIVE.
+  if (status === RideTripStatus.COMPLETED) {
+    await settleRideTrip(id);
+  }
+
+  return prisma.rideTrip.findUnique({
+    where: { id },
+    include: { payment: true },
   });
 }
