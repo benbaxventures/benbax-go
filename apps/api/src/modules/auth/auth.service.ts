@@ -1,5 +1,5 @@
-import type { Prisma, Prisma } from '@prisma/client';
-import { UserRole, UserRole } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import { UserRole } from '@prisma/client';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
 import jwt, { type SignOptions } from 'jsonwebtoken';

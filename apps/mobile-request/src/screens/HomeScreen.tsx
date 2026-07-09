@@ -35,8 +35,8 @@ export function HomeScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const [mode, setMode] = useState<Mode>('delivery');
 
-  const deliveryStore = useDeliveryStore();
-  const rideStore = useRideStore();
+  const setDeliveryPickup = useDeliveryStore((s) => s.setPickup);
+  const setRidePickup = useRideStore((s) => s.setPickup);
 
   const deliveryQuoteMutation = useDeliveryQuote();
   const createDeliveryMutation = useCreateDelivery();
@@ -82,19 +82,19 @@ export function HomeScreen() {
         longitude,
         landmark: nearbyName ?? pickupLandmark,
       };
-      deliveryStore.setPickup(point);
-      rideStore.setPickup(point);
+      setDeliveryPickup(point);
+      setRidePickup(point);
     }
   }, [
     detectedAddress,
     detectedLocationLabel,
-    deliveryStore,
     latitude,
     longitude,
     nearbyName,
     pickupLandmark,
     pickupText,
-    rideStore,
+    setDeliveryPickup,
+    setRidePickup,
   ]);
 
   useEffect(() => {
@@ -135,26 +135,38 @@ export function HomeScreen() {
     [dropoffLandmark, dropoffText]
   );
 
+  const setDeliveryQuote = useDeliveryStore((s) => s.setQuote);
+  const setDeliveryDropoff = useDeliveryStore((s) => s.setDropoff);
+  const deliveryCategory = useDeliveryStore((s) => s.draft.category);
+  const setDeliveryCategory = useDeliveryStore((s) => s.setCategory);
+  const deliveryQuote = useDeliveryStore((s) => s.draft.quote);
+
+  const setRideDropoff = useRideStore((s) => s.setDropoff);
+  const rideVehicleType = useRideStore((s) => s.draft.vehicleType);
+  const setRideQuote = useRideStore((s) => s.setQuote);
+  const setRideVehicleType = useRideStore((s) => s.setVehicleType);
+  const rideQuote = useRideStore((s) => s.draft.quote);
+
   async function handleQuote() {
-    deliveryStore.setPickup(pickup);
-    deliveryStore.setDropoff(dropoff);
-    rideStore.setPickup(pickup);
-    rideStore.setDropoff(dropoff);
+    setDeliveryPickup(pickup);
+    setDeliveryDropoff(dropoff);
+    setRidePickup(pickup);
+    setRideDropoff(dropoff);
 
     if (mode === 'delivery') {
       const result = await deliveryQuoteMutation.mutateAsync({
-        category: deliveryStore.draft.category,
+        category: deliveryCategory,
         pickup,
         dropoff,
       });
-      deliveryStore.setQuote(result);
+      setDeliveryQuote(result);
     } else {
       const result = await rideQuoteMutation.mutateAsync({
         pickup,
         dropoff,
-        requestedVehicleType: rideStore.draft.vehicleType,
+        requestedVehicleType: rideVehicleType,
       });
-      rideStore.setQuote(result);
+      setRideQuote(result);
     }
   }
 
@@ -162,7 +174,7 @@ export function HomeScreen() {
     try {
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
-          category: deliveryStore.draft.category,
+          category: deliveryCategory,
           pickup,
           dropoff,
           paymentMethod: 'PAYSTACK_CARD',
@@ -186,7 +198,7 @@ export function HomeScreen() {
         const ride = await createRideMutation.mutateAsync({
           pickup,
           dropoff,
-          requestedVehicleType: rideStore.draft.vehicleType,
+          requestedVehicleType: rideVehicleType,
         });
         navigation.navigate('RideTracking', { tripId: ride.id });
       }
@@ -203,7 +215,7 @@ export function HomeScreen() {
     try {
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
-          category: deliveryStore.draft.category,
+          category: deliveryCategory,
           pickup,
           dropoff,
           paymentMethod: 'PAYSTACK_CARD',
@@ -218,7 +230,7 @@ export function HomeScreen() {
         const ride = await createRideMutation.mutateAsync({
           pickup,
           dropoff,
-          requestedVehicleType: rideStore.draft.vehicleType,
+          requestedVehicleType: rideVehicleType,
           scheduledFor,
         });
         Alert.alert('Ride scheduled', 'Your ride is scheduled for about 30 minutes from now.');
@@ -318,11 +330,11 @@ export function HomeScreen() {
       {mode === 'delivery' ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {categories.map((item) => {
-            const selected = item.key === deliveryStore.draft.category;
+            const selected = item.key === deliveryCategory;
             return (
               <Pressable
                 key={item.key}
-                onPress={() => deliveryStore.setCategory(item.key)}
+                onPress={() => setDeliveryCategory(item.key)}
                 style={{
                   minHeight: 44,
                   paddingHorizontal: 14,
@@ -344,11 +356,11 @@ export function HomeScreen() {
       ) : (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {vehicleTypes.map((vt) => {
-            const selected = vt.key === rideStore.draft.vehicleType;
+            const selected = vt.key === rideVehicleType;
             return (
               <Pressable
                 key={vt.key}
-                onPress={() => rideStore.setVehicleType(vt.key)}
+                onPress={() => setRideVehicleType(vt.key)}
                 style={{
                   flex: 1,
                   minHeight: 60,
@@ -412,18 +424,15 @@ export function HomeScreen() {
           <Text style={{ color: theme.colors.muted }}>ETA</Text>
           <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>
             {mode === 'delivery'
-              ? (deliveryStore.draft.quote?.estimatedMinutes ?? '--')
-              : (rideStore.draft.quote?.estimatedMinutes ?? '--')}{' '}
+              ? (deliveryQuote?.estimatedMinutes ?? '--')
+              : (rideQuote?.estimatedMinutes ?? '--')}{' '}
             mins
           </Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ color: theme.colors.muted }}>Estimated fare</Text>
           <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
-            GHS{' '}
-            {mode === 'delivery'
-              ? (deliveryStore.draft.quote?.total ?? '--')
-              : (rideStore.draft.quote?.total ?? '--')}
+            GHS {mode === 'delivery' ? (deliveryQuote?.total ?? '--') : (rideQuote?.total ?? '--')}
           </Text>
         </View>
       </View>

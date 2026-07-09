@@ -1,11 +1,12 @@
-import type { NavigationProp, NavigationProp } from '@react-navigation/native';
-import { useNavigation, useNavigation } from '@react-navigation/native';
+import type { NavigationProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { CreditCard, Smartphone } from 'lucide-react-native';
 import { useState } from 'react';
 import { Alert, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { useWallet, useWalletTopup } from '../hooks/usePayments';
+import type { RootStackParamList } from '../navigation/types';
 import { ApiConnectionError, ApiResponseError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';

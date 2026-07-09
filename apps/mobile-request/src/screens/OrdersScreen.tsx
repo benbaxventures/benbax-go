@@ -6,7 +6,7 @@ import { theme } from '../theme/tokens';
 
 export function OrdersScreen() {
   const { data, isLoading } = useDeliveries();
-
+  // console.log(JSON.stringify(data, null, 2));
   return (
     <Screen>
       <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Orders</Text>
@@ -26,7 +26,7 @@ export function OrdersScreen() {
         >
           <StatusPill label={delivery.status} />
           <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
-            {delivery.pickup.label} to {delivery.dropoff.label}
+            {delivery.pickup?.label} to {delivery.dropoff?.label}
           </Text>
           <Text style={{ color: theme.colors.muted }}>
             GHS {delivery.quote?.total ?? '--'} · {delivery.category}

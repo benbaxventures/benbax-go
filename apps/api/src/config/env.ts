@@ -11,7 +11,9 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(24),
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('30d'),
-  CORS_ORIGINS: z.string().default('http://localhost:5173,http://localhost:19006'),
+  CORS_ORIGINS: z
+    .string()
+    .default('http://localhost:5173,http://localhost:19006,http://localhost:8081'),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   FIREBASE_PROJECT_ID: z.string().optional(),
   FIREBASE_CLIENT_EMAIL: z.string().optional(),
