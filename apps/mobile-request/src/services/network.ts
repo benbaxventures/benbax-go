@@ -1,9 +1,9 @@
 import Constants from 'expo-constants';
 
 const API_PORT = 4000;
-const DEFAULT_API_BASE_URL = 'https://benbax-go.onrender.com/api/v1';
-const DEFAULT_SOCKET_URL = 'https://benbax-go.onrender.com';
-const REMOTE_API_HOST = 'benbax-go.onrender.com';
+const DEFAULT_API_BASE_URL = 'http://localhost:4000/api/v1';
+const DEFAULT_SOCKET_URL = 'http://localhost:4000';
+const REMOTE_API_HOST = 'localhost:4000';
 
 function getExpoHost() {
   try {

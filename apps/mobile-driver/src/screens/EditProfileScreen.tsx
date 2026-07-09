@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import { Alert, Text, TextInput, View } from 'react-native';
+import type { Alert, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import type { RootStackParamList } from '../navigation/types';

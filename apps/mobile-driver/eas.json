@@ -11,25 +11,11 @@
     },
     "preview": {
       "distribution": "internal",
-      "channel": "preview",
-      "env": {
-        "EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID": "12d0a70a-1626-4e4c-b900-8d844978d653",
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCwKZjtvca6frTQtK_dtOH5aajalTkQa6Y",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "227842274371-n0cvmj1u88nrp82kbfhsoqaf3qmgsbv4.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com",
-        "EXPO_PUBLIC_SENTRY_DSN": "https://4d26c51c97df3355bec1c21a6401030a@o4511694623473664.ingest.us.sentry.io/4511694666072069"
-      }
+      "channel": "preview"
     },
     "production": {
       "channel": "production",
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID": "12d0a70a-1626-4e4c-b900-8d844978d653",
-        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyCwKZjtvca6frTQtK_dtOH5aajalTkQa6Y",
-        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "227842274371-n0cvmj1u88nrp82kbfhsoqaf3qmgsbv4.apps.googleusercontent.com",
-        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "227842274371-rsobq5m6fghnaitbs2tl9ih3rgrnco5a.apps.googleusercontent.com",
-        "EXPO_PUBLIC_SENTRY_DSN": "https://4d26c51c97df3355bec1c21a6401030a@o4511694623473664.ingest.us.sentry.io/4511694666072069"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {

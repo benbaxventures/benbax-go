@@ -180,8 +180,19 @@ export function HomeScreen() {
   // --- Mode and form state ---
   const [mode, setMode] = useState<Mode>('delivery');
 
-  const deliveryStore = useDeliveryStore();
-  const tripStore = useTripStore();
+  const setDeliveryPickup = useDeliveryStore((s) => s.setPickup);
+  const setTripPickup = useTripStore((s) => s.setPickup);
+  const setDeliveryCategory = useDeliveryStore((s) => s.setCategory);
+  const deliveryCategory = useDeliveryStore((s) => s.draft.category);
+  const setDeliveryQuote = useDeliveryStore((s) => s.setQuote);
+  const setDeliveryDropoff = useDeliveryStore((s) => s.setDropoff);
+  const setTripQuote = useTripStore((s) => s.setQuote);
+  const setTripDropoff = useTripStore((s) => s.setDropoff);
+  const setTripVehicleType = useTripStore((s) => s.setVehicleType);
+  const tripVehicleType = useTripStore((s) => s.draft.vehicleType);
+  const tripQuote = useTripStore((s) => s.draft.quote);
+  const deliveryQuote = useDeliveryStore((s) => s.draft.quote);
+
   const deliveryQuoteMutation = useDeliveryQuote();
   const createDeliveryMutation = useCreateDelivery();
   const tripQuoteMutation = useTripQuote();
@@ -237,19 +248,19 @@ export function HomeScreen() {
         longitude,
         landmark: (nearbyName ?? pickupLandmark) || 'Near you',
       };
-      deliveryStore.setPickup(point);
-      tripStore.setPickup(point);
+      setDeliveryPickup(point);
+      setTripPickup(point);
     }
   }, [
     detectedAddress,
     detectedLocationLabel,
-    deliveryStore,
+    setDeliveryPickup,
     latitude,
     longitude,
     nearbyName,
     pickupLandmark,
     pickupText,
-    tripStore,
+    setTripPickup,
     hasLocation,
   ]);
 
@@ -275,25 +286,25 @@ export function HomeScreen() {
   );
 
   async function handleQuote() {
-    deliveryStore.setPickup(pickup);
-    deliveryStore.setDropoff(dropoff);
-    tripStore.setPickup(pickup);
-    tripStore.setDropoff(dropoff);
+    setDeliveryPickup(pickup);
+    setDeliveryDropoff(dropoff);
+    setTripPickup(pickup);
+    setTripDropoff(dropoff);
 
     if (mode === 'delivery') {
       const result = await deliveryQuoteMutation.mutateAsync({
-        category: deliveryStore.draft.category,
+        category: deliveryCategory,
         pickup,
         dropoff,
       });
-      deliveryStore.setQuote(result);
+      setDeliveryQuote(result);
     } else {
       const result = await tripQuoteMutation.mutateAsync({
         pickup,
         dropoff,
-        requestedVehicleType: tripStore.draft.vehicleType,
+        requestedVehicleType: tripVehicleType,
       });
-      tripStore.setQuote(result);
+      setTripQuote(result);
     }
   }
 
@@ -301,7 +312,7 @@ export function HomeScreen() {
     try {
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
-          category: deliveryStore.draft.category,
+          category: deliveryCategory,
           pickup,
           dropoff,
           paymentMethod: 'PAYSTACK_CARD',
@@ -323,7 +334,7 @@ export function HomeScreen() {
         const carTrip = await createTripMutation.mutateAsync({
           pickup,
           dropoff,
-          requestedVehicleType: tripStore.draft.vehicleType,
+          requestedVehicleType: tripVehicleType,
         });
         navigation.navigate('TripTracking', { tripId: carTrip.id });
       }
@@ -340,7 +351,7 @@ export function HomeScreen() {
     try {
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
-          category: deliveryStore.draft.category,
+          category: deliveryCategory,
           pickup,
           dropoff,
           paymentMethod: 'PAYSTACK_CARD',
@@ -355,7 +366,7 @@ export function HomeScreen() {
         const carTrip = await createTripMutation.mutateAsync({
           pickup,
           dropoff,
-          requestedVehicleType: tripStore.draft.vehicleType,
+          requestedVehicleType: tripVehicleType,
           scheduledFor,
         });
         Alert.alert('Ride scheduled', 'Your ride is scheduled for about 30 minutes from now.');
@@ -822,11 +833,11 @@ export function HomeScreen() {
                       contentContainerStyle={{ gap: 8 }}
                     >
                       {categories.map((item) => {
-                        const selected = item.key === deliveryStore.draft.category;
+                        const selected = item.key === deliveryCategory;
                         return (
                           <Pressable
                             key={item.key}
-                            onPress={() => deliveryStore.setCategory(item.key)}
+                            onPress={() => setDeliveryCategory(item.key)}
                             style={{
                               paddingHorizontal: 16,
                               paddingVertical: 10,
@@ -869,11 +880,11 @@ export function HomeScreen() {
                       Select vehicle
                     </Text>
                     {vehicleTypes.map((vt) => {
-                      const selected = vt.key === tripStore.draft.vehicleType;
+                      const selected = vt.key === tripVehicleType;
                       return (
                         <Pressable
                           key={vt.key}
-                          onPress={() => tripStore.setVehicleType(vt.key)}
+                          onPress={() => setTripVehicleType(vt.key)}
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
@@ -955,8 +966,8 @@ export function HomeScreen() {
                     </View>
                     <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 14 }}>
                       {mode === 'delivery'
-                        ? (deliveryStore.draft.quote?.estimatedMinutes ?? '--')
-                        : (tripStore.draft.quote?.estimatedMinutes ?? '--')}{' '}
+                        ? (deliveryQuote?.estimatedMinutes ?? '--')
+                        : (tripQuote?.estimatedMinutes ?? '--')}{' '}
                       mins
                     </Text>
                   </View>
@@ -971,8 +982,8 @@ export function HomeScreen() {
                     <Text style={{ color: theme.colors.ink, fontWeight: '900', fontSize: 18 }}>
                       GHS{' '}
                       {mode === 'delivery'
-                        ? (deliveryStore.draft.quote?.total ?? '--')
-                        : (tripStore.draft.quote?.total ?? '--')}
+                        ? (deliveryQuote?.total ?? '--')
+                        : (tripQuote?.total ?? '--')}
                     </Text>
                   </View>
                 </View>

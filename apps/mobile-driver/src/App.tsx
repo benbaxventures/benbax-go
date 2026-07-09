@@ -1,21 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
 import 'react-native-gesture-handler';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AnimatedSplashScreen } from './components/AnimatedSplashScreen';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { useOTAUpdates } from './hooks/useOTAUpdates';
 import { RootNavigator } from './navigation/RootNavigator';
-import { initSentry, wrapWithSentry } from './services/sentry';
-
-// Initialize crash reporting before anything else so early errors are captured.
-initSentry();
-
-// Keep the splash screen visible while we load the app
-void SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,29 +14,15 @@ const queryClient = new QueryClient({
   },
 });
 
-function App() {
-  useOTAUpdates();
-  const [splashDone, setSplashDone] = useState(false);
-  const handleSplashReady = useCallback(() => {
-    setSplashDone(true);
-  }, []);
-
-  if (!splashDone) {
-    return <AnimatedSplashScreen onReady={handleSplashReady} />;
-  }
-
+export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
-          <ErrorBoundary>
-            <RootNavigator />
-          </ErrorBoundary>
+          <RootNavigator />
           <StatusBar style="dark" />
         </QueryClientProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
-
-export default wrapWithSentry(App);

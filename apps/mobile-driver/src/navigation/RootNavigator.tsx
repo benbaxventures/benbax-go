@@ -3,10 +3,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNavigationContainerRef, NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { BadgeCheck, Bike, Car, User, Wallet } from 'lucide-react-native';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { ActivityIndicator, Alert, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { usePushNotifications } from '../hooks/usePushNotifications';
 import { ActiveDeliveryScreen } from '../screens/ActiveDeliveryScreen';
 import { ActiveTripScreen } from '../screens/ActiveTripScreen';
 import { DeliveryDispatchScreen } from '../screens/DeliveryDispatchScreen';
@@ -15,19 +14,12 @@ import { EarningsScreen } from '../screens/EarningsScreen';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { KycScreen } from '../screens/KycScreen';
-import { NewsScreen } from '../screens/NewsScreen';
-import { OnboardingFlow } from '../screens/OnboardingFlow';
-import { PriorityDetailsScreen } from '../screens/PriorityDetailsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
-import { ShiftScheduleScreen } from '../screens/ShiftScheduleScreen';
 import { SignInScreen } from '../screens/SignInScreen';
 import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { WalletScreen } from '../screens/WalletScreen';
-import { WelcomeScreen } from '../screens/WelcomeScreen';
-import { presentLocalOffer } from '../services/notifications';
 import { createRealtimeClient } from '../services/realtime';
-import { setSentryUser } from '../services/sentry';
 import { useAuthStore } from '../store/authStore';
 import { useDriverStore } from '../store/driverStore';
 import { useRiderStore } from '../store/riderStore';
@@ -38,16 +30,9 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabsParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
-function goToDispatch() {
-  if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
-}
-
 function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
   const setCurrentRideOffer = useDriverStore((state) => state.setCurrentOffer);
   const setCurrentDeliveryOffer = useRiderStore((state) => state.setCurrentOffer);
-
-  // Register the Expo push token once authenticated and route taps to Dispatch.
-  usePushNotifications({ enabled, onNotificationResponse: goToDispatch });
 
   useEffect(() => {
     if (!enabled) return;
@@ -61,18 +46,15 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
           score: Number(offer.score),
           expiresAt: offer.expiresAt,
         });
-        void presentLocalOffer({
-          title: 'New ride request',
-          body: 'A nearby passenger is waiting. Tap to accept or reject.',
-          data: { type: 'ride-offer', tripId: offer.tripId },
-        });
         Alert.alert(
           'New ride request',
           'A nearby passenger is waiting. Open Dispatch to accept or reject.',
           [
             {
               text: 'View',
-              onPress: goToDispatch,
+              onPress: () => {
+                if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
+              },
             },
             { text: 'Later', style: 'cancel' },
           ]
@@ -85,18 +67,15 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
           score: Number(offer.score),
           expiresAt: offer.expiresAt,
         });
-        void presentLocalOffer({
-          title: 'New delivery offer',
-          body: 'A nearby customer delivery is waiting. Tap to accept or reject.',
-          data: { type: 'delivery-offer', deliveryId: offer.deliveryId },
-        });
         Alert.alert(
           'New delivery offer',
           'A nearby customer delivery is waiting. Open Delivery Dispatch to accept or reject.',
           [
             {
               text: 'View',
-              onPress: goToDispatch,
+              onPress: () => {
+                if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
+              },
             },
             { text: 'Later', style: 'cancel' },
           ]
@@ -167,49 +146,12 @@ function MainTabs() {
   );
 }
 
-/** Wraps OnboardingFlow and handles redirect to MainTabs when onboarding is complete. */
-function OnboardingFlowWrapper({ navigation }: any) {
-  const onboardingComplete = useAuthStore((s) => s.onboardingComplete);
-  const hasRedirected = useRef(false);
-
-  const handleComplete = useCallback(() => {
-    hasRedirected.current = true;
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'MainTabs' }],
-    });
-  }, [navigation]);
-
-  // If onboarding is already complete (e.g. returning user), redirect immediately
-  useEffect(() => {
-    if (onboardingComplete && !hasRedirected.current) {
-      hasRedirected.current = true;
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainTabs' }],
-      });
-    }
-  }, [onboardingComplete, navigation]);
-
-  if (onboardingComplete) return null;
-
-  return <OnboardingFlow onComplete={handleComplete} />;
-}
-
 export function RootNavigator() {
-  const { user, isHydrating, hydrate, hasSeenWelcome } = useAuthStore();
-  const hydratePreferences = useDriverStore((s) => s.hydratePreferences);
+  const { user, isHydrating, hydrate } = useAuthStore();
 
   useEffect(() => {
     hydrate();
   }, [hydrate]);
-
-  useEffect(() => {
-    setSentryUser(user ? { id: user.id, phone: user.phone } : null);
-    if (user) {
-      hydratePreferences();
-    }
-  }, [user, hydratePreferences]);
 
   if (isHydrating) {
     return (
@@ -232,25 +174,19 @@ export function RootNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <>
-            {/* Always render OnboardingFlow — the wrapper handles showing/hiding */}
-            <Stack.Screen name="OnboardingFlow" component={OnboardingFlowWrapper} />
             <Stack.Screen name="MainTabs" component={MainTabs} />
             <Stack.Screen name="ActiveTrip" component={ActiveTripScreen} />
             <Stack.Screen name="ActiveDelivery" component={ActiveDeliveryScreen} />
             <Stack.Screen name="WalletCheckout" component={WalletCheckoutScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="Wallet" component={WalletScreen} />
-            <Stack.Screen name="PriorityDetails" component={PriorityDetailsScreen} />
-            <Stack.Screen name="ShiftSchedule" component={ShiftScheduleScreen} />
-            <Stack.Screen name="News" component={NewsScreen} />
           </>
         ) : (
-          <Stack.Group screenOptions={{ headerShown: false }}>
-            {!hasSeenWelcome ? <Stack.Screen name="Welcome" component={WelcomeScreen} /> : null}
+          <>
             <Stack.Screen name="SignIn" component={SignInScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
             <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
-          </Stack.Group>
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

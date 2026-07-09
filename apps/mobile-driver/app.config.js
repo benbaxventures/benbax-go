@@ -2,11 +2,11 @@ const appJson = require('./app.json');
 
 module.exports = () => {
   const driverProjectId =
-    process.env.EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID ?? '12d0a70a-1626-4e4c-b900-8d844978d653';
+    process.env.EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID ?? '81c6b202-f147-4843-a15a-59c386d82b42';
   const apiBaseUrl =
-    process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://benbax-go.onrender.com/api/v1';
+    process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://benbaxapi-production.up.railway.app/api/v1';
   const socketUrl =
-    process.env.EXPO_PUBLIC_SOCKET_URL ?? 'https://benbax-go.onrender.com';
+    process.env.EXPO_PUBLIC_SOCKET_URL ?? 'https://benbaxapi-production.up.railway.app';
   const googleMapsApiKey =
     process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ?? 'your-google-maps-api-key';
 
@@ -14,15 +14,6 @@ module.exports = () => {
     ...appJson,
     expo: {
       ...appJson.expo,
-      android: {
-        ...appJson.expo.android,
-        config: {
-          ...(appJson.expo.android?.config ?? {}),
-          googleMaps: {
-            apiKey: googleMapsApiKey,
-          },
-        },
-      },
       extra: {
         ...appJson.expo.extra,
         apiBaseUrl,

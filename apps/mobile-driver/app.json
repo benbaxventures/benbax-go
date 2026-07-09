@@ -5,14 +5,10 @@
     "scheme": "benbax-driver",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/logo.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0E7C66"
-    },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.benbax.driver",
@@ -24,16 +20,12 @@
     },
     "android": {
       "package": "com.benbax.driver",
-      "googleServicesFile": "./google-services.json",
-      "config": {
-        "googleMaps": {
-          "apiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
-        }
-      },
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "POST_NOTIFICATIONS"],
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#0E7C66",
-        "foregroundImage": "./assets/logo.png"
+        "backgroundColor": "#0E7C66"
       }
     },
     "plugins": [
@@ -48,23 +40,20 @@
           "cameraPermission": "Benbax uses the camera to capture driver KYC documents."
         }
       ],
-      "expo-web-browser",
-      "expo-splash-screen",
-      "expo-notifications",
-      "@sentry/react-native/expo"
+      "expo-web-browser"
     ],
     "extra": {
       "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",
       "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}",
       "eas": {
-        "projectId": "12d0a70a-1626-4e4c-b900-8d844978d653"
+        "projectId": "${EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID}"
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/12d0a70a-1626-4e4c-b900-8d844978d653",
+      "url": "https://u.expo.dev/${EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID}",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
-    "runtimeVersion": "0.1.0"
+    "runtimeVersion": "1.0.0"
   }
 }

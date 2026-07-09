@@ -1,4 +1,4 @@
-import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { type NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Constants from 'expo-constants';
 import { Eye, EyeOff } from 'lucide-react-native';
@@ -18,7 +18,7 @@ import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../servic
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
-import * as GoogleSignIn from '@react-native-google-signin/google-signin';
+import type GoogleSignInModule from '@react-native-google-signin/google-signin';
 
 const GOOGLE_ANDROID_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
@@ -42,11 +42,8 @@ const inputStyle = {
 };
 
 export function SignInScreen() {
-  const route = useRoute<RouteProp<RootStackParamList, 'SignIn'>>();
-  const [mode, setMode] = useState<'login' | 'register'>(route.params?.mode ?? 'login');
-  const [partnerRole, setPartnerRole] = useState<'DRIVER' | 'RIDER'>(
-    route.params?.role ?? 'DRIVER'
-  );
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [partnerRole, setPartnerRole] = useState<'DRIVER' | 'RIDER'>('DRIVER');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
@@ -119,8 +116,8 @@ export function SignInScreen() {
                 }}
               >
                 {[
-                  { role: 'RIDER' as const, label: 'Delivery Rider' },
-                  { role: 'DRIVER' as const, label: 'Driver' },
+                  { role: 'DRIVER' as const, label: 'Ride driver' },
+                  { role: 'RIDER' as const, label: 'Delivery rider' },
                 ].map((item) => {
                   const selected = partnerRole === item.role;
                   return (
@@ -227,7 +224,7 @@ export function SignInScreen() {
             mode === 'login'
               ? 'Sign in'
               : partnerRole === 'DRIVER'
-                ? 'Create driver account'
+                ? 'Create ride driver account'
                 : 'Create delivery rider account'
           }
           onPress={submit}
@@ -287,7 +284,7 @@ function GoogleSignInButton({
   async function signInWithGoogle() {
     setGoogleLoading(true);
     onError(null);
-    let googleStatusCodes: typeof GoogleSignIn.statusCodes | null = null;
+    let googleStatusCodes: GoogleSignInModule['statusCodes'] | null = null;
     try {
       const googleModule = await loadGoogleSignIn().catch(() => null);
 
@@ -437,8 +434,8 @@ function GoogleSignInButton({
   );
 }
 
-async function loadGoogleSignIn(): Promise<typeof GoogleSignIn> {
-  return GoogleSignIn;
+async function loadGoogleSignIn(): Promise<GoogleSignInModule> {
+  return import('@react-native-google-signin/google-signin');
 }
 
 function isGoogleSignInError(error: unknown, code: string) {

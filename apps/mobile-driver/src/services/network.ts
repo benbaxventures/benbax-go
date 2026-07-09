@@ -1,9 +1,9 @@
 import Constants from 'expo-constants';
 
 const API_PORT = 4000;
-const DEFAULT_API_BASE_URL = 'https://benbax-go.onrender.com/api/v1';
-const DEFAULT_SOCKET_URL = 'https://benbax-go.onrender.com';
-const REMOTE_API_HOST = 'benbax-go.onrender.com';
+const DEFAULT_API_BASE_URL = 'https://benbaxapi-production.up.railway.app/api/v1';
+const DEFAULT_SOCKET_URL = 'https://benbaxapi-production.up.railway.app';
+const RAILWAY_HOST = 'benbaxapi-production.up.railway.app';
 const USE_LOCAL_API = process.env.EXPO_PUBLIC_USE_LOCAL_API === 'true';
 
 function getConfiguredApiBaseUrl() {
@@ -71,7 +71,7 @@ function normalizeRemoteUrl(url: string) {
 
     if (
       parsedUrl.protocol === 'https:' &&
-      parsedUrl.hostname === REMOTE_API_HOST &&
+      parsedUrl.hostname === RAILWAY_HOST &&
       parsedUrl.port === '8080'
     ) {
       parsedUrl.port = '';
