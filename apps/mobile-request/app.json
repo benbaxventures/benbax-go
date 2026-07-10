@@ -57,17 +57,16 @@
       "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",
       "googleMapsApiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}",
       "eas": {
-        "projectId": "75160589-e514-4b17-82b0-cf5870857b56"
+        "projectId": "ad6d334c-8419-46f9-9f81-17aeb7d34655"
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/75160589-e514-4b17-82b0-cf5870857b56",
+      "url": "https://u.expo.dev/ad6d334c-8419-46f9-9f81-17aeb7d34655",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
     "runtimeVersion": {
       "policy": "fingerprint"
-    },
-    "owner": "a16-0s-organization"
+    }
   }
 }
