@@ -64,7 +64,7 @@
   "overrides": {
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "expo": "~54.0.0"
+    "expo": "~55.0.0"
   },
   "lint-staged": {
     "*.{ts,tsx,json,md,yml,yaml}": [

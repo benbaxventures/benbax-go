@@ -65,8 +65,6 @@
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
     },
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    }
+    "runtimeVersion": "0.1.0"
   }
 }
