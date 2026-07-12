@@ -143,6 +143,21 @@ export async function register(input: RegisterInput) {
   };
 }
 
+export async function refresh(refreshToken: string) {
+  let payload: { sub: string; role: UserRole };
+  try {
+    payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { sub: string; role: UserRole };
+  } catch {
+    throw unauthorized('Invalid or expired refresh token');
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+  if (!user) throw unauthorized('Invalid or expired refresh token');
+
+  // Rotate both tokens so a fresh 30-day refresh window starts on every use.
+  return authPayload(user);
+}
+
 export async function login(phone: string, password: string) {
   const user = await prisma.user.findUnique({ where: { phone } });
   if (!user?.passwordHash) throw unauthorized('Invalid credentials');

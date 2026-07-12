@@ -26,6 +26,12 @@ const loginSchema = z.object({
   }),
 });
 
+const refreshSchema = z.object({
+  body: z.object({
+    refreshToken: z.string().min(1),
+  }),
+});
+
 const googleLoginSchema = z.object({
   body: z
     .object({
@@ -48,6 +54,12 @@ authRouter.post(
   '/login',
   validate(loginSchema),
   asyncHandler(async (req, res) => ok(res, await service.login(req.body.phone, req.body.password)))
+);
+
+authRouter.post(
+  '/refresh',
+  validate(refreshSchema),
+  asyncHandler(async (req, res) => ok(res, await service.refresh(req.body.refreshToken)))
 );
 
 authRouter.post(
