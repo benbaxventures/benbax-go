@@ -1,0 +1,42 @@
+name: Keep backend warm
+
+# The API runs on Render's free tier, which spins the service down after ~15
+# minutes of inactivity. A cold start then takes ~50s and can surface a 500
+# while the database reconnects. This workflow pings /health on a schedule so
+# the server stays awake during active hours, keeping Sign in / Book now fast.
+#
+# Notes:
+# - GitHub cron is best-effort; runs can be delayed several minutes under load,
+#   so we ping well inside the ~15-min idle window.
+# - Scheduled workflows are paused after 60 days with no repo activity, and only
+#   run on the default branch. Re-enable from the Actions tab if that happens.
+# - For guaranteed no-sleep, upgrade the Render web service to a paid instance.
+
+on:
+  schedule:
+    # Every 10 minutes. Times are UTC.
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {} # allow manual "keep warm" runs from the Actions tab
+
+# Never run two pings at once; cancel a still-running one if a new tick fires.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API health endpoint
+        run: |
+          URL="https://benbax-go.onrender.com/health"
+          echo "Pinging $URL"
+          # Wait up to 90s so a cold start counts as success (it wakes the server,
+          # which is the whole point) rather than a failure.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 --retry 2 --retry-delay 5 "$URL" || echo "000")
+          echo "HTTP status: $code"
+          # 2xx/3xx = awake. Any other code still means the request reached and
+          # woke the service, so don't fail the workflow on a transient 5xx.
+          if [ "$code" = "000" ]; then
+            echo "::warning::No response from $URL within timeout"
+          fi

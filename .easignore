@@ -1,0 +1,54 @@
+# .easignore — trims the archive uploaded to EAS Build servers.
+# IMPORTANT: when this file exists, EAS ignores ALL .gitignore files
+# (root and nested ones like android/.gitignore), so their rules are
+# mirrored here. Syntax: same as .gitignore.
+# Docs: https://expo.fyi/eas-build-archive
+
+# ---------- mirrored from .gitignore ----------
+node_modules/
+*.env
+!.env.example
+.expo/
+dist/
+coverage/
+.DS_Store
+*.log
+nul
+
+# ---------- native build outputs (normally covered by android/.gitignore) ----------
+apps/*/android/build/
+apps/*/android/app/build/
+apps/*/android/app/.cxx/
+apps/*/android/.gradle/
+apps/*/android/local.properties
+apps/*/ios/build/
+apps/*/ios/Pods/
+
+# ---------- IDE / tooling noise ----------
+.idea/
+.vscode/
+.husky/
+.claude/
+
+# ---------- not needed for mobile builds ----------
+docs/
+.github/
+Dockerfile
+apps/Dockerfile
+docker-compose.yml
+
+# Root-level design files and reference screenshots
+/BENBAX COMPANY LTD.png
+/yango_map.jpg
+/Screenshot_*.jpg
+
+# Backend and admin dashboard sources — not part of a mobile build.
+# Their package.json files MUST stay so `npm ci` matches package-lock.json.
+apps/api/**
+!apps/api/package.json
+apps/admin/**
+!apps/admin/package.json
+
+# Both mobile apps stay in the archive so either one can be built on EAS
+# without editing this file. (Excluding the sibling app breaks its build:
+# EAS then resolves its expo-updates runtime version to null.)
