@@ -105,7 +105,7 @@ export function AnimatedSplashScreen({ onReady, minDuration = 2200 }: Props) {
       >
         <Image
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          source={require('../../assets/logo.png')}
+          source={require('../../assets/benbax-logo.png')}
           style={{ width: LOGO_SIZE * 0.72, height: LOGO_SIZE * 0.72 }}
           resizeMode="contain"
         />

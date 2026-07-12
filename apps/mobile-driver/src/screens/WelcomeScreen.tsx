@@ -28,7 +28,7 @@ export function WelcomeScreen() {
     >
       <View style={{ alignItems: 'center', gap: 14 }}>
         <Image
-          source={require('../../assets/logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+          source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
           style={{ width: 64, height: 64, borderRadius: 14 }}
           resizeMode="contain"
         />

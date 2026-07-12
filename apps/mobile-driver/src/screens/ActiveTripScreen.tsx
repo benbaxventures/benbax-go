@@ -303,16 +303,18 @@ export function ActiveTripScreen({ route, navigation }: Props) {
       {MapView && Marker && Polyline ? (
         <MapView
           style={{ flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          initialRegion={{
-            latitude: pickup.latitude,
-            longitude: pickup.longitude,
-            latitudeDelta: 0.08,
-            longitudeDelta: 0.08,
+          initialCamera={{
+            center: pickup,
+            pitch: 45,
+            heading: 0,
+            zoom: 14,
+            altitude: 1200,
           }}
           showsUserLocation
           showsMyLocationButton={false}
+          showsBuildings
           rotateEnabled
-          pitchEnabled={false}
+          pitchEnabled
         >
           <Marker coordinate={pickup} title="Pickup" description={trip?.pickupLabel}>
             <View

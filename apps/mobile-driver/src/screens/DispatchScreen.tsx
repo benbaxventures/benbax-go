@@ -393,7 +393,7 @@ export function DispatchScreen() {
           }}
         >
           <Image
-            source={require('../../assets/logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+            source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
             style={{ width: 22, height: 22, borderRadius: 5 }}
             resizeMode="contain"
           />

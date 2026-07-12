@@ -149,16 +149,18 @@ export function DeliveryDispatchScreen() {
       {isOnline && MapView && Marker && latitude && longitude ? (
         <MapView
           style={{ flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-          initialRegion={{
-            latitude,
-            longitude,
-            latitudeDelta: 0.08,
-            longitudeDelta: 0.08,
+          initialCamera={{
+            center: { latitude, longitude },
+            pitch: 55,
+            heading: 0,
+            zoom: 15,
+            altitude: 800,
           }}
           showsUserLocation
           showsMyLocationButton={false}
+          showsBuildings
           rotateEnabled
-          pitchEnabled={false}
+          pitchEnabled
         >
           <HotZoneOverlay zones={hotZones ?? []} MapView={MapView} Marker={Marker} />
         </MapView>
@@ -169,7 +171,7 @@ export function DeliveryDispatchScreen() {
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Image
-            source={require('../../assets/logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+            source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
             style={{ width: 28, height: 28, borderRadius: 6 }}
             resizeMode="contain"
           />

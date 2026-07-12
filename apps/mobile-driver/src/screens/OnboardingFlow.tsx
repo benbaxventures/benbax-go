@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import {
   BadgeCheck,
@@ -8,8 +9,9 @@ import {
   DollarSign,
   Image as ImageIcon,
 } from 'lucide-react-native';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Image,
@@ -53,6 +55,13 @@ type ImagePickerModule = {
   launchImageLibraryAsync: (
     options: Record<string, unknown>
   ) => Promise<{ canceled: boolean; assets: PickedAsset[] | null }>;
+  /** Android only: recovers a picker result after the OS killed the app while the camera was open. */
+  getPendingResultAsync?: () => Promise<{
+    canceled?: boolean;
+    assets?: PickedAsset[] | null;
+    /** Present on error results instead of assets. */
+    code?: string;
+  } | null>;
 };
 
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -64,9 +73,9 @@ function showNativePickerUnavailable(kind: string) {
   );
 }
 
-async function loadImagePicker(): Promise<ImagePickerModule | null> {
+async function loadImagePicker(silent = false): Promise<ImagePickerModule | null> {
   if (isExpoGo) {
-    showNativePickerUnavailable('camera');
+    if (!silent) showNativePickerUnavailable('camera');
     return null;
   }
 
@@ -74,8 +83,49 @@ async function loadImagePicker(): Promise<ImagePickerModule | null> {
     const module = await import('expo-image-picker');
     return module.default ?? module;
   } catch {
-    showNativePickerUnavailable('camera');
+    if (!silent) showNativePickerUnavailable('camera');
     return null;
+  }
+}
+
+// Android can kill the app process while the camera is open. Everything the
+// driver has done so far is persisted here so a cold restart resumes the flow
+// instead of starting over from step one.
+const PROGRESS_KEY = 'benbax.driver.onboardingProgress';
+const PENDING_CAPTURE_KEY = 'benbax.driver.onboardingPendingCapture';
+
+type PersistedProgress = {
+  step: OnboardingStep;
+  selfieUri: string | null;
+  selfieUploaded: boolean;
+  vehicleType: string;
+  plateNumber: string;
+  vehiclePhotoUri: string | null;
+  uploaded: Partial<Record<DocumentType, string>>;
+  localDocUris: Partial<Record<DocumentType, string>>;
+};
+
+async function markPendingCapture(type: DocumentType): Promise<void> {
+  try {
+    await AsyncStorage.setItem(PENDING_CAPTURE_KEY, type);
+  } catch {
+    // Best effort — worst case recovery is skipped.
+  }
+}
+
+async function clearPendingCapture(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(PENDING_CAPTURE_KEY);
+  } catch {
+    // Best effort.
+  }
+}
+
+async function clearPersistedProgress(): Promise<void> {
+  try {
+    await AsyncStorage.multiRemove([PROGRESS_KEY, PENDING_CAPTURE_KEY]);
+  } catch {
+    // Best effort.
   }
 }
 
@@ -157,6 +207,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const [localDocUris, setLocalDocUris] = useState<Partial<Record<DocumentType, string>>>({});
   const [uploading, setUploading] = useState<string | null>(null);
   const [stepError, setStepError] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(true);
   const fadeAnim = useRef(new Animated.Value(1)).current;
 
   const slideTo = useCallback(
@@ -178,6 +229,134 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
     [fadeAnim]
   );
 
+  // Restore persisted progress after an OS-forced restart (e.g. Android killed
+  // the app while the camera was open), then recover any photo the camera
+  // captured right before the process died.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restore() {
+      let restored: PersistedProgress | null = null;
+      let pendingType: DocumentType | null = null;
+
+      try {
+        const [rawProgress, rawPending] = await Promise.all([
+          AsyncStorage.getItem(PROGRESS_KEY),
+          AsyncStorage.getItem(PENDING_CAPTURE_KEY),
+        ]);
+        if (rawProgress) restored = JSON.parse(rawProgress) as PersistedProgress;
+        if (rawPending) pendingType = rawPending as DocumentType;
+      } catch {
+        // Corrupt/unreadable progress — start fresh rather than crash.
+      }
+
+      if (cancelled) return;
+
+      if (restored) {
+        if (STEP_ORDER.includes(restored.step)) setStep(restored.step);
+        setSelfieUri(restored.selfieUri ?? null);
+        setSelfieUploaded(Boolean(restored.selfieUploaded));
+        setVehicleType(restored.vehicleType || 'Car');
+        setPlateNumber(restored.plateNumber ?? '');
+        setVehiclePhotoUri(restored.vehiclePhotoUri ?? null);
+        setUploaded(restored.uploaded ?? {});
+        setLocalDocUris(restored.localDocUris ?? {});
+      }
+
+      setIsRestoring(false);
+
+      if (pendingType) {
+        await clearPendingCapture();
+        await recoverPendingCapture(pendingType, restored);
+      }
+    }
+
+    restore();
+    return () => {
+      cancelled = true;
+    };
+    // Runs once on mount by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep progress persisted so a process restart never loses the driver's work.
+  useEffect(() => {
+    if (isRestoring) return;
+    const progress: PersistedProgress = {
+      step,
+      selfieUri,
+      selfieUploaded,
+      vehicleType,
+      plateNumber,
+      vehiclePhotoUri,
+      uploaded,
+      localDocUris,
+    };
+    AsyncStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)).catch(() => {
+      // Best effort — persistence failing should never block the flow.
+    });
+  }, [
+    isRestoring,
+    step,
+    selfieUri,
+    selfieUploaded,
+    vehicleType,
+    plateNumber,
+    vehiclePhotoUri,
+    uploaded,
+    localDocUris,
+  ]);
+
+  async function recoverPendingCapture(type: DocumentType, restored: PersistedProgress | null) {
+    const ImagePicker = await loadImagePicker(true);
+    if (!ImagePicker?.getPendingResultAsync) return;
+
+    try {
+      // The native side may surface the pending result a moment after JS
+      // starts, so poll briefly instead of checking once.
+      let asset: PickedAsset | null | undefined = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const pending = await ImagePicker.getPendingResultAsync();
+        asset = pending && !pending.canceled && !pending.code ? pending.assets?.[0] : null;
+        if (asset?.uri) break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      if (!asset?.uri) return;
+
+      const meta = restored
+        ? { vehicleType: restored.vehicleType, plateNumber: restored.plateNumber }
+        : undefined;
+
+      if (type === 'SELFIE') {
+        setSelfieUri(asset.uri);
+        await uploadAsset(
+          'SELFIE',
+          {
+            uri: asset.uri,
+            name: 'selfie.jpg',
+            type: asset.mimeType ?? 'image/jpeg',
+          },
+          meta
+        );
+      } else if (type === 'VEHICLE_PHOTO') {
+        setVehiclePhotoUri(asset.uri);
+      } else {
+        setLocalDocUris((prev) => ({ ...prev, [type]: asset.uri }));
+        await uploadAsset(
+          type,
+          {
+            uri: asset.uri,
+            name: `${type.toLowerCase()}.jpg`,
+            type: asset.mimeType ?? 'image/jpeg',
+          },
+          meta
+        );
+      }
+    } catch {
+      // No recoverable result — the driver can simply retake the photo.
+    }
+  }
+
   async function handleSelfieCapture() {
     const ImagePicker = await loadImagePicker();
     if (!ImagePicker) return;
@@ -192,11 +371,13 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
         return;
       }
 
+      await markPendingCapture('SELFIE');
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
         quality: 0.85,
       });
+      await clearPendingCapture();
 
       if (!result.canceled && result.assets?.[0]?.uri) {
         setSelfieUri(result.assets[0].uri);
@@ -226,20 +407,24 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       if (!permission.granted) {
         const libPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!libPermission.granted) return;
+        await markPendingCapture('VEHICLE_PHOTO');
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 0.85,
         });
+        await clearPendingCapture();
         if (!result.canceled && result.assets?.[0]?.uri) {
           setVehiclePhotoUri(result.assets[0].uri);
         }
         return;
       }
 
+      await markPendingCapture('VEHICLE_PHOTO');
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         quality: 0.85,
       });
+      await clearPendingCapture();
 
       if (!result.canceled && result.assets?.[0]?.uri) {
         setVehiclePhotoUri(result.assets[0].uri);
@@ -258,10 +443,12 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       if (!permission.granted) {
         const libPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (!libPermission.granted) return;
+        await markPendingCapture(type);
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           quality: 0.85,
         });
+        await clearPendingCapture();
         if (!result.canceled && result.assets?.[0]?.uri) {
           const uri = result.assets[0].uri;
           setLocalDocUris((prev) => ({ ...prev, [type]: uri }));
@@ -274,10 +461,12 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
         return;
       }
 
+      await markPendingCapture(type);
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         quality: 0.85,
       });
+      await clearPendingCapture();
 
       if (!result.canceled && result.assets?.[0]?.uri) {
         const uri = result.assets[0].uri;
@@ -295,7 +484,8 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
 
   async function uploadAsset(
     type: string,
-    asset: { uri: string; name: string; type: string }
+    asset: { uri: string; name: string; type: string },
+    meta?: { vehicleType?: string; plateNumber?: string }
   ) {
     setUploading(type);
     setStepError(null);
@@ -335,8 +525,8 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
         body: JSON.stringify({
           documentType: type,
           fileUrl: cloudinaryBody.secure_url,
-          vehicleType,
-          plateNumber,
+          vehicleType: meta?.vehicleType ?? vehicleType,
+          plateNumber: meta?.plateNumber ?? plateNumber,
         }),
       });
 
@@ -363,11 +553,27 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
     }
 
     await completeOnboarding();
+    await clearPersistedProgress();
     onComplete();
   }
 
   function canProceedFromVehicle() {
     return vehicleType.trim().length > 0 && plateNumber.trim().length >= 3;
+  }
+
+  if (isRestoring) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: theme.colors.canvas,
+        }}
+      >
+        <ActivityIndicator color={theme.colors.primary} />
+      </View>
+    );
   }
 
   return (
@@ -385,26 +591,20 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
           <Image
-            source={require('../../assets/logo.png')}
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            source={require('../../assets/benbax-logo.png')}
             style={{ width: 28, height: 28, borderRadius: 6 }}
             resizeMode="contain"
           />
-          <Text style={{ fontSize: 17, fontWeight: '800', color: theme.colors.ink }}>
-            BENBAX
-          </Text>
+          <Text style={{ fontSize: 17, fontWeight: '800', color: theme.colors.ink }}>BENBAX</Text>
         </View>
         <StepIndicator current={step} />
       </View>
 
       {/* Scrollable step content */}
-      <ScrollView
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
-      >
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
         <Animated.View style={{ opacity: fadeAnim, gap: 16 }}>
-          {stepError ? (
-            <ErrorState message={stepError} compact variant="error" />
-          ) : null}
+          {stepError ? <ErrorState message={stepError} compact variant="error" /> : null}
 
           {/* Step 0: Welcome */}
           {step === 'welcome' && (
@@ -508,16 +708,12 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                     width: 140,
                     height: 140,
                     borderRadius: 70,
-                    backgroundColor: selfieUri
-                      ? 'transparent'
-                      : theme.colors.canvas,
+                    backgroundColor: selfieUri ? 'transparent' : theme.colors.canvas,
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'hidden',
                     borderWidth: 3,
-                    borderColor: selfieUploaded
-                      ? theme.colors.primary
-                      : theme.colors.border,
+                    borderColor: selfieUploaded ? theme.colors.primary : theme.colors.border,
                   }}
                 >
                   {selfieUri ? (
@@ -567,11 +763,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                 }}
               >
                 <View style={{ flex: 1 }}>
-                  <Button
-                    label="Back"
-                    onPress={() => slideTo('welcome')}
-                    variant="secondary"
-                  />
+                  <Button label="Back" onPress={() => slideTo('welcome')} variant="secondary" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Button
@@ -645,9 +837,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                   <Text style={{ color: theme.colors.muted, fontSize: 13, fontWeight: '600' }}>
                     Vehicle photo
                   </Text>
-                  <Text
-                    style={{ color: theme.colors.muted, fontSize: 11, marginBottom: 4 }}
-                  >
+                  <Text style={{ color: theme.colors.muted, fontSize: 11, marginBottom: 4 }}>
                     Optional — helps riders identify your vehicle
                   </Text>
                   <TouchableOpacity
@@ -671,7 +861,9 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
                           source={{ uri: vehiclePhotoUri }}
                           style={{ width: 80, height: 60, borderRadius: 6 }}
                         />
-                        <Text style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '600' }}>
+                        <Text
+                          style={{ color: theme.colors.primary, fontSize: 12, fontWeight: '600' }}
+                        >
                           Photo added
                         </Text>
                       </View>
@@ -689,11 +881,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <Button
-                    label="Back"
-                    onPress={() => slideTo('selfie')}
-                    variant="secondary"
-                  />
+                  <Button label="Back" onPress={() => slideTo('selfie')} variant="secondary" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Button
@@ -745,17 +933,10 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
 
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <Button
-                    label="Back"
-                    onPress={() => slideTo('vehicle')}
-                    variant="secondary"
-                  />
+                  <Button label="Back" onPress={() => slideTo('vehicle')} variant="secondary" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Button
-                    label="Continue"
-                    onPress={() => slideTo('complete')}
-                  />
+                  <Button label="Continue" onPress={() => slideTo('complete')} />
                 </View>
               </View>
             </>
@@ -915,7 +1096,6 @@ function SummaryRow({
 
 function DocUploadCard({
   label,
-  type,
   uploaded,
   localUri,
   uploading,
