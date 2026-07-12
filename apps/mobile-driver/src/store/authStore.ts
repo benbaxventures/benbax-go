@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
-import { apiRequest } from '../services/api';
+import { apiRequest, setUnauthorizedHandler } from '../services/api';
 
 type DriverUser = {
   id: string;
@@ -135,6 +135,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       'benbax.driver.user',
       'benbax.driver.rememberMe',
       ONBOARDING_KEY,
+      'benbax.driver.onboardingProgress',
+      'benbax.driver.onboardingPendingCapture',
     ]);
     set({ user: null, onboardingComplete: false });
   },
@@ -152,3 +154,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ onboardingComplete: true });
   },
 }));
+
+// When both access and refresh tokens are rejected, drop the in-memory session
+// so the app routes back to sign-in instead of looping on 401s.
+setUnauthorizedHandler(() => {
+  useAuthStore.setState({ user: null });
+});
