@@ -182,6 +182,12 @@ export function HomeScreen() {
 
   const deliveryStore = useDeliveryStore();
   const tripStore = useTripStore();
+  // Stable action refs for effects: subscribing to the whole store above means
+  // every store write returns a new snapshot, so putting `deliveryStore` /
+  // `tripStore` in an effect dependency array while writing to the store inside
+  // that effect loops forever ("Maximum update depth exceeded").
+  const setDeliveryPickup = useDeliveryStore((s) => s.setPickup);
+  const setTripPickup = useTripStore((s) => s.setPickup);
   const deliveryQuoteMutation = useDeliveryQuote();
   const createDeliveryMutation = useCreateDelivery();
   const tripQuoteMutation = useTripQuote();
@@ -237,19 +243,19 @@ export function HomeScreen() {
         longitude,
         landmark: (nearbyName ?? pickupLandmark) || 'Near you',
       };
-      deliveryStore.setPickup(point);
-      tripStore.setPickup(point);
+      setDeliveryPickup(point);
+      setTripPickup(point);
     }
   }, [
     detectedAddress,
     detectedLocationLabel,
-    deliveryStore,
+    setDeliveryPickup,
     latitude,
     longitude,
     nearbyName,
     pickupLandmark,
     pickupText,
-    tripStore,
+    setTripPickup,
     hasLocation,
   ]);
 

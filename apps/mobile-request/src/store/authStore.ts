@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { apiRequest } from '../services/api';
+import { apiRequest, setUnauthorizedHandler } from '../services/api';
 import {
   clearAuthSession,
   getBiometricEnabled,
@@ -88,3 +88,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, biometricEnabled, isHydrating: false });
   },
 }));
+
+// When both access and refresh tokens are rejected, drop the in-memory session
+// so the navigator routes back to sign-in instead of looping on 401s.
+setUnauthorizedHandler(() => {
+  useAuthStore.setState({ user: null, biometricEnabled: false });
+});

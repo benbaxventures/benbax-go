@@ -24,6 +24,30 @@ export async function getAccessToken() {
   }
 }
 
+export async function getRefreshToken() {
+  try {
+    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+  } catch {
+    return AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+  }
+}
+
+// Persist rotated tokens after a successful refresh, without touching the
+// stored user or rememberMe flag.
+export async function saveTokens(accessToken: string, refreshToken: string) {
+  try {
+    await Promise.all([
+      SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken),
+      SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken),
+    ]);
+  } catch {
+    await Promise.all([
+      AsyncStorage.setItem(ACCESS_TOKEN_KEY, accessToken),
+      AsyncStorage.setItem(REFRESH_TOKEN_KEY, refreshToken),
+    ]);
+  }
+}
+
 export async function saveAuthSession(
   input: {
     accessToken: string;
