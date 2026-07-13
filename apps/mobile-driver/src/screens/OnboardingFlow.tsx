@@ -375,20 +375,20 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 0.85,
+        quality: 0.5,
       });
       await clearPendingCapture();
 
       if (!result.canceled && result.assets?.[0]?.uri) {
         setSelfieUri(result.assets[0].uri);
         setSelfieUploaded(false);
-        // Auto-upload selfie
+        // Auto-upload selfie. uploadAsset marks selfieUploaded only on success,
+        // so we must not force it true here — that would mask a failed upload.
         await uploadAsset('SELFIE', {
           uri: result.assets[0].uri,
           name: 'selfie.jpg',
           type: result.assets[0].mimeType ?? 'image/jpeg',
         });
-        setSelfieUploaded(true);
       }
     } catch (error) {
       Alert.alert(
@@ -410,7 +410,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
         await markPendingCapture('VEHICLE_PHOTO');
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
-          quality: 0.85,
+          quality: 0.5,
         });
         await clearPendingCapture();
         if (!result.canceled && result.assets?.[0]?.uri) {
@@ -422,7 +422,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       await markPendingCapture('VEHICLE_PHOTO');
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        quality: 0.85,
+        quality: 0.5,
       });
       await clearPendingCapture();
 
@@ -446,7 +446,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
         await markPendingCapture(type);
         const result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
-          quality: 0.85,
+          quality: 0.5,
         });
         await clearPendingCapture();
         if (!result.canceled && result.assets?.[0]?.uri) {
@@ -464,7 +464,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       await markPendingCapture(type);
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        quality: 0.85,
+        quality: 0.5,
       });
       await clearPendingCapture();
 
@@ -508,10 +508,25 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       form.append('folder', signature.folder);
       form.append('signature', signature.signature);
 
-      const cloudinaryResponse = await fetch(
-        `https://api.cloudinary.com/v1_1/${signature.cloudName}/auto/upload`,
-        { method: 'POST', body: form }
-      );
+      // React Native's fetch has no default timeout; a stalled multipart upload
+      // on flaky mobile data would otherwise hang here forever, leaving the
+      // button stuck on "Uploading...". Abort after 90s so the error surfaces.
+      const uploadController = new AbortController();
+      const uploadTimer = setTimeout(() => uploadController.abort(), 90_000);
+      let cloudinaryResponse: Response;
+      try {
+        cloudinaryResponse = await fetch(
+          `https://api.cloudinary.com/v1_1/${signature.cloudName}/auto/upload`,
+          { method: 'POST', body: form, signal: uploadController.signal }
+        );
+      } catch (uploadError) {
+        if (uploadError instanceof Error && uploadError.name === 'AbortError') {
+          throw new Error('Upload timed out. Check your connection and try again.');
+        }
+        throw new Error('Could not reach the image server. Check your connection and try again.');
+      } finally {
+        clearTimeout(uploadTimer);
+      }
       const cloudinaryBody = (await cloudinaryResponse.json()) as {
         secure_url?: string;
         error?: { message?: string };
