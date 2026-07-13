@@ -78,7 +78,7 @@ export function TripTrackingScreen({ route, navigation }: Props) {
     isLoading,
   } = useQuery({
     queryKey: ['trip', route.params.tripId],
-    queryFn: () => apiRequest<TripDetail>(`/trips/${route.params.tripId}`),
+    queryFn: () => apiRequest<TripDetail>(`/rides/${route.params.tripId}`),
   });
 
   useEffect(() => {

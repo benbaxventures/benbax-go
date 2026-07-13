@@ -9,7 +9,7 @@ export function useTripQuote() {
       dropoff: AddressPoint;
       requestedVehicleType?: string;
     }) =>
-      apiRequest<CarTripQuote>('/trips/quote', {
+      apiRequest<CarTripQuote>('/rides/quote', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
@@ -25,7 +25,7 @@ export function useCreateTrip() {
       scheduledFor?: string;
       paymentMethod?: 'MTN_MOMO' | 'PAYSTACK_CARD' | 'WALLET' | 'CASH_ON_DELIVERY';
     }) =>
-      apiRequest<CarTripSummary>('/trips', {
+      apiRequest<CarTripSummary>('/rides', {
         method: 'POST',
         body: JSON.stringify(input),
       }),
