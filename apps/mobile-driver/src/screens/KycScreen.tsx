@@ -123,7 +123,7 @@ export function KycScreen() {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: type === 'SELFIE',
-        quality: 0.85,
+        quality: 0.5,
       });
       if (!result.canceled && result.assets) {
         const uri = result.assets[0]?.uri;
@@ -158,7 +158,7 @@ export function KycScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: type === 'SELFIE',
-        quality: 0.85,
+        quality: 0.5,
       });
       if (!result.canceled && result.assets) {
         const uri = result.assets[0]?.uri;
@@ -229,13 +229,29 @@ export function KycScreen() {
       form.append('folder', signature.folder);
       form.append('signature', signature.signature);
 
-      const cloudinaryResponse = await fetch(
-        `https://api.cloudinary.com/v1_1/${signature.cloudName}/auto/upload`,
-        {
-          method: 'POST',
-          body: form,
+      // React Native's fetch has no default timeout; a stalled multipart upload
+      // on flaky mobile data would otherwise hang here forever, leaving the
+      // button stuck on "Uploading...". Abort after 90s so the error surfaces.
+      const uploadController = new AbortController();
+      const uploadTimer = setTimeout(() => uploadController.abort(), 90_000);
+      let cloudinaryResponse: Response;
+      try {
+        cloudinaryResponse = await fetch(
+          `https://api.cloudinary.com/v1_1/${signature.cloudName}/auto/upload`,
+          {
+            method: 'POST',
+            body: form,
+            signal: uploadController.signal,
+          }
+        );
+      } catch (uploadError) {
+        if (uploadError instanceof Error && uploadError.name === 'AbortError') {
+          throw new Error('Upload timed out. Check your connection and try again.');
         }
-      );
+        throw new Error('Could not reach the image server. Check your connection and try again.');
+      } finally {
+        clearTimeout(uploadTimer);
+      }
       const cloudinaryBody = (await cloudinaryResponse.json()) as {
         secure_url?: string;
         error?: { message?: string };
@@ -270,9 +286,7 @@ export function KycScreen() {
     <Screen>
       <OfflineBanner />
       {/* Header */}
-      <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>
-        Driver KYC
-      </Text>
+      <Text style={{ fontSize: 26, fontWeight: '900', color: theme.colors.ink }}>Driver KYC</Text>
 
       {/* Progress card */}
       <View
@@ -282,8 +296,7 @@ export function KycScreen() {
           padding: 16,
           gap: 10,
           borderLeftWidth: 4,
-          borderLeftColor:
-            progressPct === 100 ? theme.colors.primary : theme.colors.accent,
+          borderLeftColor: progressPct === 100 ? theme.colors.primary : theme.colors.accent,
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -291,9 +304,7 @@ export function KycScreen() {
             size={22}
             color={progressPct === 100 ? theme.colors.primary : theme.colors.accent}
           />
-          <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
-            Identity verification
-          </Text>
+          <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>Identity verification</Text>
         </View>
         <Text style={{ color: theme.colors.muted }}>
           Upload your documents and vehicle details to start earning.
@@ -312,8 +323,7 @@ export function KycScreen() {
             style={{
               width: `${progressPct}%`,
               height: '100%',
-              backgroundColor:
-                progressPct === 100 ? theme.colors.primary : theme.colors.accent,
+              backgroundColor: progressPct === 100 ? theme.colors.primary : theme.colors.accent,
               borderRadius: 3,
             }}
           />
@@ -341,9 +351,7 @@ export function KycScreen() {
               width: 48,
               height: 48,
               borderRadius: 24,
-              backgroundColor: uploaded.SELFIE
-                ? theme.colors.primary + '20'
-                : theme.colors.border,
+              backgroundColor: uploaded.SELFIE ? theme.colors.primary + '20' : theme.colors.border,
               alignItems: 'center',
               justifyContent: 'center',
               overflow: 'hidden',
@@ -355,7 +363,10 @@ export function KycScreen() {
                 style={{ width: 48, height: 48, borderRadius: 24 }}
               />
             ) : (
-              <Camera size={22} color={uploaded.SELFIE ? theme.colors.primary : theme.colors.muted} />
+              <Camera
+                size={22}
+                color={uploaded.SELFIE ? theme.colors.primary : theme.colors.muted}
+              />
             )}
           </View>
           <View style={{ flex: 1 }}>
@@ -368,9 +379,7 @@ export function KycScreen() {
                 : 'Take a clear photo of your face to verify your identity'}
             </Text>
           </View>
-          {uploaded.SELFIE ? (
-            <CheckCircle2 size={22} color={theme.colors.primary} />
-          ) : null}
+          {uploaded.SELFIE ? <CheckCircle2 size={22} color={theme.colors.primary} /> : null}
         </View>
 
         {uploaded.SELFIE ? (
@@ -478,9 +487,7 @@ export function KycScreen() {
                     width: 56,
                     height: 56,
                     borderRadius: 8,
-                    backgroundColor: isUploaded
-                      ? theme.colors.primary + '10'
-                      : theme.colors.canvas,
+                    backgroundColor: isUploaded ? theme.colors.primary + '10' : theme.colors.canvas,
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'hidden',
@@ -504,14 +511,10 @@ export function KycScreen() {
                     <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
                       {document.label}
                     </Text>
-                    {isUploaded ? (
-                      <CheckCircle2 size={16} color={theme.colors.primary} />
-                    ) : null}
+                    {isUploaded ? <CheckCircle2 size={16} color={theme.colors.primary} /> : null}
                   </View>
                   <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
-                    {isUploaded
-                      ? 'Submitted for review'
-                      : 'Capture or upload a clear image'}
+                    {isUploaded ? 'Submitted for review' : 'Capture or upload a clear image'}
                   </Text>
                 </View>
 
