@@ -3,8 +3,10 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
+import { realtimeEvents } from '../../realtime/events';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { created, ok } from '../../utils/response';
+import { sendExpoPushToRole } from '../notifications/push';
 import * as service from './auth.service';
 
 export const authRouter = Router();
@@ -47,7 +49,27 @@ const googleLoginSchema = z.object({
 authRouter.post(
   '/register',
   validate(registerSchema),
-  asyncHandler(async (req, res) => created(res, await service.register(req.body)))
+  asyncHandler(async (req, res) => {
+    const result = await service.register(req.body);
+
+    // Notify drivers when a new passenger joins: an in-app realtime event for
+    // drivers who are online, plus a push for those who aren't.
+    if (result.user.role === UserRole.CUSTOMER) {
+      const io = req.app.get('io');
+      io?.to('drivers').emit(realtimeEvents.clientRegistered, {
+        id: result.user.id,
+        name: result.user.name,
+        joinedAt: new Date().toISOString(),
+      });
+      void sendExpoPushToRole(UserRole.DRIVER, {
+        title: 'New passenger on Benbax',
+        body: `${result.user.name} just joined. More riders means more trips.`,
+        data: { type: 'client-registered', clientId: result.user.id },
+      });
+    }
+
+    return created(res, result);
+  })
 );
 
 authRouter.post(

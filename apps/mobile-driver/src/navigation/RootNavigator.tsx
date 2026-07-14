@@ -102,6 +102,15 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
           ]
         );
       });
+      socket.on(realtimeEvents.clientRegistered, (client: { name?: string }) => {
+        void presentLocalOffer({
+          title: 'New passenger on Benbax',
+          body: client?.name
+            ? `${client.name} just joined. More riders means more trips.`
+            : 'A new passenger just joined. More riders means more trips.',
+          data: { type: 'client-registered' },
+        });
+      });
       socket.on(realtimeEvents.rideAssigned, (assignment) => {
         if (assignment.tripId) setCurrentRideOffer(null);
       });

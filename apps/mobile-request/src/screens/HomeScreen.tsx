@@ -28,12 +28,14 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
 import { MapMarker, MapView } from '../components/MapView';
+import { useClientPresence } from '../hooks/useClientPresence';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
 import { useInitializePayment } from '../hooks/usePayments';
 import { useCreateTrip, useTripQuote } from '../hooks/useTrips';
 import type { RootStackParamList } from '../navigation/types';
 import type { AddressPoint, DeliveryCategory } from '../shared';
+import { useAuthStore } from '../store/authStore';
 import { useDeliveryStore } from '../store/deliveryStore';
 import { useTripStore } from '../store/tripStore';
 import { theme } from '../theme/tokens';
@@ -202,6 +204,16 @@ export function HomeScreen() {
     nearbyName,
     requestLocation,
   } = useCurrentLocation();
+
+  // Announce this passenger's live location to the server so nearby online
+  // drivers see them on the dispatch map while they're browsing for a ride.
+  const currentUserName = useAuthStore((s) => s.user?.name);
+  useClientPresence({
+    enabled: true,
+    latitude,
+    longitude,
+    ...(currentUserName ? { name: currentUserName } : {}),
+  });
 
   const [pickupText, setPickupText] = useState('Current location');
   const [dropoffText, setDropoffText] = useState('');
@@ -468,7 +480,7 @@ export function HomeScreen() {
               }}
             >
               <Image
-                source={require('../../assets/logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+                source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
                 style={{ width: 28, height: 28, borderRadius: 6 }}
                 resizeMode="contain"
               />

@@ -1,3 +1,4 @@
+import type { UserRole } from '@prisma/client';
 import axios from 'axios';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
@@ -37,9 +38,31 @@ function chunk<T>(items: T[], size: number): T[][] {
  * dispatch. Tokens that Expo reports as unregistered are pruned from the DB.
  */
 export async function sendExpoPushToUser(userId: string, message: PushMessage): Promise<void> {
+  return sendExpoPushToTokens(
+    (await prisma.deviceToken.findMany({ where: { userId } })).map((d) => d.token),
+    message
+  );
+}
+
+/**
+ * Sends a push to every device belonging to any user with the given role.
+ * Best-effort — used for broadcast-style alerts such as notifying all drivers
+ * that a new passenger just registered. Never throws.
+ */
+export async function sendExpoPushToRole(role: UserRole, message: PushMessage): Promise<void> {
+  const devices = await prisma.deviceToken.findMany({
+    where: { user: { role } },
+    select: { token: true },
+  });
+  return sendExpoPushToTokens(
+    devices.map((d) => d.token),
+    message
+  );
+}
+
+async function sendExpoPushToTokens(rawTokens: string[], message: PushMessage): Promise<void> {
   try {
-    const devices = await prisma.deviceToken.findMany({ where: { userId } });
-    const tokens = devices.map((device) => device.token).filter(isExpoToken);
+    const tokens = rawTokens.filter(isExpoToken);
     if (tokens.length === 0) return;
 
     const headers: Record<string, string> = {

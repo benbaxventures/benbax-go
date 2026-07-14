@@ -5,6 +5,7 @@ import { prisma } from '../../config/prisma';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { realtimeEvents } from '../../realtime/events';
+import { clientsNear } from '../../realtime/presence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
@@ -206,6 +207,34 @@ driversRouter.get(
       acceptanceRate,
       completionRate,
     });
+  })
+);
+
+driversRouter.get(
+  '/me/nearby-clients',
+  requireRoles(UserRole.DRIVER),
+  asyncHandler(async (req, res) => {
+    const driver = await prisma.driverProfile.findUnique({
+      where: { userId: req.user!.id },
+      select: { currentLatitude: true, currentLongitude: true },
+    });
+    if (!driver) throw notFound('Driver profile not found');
+
+    // Without a known location we can't scope by distance; return an empty
+    // snapshot and let the live socket stream fill in as the driver moves.
+    if (driver.currentLatitude == null || driver.currentLongitude == null) {
+      return ok(res, []);
+    }
+
+    const radiusKm = Number(req.query.radiusKm) || 10;
+    const nearby = clientsNear(
+      {
+        latitude: Number(driver.currentLatitude),
+        longitude: Number(driver.currentLongitude),
+      },
+      radiusKm
+    );
+    return ok(res, nearby);
   })
 );
 

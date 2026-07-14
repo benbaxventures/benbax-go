@@ -50,7 +50,16 @@ ridesRouter.post(
 
 ridesRouter.post(
   '/',
-  requireRoles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.OPERATIONS),
+  // Any authenticated end user can request a ride as a passenger. Drivers and
+  // riders are people too, so a phone number registered on another app must not
+  // be blocked from booking (previously returned 403 "Permission denied").
+  requireRoles(
+    UserRole.CUSTOMER,
+    UserRole.RIDER,
+    UserRole.DRIVER,
+    UserRole.ADMIN,
+    UserRole.OPERATIONS
+  ),
   validate(createSchema),
   asyncHandler(async (req, res) => {
     const trip = await service.createRide({

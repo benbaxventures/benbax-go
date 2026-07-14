@@ -5,10 +5,10 @@
     "scheme": "benbax",
     "version": "0.1.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/benbax-logo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/benbax-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#0E7C66"
     },
@@ -40,7 +40,7 @@
       ],
       "adaptiveIcon": {
         "backgroundColor": "#0E7C66",
-        "foregroundImage": "./assets/logo.png"
+        "foregroundImage": "./assets/benbax-logo.png"
       }
     },
     "plugins": [
@@ -51,7 +51,15 @@
       "expo-local-authentication",
       "expo-updates",
       "expo-web-browser",
-      "expo-splash-screen"
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/benbax-logo.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0E7C66"
+        }
+      ]
     ],
     "extra": {
       "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",

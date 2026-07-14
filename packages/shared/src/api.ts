@@ -37,4 +37,11 @@ export const realtimeEvents = {
   adminAlert: 'admin:alert',
   chatMessage: 'chat:message',
   userPresence: 'user:presence',
+  // A new passenger just registered on the request app (drivers are notified).
+  clientRegistered: 'client:registered',
+  // Live passenger-presence stream consumed by online drivers.
+  clientsNearby: 'clients:nearby',
+  clientOnline: 'client:online',
+  clientMoved: 'client:moved',
+  clientOffline: 'client:offline',
 } as const;

@@ -55,7 +55,15 @@ deliveriesRouter.post(
 
 deliveriesRouter.post(
   '/',
-  requireRoles(UserRole.CUSTOMER, UserRole.ADMIN, UserRole.OPERATIONS),
+  // Any authenticated end user can request a delivery. Blocking non-CUSTOMER
+  // roles here surfaced as a 403 "Permission denied" when booking.
+  requireRoles(
+    UserRole.CUSTOMER,
+    UserRole.RIDER,
+    UserRole.DRIVER,
+    UserRole.ADMIN,
+    UserRole.OPERATIONS
+  ),
   validate(createSchema),
   asyncHandler(async (req, res) => {
     const delivery = await service.createDelivery({

@@ -126,7 +126,7 @@ export function SignInScreen() {
       <View style={{ gap: 18 }}>
         <View style={{ alignItems: 'center', gap: 12 }}>
           <Image
-            source={require('../../assets/logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+            source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
             style={{ width: 80, height: 80, borderRadius: 16 }}
             resizeMode="contain"
           />

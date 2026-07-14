@@ -112,7 +112,7 @@ export function BiometricGateScreen({ onSuccess }: { onSuccess: () => void }) {
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', gap: 24 }}>
         {/* App branding */}
         <Image
-          source={require('../../assets/logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+          source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
           style={{ width: 100, height: 100, borderRadius: 20 }}
           resizeMode="contain"
         />
