@@ -1,8 +1,8 @@
-import { realtimeEvents } from '@benbax/shared';
 import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDateTime, formatRelativeTime } from '../lib/format';
+import { realtimeEvents } from '../lib/realtimeEvents';
 import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
 

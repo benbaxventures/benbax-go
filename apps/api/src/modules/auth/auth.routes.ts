@@ -25,7 +25,10 @@ const registerSchema = z.object({
     phone: z.string().min(8),
     email: z.string().email().optional(),
     password: z.string().min(8),
-    role: z.nativeEnum(UserRole).optional(),
+    // Public self-registration is for end users only. Staff accounts (ADMIN,
+    // OPERATIONS, SUPPORT) must be provisioned by an existing admin or seed —
+    // accepting them here would let anyone mint an admin account.
+    role: z.enum([UserRole.CUSTOMER, UserRole.RIDER, UserRole.DRIVER]).optional(),
   }),
 });
 

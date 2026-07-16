@@ -45,3 +45,27 @@ export const env = envSchema.parse(process.env);
 export const corsOrigins = env.CORS_ORIGINS.split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+// Hosted admin dashboard domains (Vercel). The production alias is stable; the
+// per-deployment URLs are random, so they are matched by pattern. Kept in code
+// so a dashboard deploy never silently breaks on a forgotten env update —
+// additional origins can still be added via CORS_ORIGINS.
+const ADMIN_DASHBOARD_ORIGIN_PATTERNS = [
+  /^https:\/\/admin-henna-eta-88\.vercel\.app$/,
+  /^https:\/\/admin-[a-z0-9]+-bright-anyawes-projects\.vercel\.app$/,
+];
+
+export function isAllowedOrigin(origin: string): boolean {
+  if (corsOrigins.includes(origin)) return true;
+  return ADMIN_DASHBOARD_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin));
+}
+
+// cors-package-compatible origin callback, shared by Express and Socket.IO.
+export function corsOriginHandler(
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void
+) {
+  // Non-browser clients (curl, mobile apps, server-to-server) send no Origin.
+  if (!origin || isAllowedOrigin(origin)) return callback(null, true);
+  return callback(null, false);
+}

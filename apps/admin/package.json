@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@benbax/shared": "file:../../packages/shared",
     "@tanstack/react-query": "^5.74.4",
     "lucide-react": "^0.511.0",
     "react": "19.2.0",

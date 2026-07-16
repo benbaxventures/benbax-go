@@ -1,7 +1,7 @@
 import http from 'http';
 import { Server } from 'socket.io';
 import { createApp } from './app';
-import { corsOrigins, env } from './config/env';
+import { corsOriginHandler, env } from './config/env';
 import { redis } from './config/redis';
 import { registerRealtimeHandlers } from './realtime/socket';
 
@@ -10,7 +10,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: corsOrigins,
+    origin: corsOriginHandler,
     credentials: true,
   },
 });

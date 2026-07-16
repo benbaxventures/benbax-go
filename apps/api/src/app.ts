@@ -4,7 +4,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import { corsOrigins } from './config/env';
+import { corsOriginHandler } from './config/env';
 import { prisma } from './config/prisma';
 import { errorHandler } from './middleware/error';
 import { apiRouter } from './routes';
@@ -16,7 +16,7 @@ export function createApp() {
   app.use(helmet());
   app.use(
     cors({
-      origin: corsOrigins,
+      origin: corsOriginHandler,
       credentials: true,
     })
   );

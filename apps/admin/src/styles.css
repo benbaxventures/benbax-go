@@ -140,6 +140,24 @@ input {
   font-weight: 700;
 }
 
+.form-notice {
+  color: #0e7c66;
+  font-weight: 700;
+}
+
+.login-panel .link-button,
+.link-button {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0e7c66;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  justify-self: start;
+}
+
 .shell {
   min-height: 100vh;
   display: grid;

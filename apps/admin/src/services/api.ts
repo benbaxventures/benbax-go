@@ -1,4 +1,8 @@
-import type { ApiResponse } from '@benbax/shared';
+// Mirrors packages/shared/src/api.ts's ApiResponse. Duplicated locally so this
+// app builds standalone when deployed from a subdirectory-only checkout.
+type ApiResponse<T> =
+  | { ok: true; data: T; meta?: Record<string, unknown> }
+  | { ok: false; error: { message: string; code?: string } };
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000/api/v1';
 
