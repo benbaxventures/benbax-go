@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Bike, CircleDollarSign, PackageCheck, Users } from 'lucide-react';
+import { Activity, AlertTriangle, Bike, CircleDollarSign, PackageCheck, Users } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -10,16 +10,8 @@ import {
   YAxis,
 } from 'recharts';
 import { MetricCard } from '../components/MetricCard';
+import { formatDateTime } from '../lib/format';
 import { apiRequest } from '../services/api';
-
-const demand = [
-  { hour: '06', orders: 18 },
-  { hour: '09', orders: 42 },
-  { hour: '12', orders: 64 },
-  { hour: '15', orders: 51 },
-  { hour: '18', orders: 88 },
-  { hour: '21', orders: 39 },
-];
 
 type Dashboard = {
   users: number;
@@ -28,10 +20,54 @@ type Dashboard = {
   revenueGhs: number;
 };
 
+type ActivityEvent = {
+  id: string;
+  type: string;
+  title: string;
+  detail: string;
+  at: string;
+};
+
+type DemandPoint = {
+  hour: string;
+  deliveries: number;
+  rides: number;
+  total: number;
+};
+
+type StuckOrder = {
+  id: string;
+  kind: 'DELIVERY' | 'RIDE';
+  code: string;
+  status: string;
+  problem: string;
+  pickupLabel: string;
+  requester: { name: string; phone: string };
+  ageMinutes: number;
+};
+
 export function DashboardPage() {
   const { data } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: () => apiRequest<Dashboard>('/admin/dashboard'),
+  });
+
+  const { data: activity } = useQuery({
+    queryKey: ['admin-activity'],
+    queryFn: () => apiRequest<ActivityEvent[]>('/admin/activity'),
+    refetchInterval: 15_000,
+  });
+
+  const { data: demand } = useQuery({
+    queryKey: ['admin-demand'],
+    queryFn: () => apiRequest<DemandPoint[]>('/admin/demand'),
+    refetchInterval: 60_000,
+  });
+
+  const { data: stuckOrders } = useQuery({
+    queryKey: ['admin-stuck-orders'],
+    queryFn: () => apiRequest<StuckOrder[]>('/admin/orders/stuck'),
+    refetchInterval: 30_000,
   });
 
   return (
@@ -74,42 +110,89 @@ export function DashboardPage() {
       <div className="panel-grid">
         <div className="panel span-2">
           <div className="panel-header">
-            <h2>Demand curve</h2>
+            <h2>Demand — last 24h (live)</h2>
             <Activity size={18} />
           </div>
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={demand}>
+            <AreaChart data={demand ?? []}>
               <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
               <XAxis dataKey="hour" stroke="#5B6472" />
-              <YAxis stroke="#5B6472" />
+              <YAxis stroke="#5B6472" allowDecimals={false} />
               <Tooltip />
-              <Area type="monotone" dataKey="orders" stroke="#0E7C66" fill="#0E7C6633" />
+              <Area
+                type="monotone"
+                dataKey="deliveries"
+                name="Deliveries"
+                stackId="demand"
+                stroke="#0E7C66"
+                fill="#0E7C6633"
+              />
+              <Area
+                type="monotone"
+                dataKey="rides"
+                name="Rides"
+                stackId="demand"
+                stroke="#2563EB"
+                fill="#2563EB33"
+              />
             </AreaChart>
           </ResponsiveContainer>
         </div>
         <div className="panel">
           <div className="panel-header">
-            <h2>Dispatch quality</h2>
+            <h2>Needs attention</h2>
+            <span className={`status-chip${stuckOrders?.length ? ' chip-danger' : ''}`}>
+              <AlertTriangle size={14} />
+              &nbsp;{stuckOrders?.length ?? 0}
+            </span>
           </div>
           <ul className="dense-list">
-            <li>
-              <strong>Nearest rider match</strong>
-              <span>Fresh GPS under 60s</span>
-            </li>
-            <li>
-              <strong>Batching readiness</strong>
-              <span>Food and courier clusters</span>
-            </li>
-            <li>
-              <strong>Risk scan</strong>
-              <span>No active severe alerts</span>
-            </li>
-            <li>
-              <strong>Support SLA</strong>
-              <span>Median first reply 2m</span>
-            </li>
+            {stuckOrders?.length ? (
+              stuckOrders.slice(0, 6).map((order) => (
+                <li key={`${order.kind}-${order.id}`}>
+                  <strong>
+                    {order.code}
+                    <span className="muted table-subtext">
+                      {order.problem} · {order.requester.name}
+                    </span>
+                  </strong>
+                  <span>{order.ageMinutes}m</span>
+                </li>
+              ))
+            ) : (
+              <li>
+                <strong>All clear</strong>
+                <span>No stuck orders</span>
+              </li>
+            )}
           </ul>
         </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2>Recent user &amp; driver activity</h2>
+          <span className="live-dot">Live</span>
+        </div>
+        {activity?.length ? (
+          <ul className="timeline timeline-columns">
+            {activity.slice(0, 20).map((event) => (
+              <li key={event.id}>
+                <div className="timeline-row">
+                  <strong>{event.title}</strong>
+                  <time>{formatDateTime(event.at)}</time>
+                </div>
+                <span className="muted">
+                  {event.type} · {event.detail}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="muted">
+            No recent activity — registrations, logins, orders, and rides will appear here.
+          </p>
+        )}
       </div>
     </section>
   );

@@ -1,11 +1,20 @@
-import type { PaymentMethod } from '@prisma/client';
-import { Prisma, RideTripStatus } from '@prisma/client';
+import type { PaymentMethod, UserRole } from '@prisma/client';
+import { CancelActor, Prisma, RideTripStatus } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
-import { notFound } from '../../utils/http';
+import { badRequest, forbidden, notFound } from '../../utils/http';
 import { estimateRide } from '../dispatch/dispatch.engine';
+import { recordTripStatusEvent } from '../orders/status-events';
 import { settleRideTrip } from '../payments/settlement';
 import { buildExpectedRoute } from '../tracking/routeSafety';
+
+const CANCELLABLE_STATUSES: RideTripStatus[] = [
+  RideTripStatus.REQUESTED,
+  RideTripStatus.ASSIGNING,
+  RideTripStatus.ASSIGNED,
+  RideTripStatus.DRIVER_ARRIVING,
+  RideTripStatus.ARRIVED,
+];
 
 type CoordinateInput = {
   label: string;
@@ -42,7 +51,7 @@ export async function createRide(input: CreateRideInput) {
     { latitude: input.dropoff.latitude, longitude: input.dropoff.longitude }
   );
 
-  return prisma.rideTrip.create({
+  const trip = await prisma.rideTrip.create({
     data: {
       tripCode: `RIDE-${nanoid(8).toUpperCase()}`,
       passengerId: input.passengerId,
@@ -85,6 +94,15 @@ export async function createRide(input: CreateRideInput) {
       assignments: true,
     },
   });
+
+  await recordTripStatusEvent(trip.id, {
+    fromStatus: null,
+    toStatus: RideTripStatus.REQUESTED,
+    actorId: input.passengerId,
+    note: 'Ride requested',
+  });
+
+  return trip;
 }
 
 export async function listPassengerRides(passengerId: string) {
@@ -120,11 +138,22 @@ export async function getRide(id: string, requesterId: string) {
   return ride;
 }
 
-export async function updateRideStatus(id: string, status: RideTripStatus) {
+export async function updateRideStatus(id: string, status: RideTripStatus, actorId?: string) {
+  const current = await prisma.rideTrip.findUnique({ where: { id }, select: { status: true } });
+  if (!current) throw notFound('Ride trip not found');
+
   await prisma.rideTrip.update({
     where: { id },
     data: { status },
   });
+
+  if (current.status !== status) {
+    await recordTripStatusEvent(id, {
+      fromStatus: current.status,
+      toStatus: status,
+      actorId: actorId ?? null,
+    });
+  }
 
   // Completing a trip settles the fare: credits the driver's wallet (digital)
   // or records commission owed (cash), and releases the driver back to ACTIVE.
@@ -136,4 +165,86 @@ export async function updateRideStatus(id: string, status: RideTripStatus) {
     where: { id },
     include: { payment: true },
   });
+}
+
+function resolveCancelActor(
+  requester: { id: string; role: UserRole },
+  ownerId: string
+): CancelActor {
+  if (requester.id === ownerId) return CancelActor.CUSTOMER;
+  if (
+    requester.role === 'ADMIN' ||
+    requester.role === 'OPERATIONS' ||
+    requester.role === 'SUPPORT'
+  ) {
+    return CancelActor.ADMIN;
+  }
+  if (requester.role === 'DRIVER') return CancelActor.DRIVER;
+  if (requester.role === 'RIDER') return CancelActor.RIDER;
+  return CancelActor.SYSTEM;
+}
+
+export async function cancelRide(
+  id: string,
+  requester: { id: string; role: UserRole },
+  reason?: string
+) {
+  const trip = await prisma.rideTrip.findUnique({
+    where: { id },
+    include: {
+      assignments: {
+        where: { status: { in: ['OFFERED', 'ACCEPTED'] } },
+        include: { driverProfile: { select: { id: true, userId: true } } },
+      },
+    },
+  });
+  if (!trip) throw notFound('Ride trip not found');
+
+  const isOwner = trip.passengerId === requester.id;
+  const isStaff =
+    requester.role === 'ADMIN' || requester.role === 'OPERATIONS' || requester.role === 'SUPPORT';
+  const isAssignedDriver = trip.assignments.some(
+    (assignment) => assignment.driverProfile.userId === requester.id
+  );
+  if (!isOwner && !isStaff && !isAssignedDriver) {
+    throw forbidden('You cannot cancel this ride');
+  }
+
+  if (trip.status === RideTripStatus.CANCELLED) return trip;
+  if (!CANCELLABLE_STATUSES.includes(trip.status)) {
+    throw badRequest(`Ride can no longer be cancelled (status: ${trip.status})`);
+  }
+
+  const cancelledBy = resolveCancelActor(requester, trip.passengerId);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Release the driver and expire open offers so they can take new trips.
+    for (const assignment of trip.assignments) {
+      await tx.rideAssignment.update({
+        where: { id: assignment.id },
+        data: { status: 'EXPIRED', respondedAt: assignment.respondedAt ?? new Date() },
+      });
+      await tx.driverProfile.update({
+        where: { id: assignment.driverProfile.id },
+        data: { status: 'ACTIVE' },
+      });
+    }
+    return tx.rideTrip.update({
+      where: { id },
+      data: {
+        status: RideTripStatus.CANCELLED,
+        cancelledBy,
+        cancellationReason: reason ?? null,
+      },
+    });
+  });
+
+  await recordTripStatusEvent(id, {
+    fromStatus: trip.status,
+    toStatus: RideTripStatus.CANCELLED,
+    actorId: requester.id,
+    note: reason ? `Cancelled by ${cancelledBy}: ${reason}` : `Cancelled by ${cancelledBy}`,
+  });
+
+  return updated;
 }

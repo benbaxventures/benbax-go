@@ -8,6 +8,7 @@ import { badRequest, notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
 import { rankRiders } from '../dispatch/dispatch.engine';
 import { sendExpoPushToUser } from '../notifications/push';
+import { recordTripStatusEvent } from '../orders/status-events';
 
 export const rideDispatchRouter = Router();
 
@@ -73,6 +74,13 @@ rideDispatchRouter.post(
       data: { status: 'ASSIGNING' },
     });
 
+    await recordTripStatusEvent(trip.id, {
+      fromStatus: trip.status,
+      toStatus: 'ASSIGNING',
+      actorId: req.user!.id,
+      note: `Manually dispatched to ${assignment.driverProfile.user.name}`,
+    });
+
     const io = req.app.get('io');
     io?.to(`driver:${assignment.driverProfile.userId}`).emit(
       realtimeEvents.driverOffer,
@@ -125,6 +133,13 @@ rideDispatchRouter.post(
         driverProfile: { include: { user: true, vehicle: true } },
         trip: true,
       },
+    });
+
+    await recordTripStatusEvent(assignment.tripId, {
+      fromStatus: 'ASSIGNING',
+      toStatus: 'ASSIGNED',
+      actorId: req.user!.id,
+      note: 'Driver accepted the offer',
     });
 
     const io = req.app.get('io');

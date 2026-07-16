@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
+import { realtimeEvents } from '../../realtime/events';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { created, ok } from '../../utils/response';
 import { dispatchDelivery } from '../dispatch/dispatch.service';
@@ -43,6 +44,14 @@ const createSchema = z.object({
 const statusSchema = z.object({
   params: z.object({ id: z.string().min(1) }),
   body: z.object({ status: z.nativeEnum(DeliveryStatus) }),
+});
+
+const cancelSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: z
+    .object({ reason: z.string().max(300).optional() })
+    .optional()
+    .default({}),
 });
 
 deliveriesRouter.use(requireAuth);
@@ -100,6 +109,19 @@ deliveriesRouter.patch(
   requireRoles(UserRole.RIDER, UserRole.ADMIN, UserRole.OPERATIONS),
   validate(statusSchema),
   asyncHandler(async (req, res) =>
-    ok(res, await service.updateDeliveryStatus(req.params.id!, req.body.status))
+    ok(res, await service.updateDeliveryStatus(req.params.id!, req.body.status, req.user!.id))
   )
+);
+
+deliveriesRouter.post(
+  '/:id/cancel',
+  validate(cancelSchema),
+  asyncHandler(async (req, res) => {
+    const delivery = await service.cancelDelivery(req.params.id!, req.user!, req.body?.reason);
+    const io = req.app.get('io');
+    io?.to(`delivery:${delivery.id}`).emit(realtimeEvents.deliveryUpdated, delivery);
+    io?.to(`user:${delivery.customerId}`).emit(realtimeEvents.deliveryUpdated, delivery);
+    io?.to('admins').emit(realtimeEvents.deliveryUpdated, delivery);
+    return ok(res, delivery);
+  })
 );

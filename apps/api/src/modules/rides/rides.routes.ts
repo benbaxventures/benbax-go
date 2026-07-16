@@ -40,6 +40,14 @@ const statusSchema = z.object({
   body: z.object({ status: z.nativeEnum(RideTripStatus) }),
 });
 
+const cancelSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+  body: z
+    .object({ reason: z.string().max(300).optional() })
+    .optional()
+    .default({}),
+});
+
 ridesRouter.use(requireAuth);
 
 ridesRouter.post(
@@ -100,6 +108,19 @@ ridesRouter.patch(
   requireRoles(UserRole.DRIVER, UserRole.ADMIN, UserRole.OPERATIONS),
   validate(statusSchema),
   asyncHandler(async (req, res) =>
-    ok(res, await service.updateRideStatus(req.params.id!, req.body.status))
+    ok(res, await service.updateRideStatus(req.params.id!, req.body.status, req.user!.id))
   )
+);
+
+ridesRouter.post(
+  '/:id/cancel',
+  validate(cancelSchema),
+  asyncHandler(async (req, res) => {
+    const trip = await service.cancelRide(req.params.id!, req.user!, req.body?.reason);
+    const io = req.app.get('io');
+    io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, trip);
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, trip);
+    io?.to('admins').emit(realtimeEvents.rideUpdated, trip);
+    return ok(res, trip);
+  })
 );

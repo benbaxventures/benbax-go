@@ -5,10 +5,11 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:4000';
 type SocketHandler = (socket: Socket) => void;
 
 export function createRealtimeClient(onReady?: SocketHandler) {
-  const token = localStorage.getItem('benbax.admin.accessToken');
   const socket = io(SOCKET_URL, {
     transports: ['websocket', 'polling'],
-    auth: { token },
+    // Read the token per connection attempt so reconnects after a token
+    // refresh authenticate with the fresh token, not the one from page load.
+    auth: (cb) => cb({ token: localStorage.getItem('benbax.admin.accessToken') }),
     reconnection: true,
     reconnectionAttempts: 10,
     reconnectionDelay: 1000,

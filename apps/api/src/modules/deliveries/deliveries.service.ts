@@ -1,10 +1,19 @@
-import type { DeliveryCategory } from '@prisma/client';
-import { DeliveryStatus, Prisma } from '@prisma/client';
+import type { DeliveryCategory, UserRole } from '@prisma/client';
+import { CancelActor, DeliveryStatus, Prisma } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
-import { notFound } from '../../utils/http';
+import { badRequest, forbidden, notFound } from '../../utils/http';
 import { estimateDelivery } from '../dispatch/dispatch.engine';
+import { recordDeliveryStatusEvent } from '../orders/status-events';
 import { buildExpectedRoute } from '../tracking/routeSafety';
+
+const CANCELLABLE_STATUSES: DeliveryStatus[] = [
+  DeliveryStatus.DRAFT,
+  DeliveryStatus.REQUESTED,
+  DeliveryStatus.ASSIGNING,
+  DeliveryStatus.ASSIGNED,
+  DeliveryStatus.PICKING_UP,
+];
 
 type CoordinateInput = {
   label: string;
@@ -47,7 +56,7 @@ export async function createDelivery(input: CreateDeliveryInput) {
     { latitude: input.dropoff.latitude, longitude: input.dropoff.longitude }
   );
 
-  return prisma.delivery.create({
+  const delivery = await prisma.delivery.create({
     data: {
       trackingCode: `BBX-${nanoid(8).toUpperCase()}`,
       customerId: input.customerId,
@@ -96,6 +105,15 @@ export async function createDelivery(input: CreateDeliveryInput) {
       assignments: true,
     },
   });
+
+  await recordDeliveryStatusEvent(delivery.id, {
+    fromStatus: null,
+    toStatus: DeliveryStatus.REQUESTED,
+    actorId: input.customerId,
+    note: 'Delivery requested',
+  });
+
+  return delivery;
 }
 
 export async function listCustomerDeliveries(customerId: string) {
@@ -131,9 +149,104 @@ export async function getDelivery(id: string, requesterId: string) {
   return delivery;
 }
 
-export async function updateDeliveryStatus(id: string, status: DeliveryStatus) {
-  return prisma.delivery.update({
+export async function updateDeliveryStatus(id: string, status: DeliveryStatus, actorId?: string) {
+  const current = await prisma.delivery.findUnique({ where: { id }, select: { status: true } });
+  if (!current) throw notFound('Delivery not found');
+
+  const updated = await prisma.delivery.update({
     where: { id },
     data: { status },
   });
+
+  if (current.status !== status) {
+    await recordDeliveryStatusEvent(id, {
+      fromStatus: current.status,
+      toStatus: status,
+      actorId: actorId ?? null,
+    });
+  }
+
+  return updated;
+}
+
+function resolveCancelActor(
+  requester: { id: string; role: UserRole },
+  ownerId: string
+): CancelActor {
+  if (requester.id === ownerId) return CancelActor.CUSTOMER;
+  if (
+    requester.role === 'ADMIN' ||
+    requester.role === 'OPERATIONS' ||
+    requester.role === 'SUPPORT'
+  ) {
+    return CancelActor.ADMIN;
+  }
+  if (requester.role === 'RIDER') return CancelActor.RIDER;
+  if (requester.role === 'DRIVER') return CancelActor.DRIVER;
+  return CancelActor.SYSTEM;
+}
+
+export async function cancelDelivery(
+  id: string,
+  requester: { id: string; role: UserRole },
+  reason?: string
+) {
+  const delivery = await prisma.delivery.findUnique({
+    where: { id },
+    include: {
+      assignments: {
+        where: { status: { in: ['OFFERED', 'ACCEPTED'] } },
+        include: { riderProfile: { select: { id: true, userId: true } } },
+      },
+    },
+  });
+  if (!delivery) throw notFound('Delivery not found');
+
+  const isOwner = delivery.customerId === requester.id;
+  const isStaff =
+    requester.role === 'ADMIN' || requester.role === 'OPERATIONS' || requester.role === 'SUPPORT';
+  const isAssignedRider = delivery.assignments.some(
+    (assignment) => assignment.riderProfile.userId === requester.id
+  );
+  if (!isOwner && !isStaff && !isAssignedRider) {
+    throw forbidden('You cannot cancel this delivery');
+  }
+
+  if (delivery.status === DeliveryStatus.CANCELLED) return delivery;
+  if (!CANCELLABLE_STATUSES.includes(delivery.status)) {
+    throw badRequest(`Delivery can no longer be cancelled (status: ${delivery.status})`);
+  }
+
+  const cancelledBy = resolveCancelActor(requester, delivery.customerId);
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Release the rider and expire any open offers so they can take new jobs.
+    for (const assignment of delivery.assignments) {
+      await tx.deliveryAssignment.update({
+        where: { id: assignment.id },
+        data: { status: 'EXPIRED', respondedAt: assignment.respondedAt ?? new Date() },
+      });
+      await tx.riderProfile.update({
+        where: { id: assignment.riderProfile.id },
+        data: { status: 'ACTIVE' },
+      });
+    }
+    return tx.delivery.update({
+      where: { id },
+      data: {
+        status: DeliveryStatus.CANCELLED,
+        cancelledBy,
+        cancellationReason: reason ?? null,
+      },
+    });
+  });
+
+  await recordDeliveryStatusEvent(id, {
+    fromStatus: delivery.status,
+    toStatus: DeliveryStatus.CANCELLED,
+    actorId: requester.id,
+    note: reason ? `Cancelled by ${cancelledBy}: ${reason}` : `Cancelled by ${cancelledBy}`,
+  });
+
+  return updated;
 }

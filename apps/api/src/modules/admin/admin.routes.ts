@@ -6,10 +6,12 @@ import { asyncHandler } from '../../utils/asyncHandler';
 import { badRequest, notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
 import { WalletTxType } from '../payments/settlement';
+import { monitoringRouter } from './monitoring.routes';
 
 export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRoles(UserRole.ADMIN, UserRole.OPERATIONS, UserRole.SUPPORT));
+adminRouter.use(monitoringRouter);
 
 adminRouter.get(
   '/dashboard',

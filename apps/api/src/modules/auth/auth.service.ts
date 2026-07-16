@@ -3,7 +3,7 @@ import { UserRole } from '@prisma/client';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
 import jwt, { type SignOptions } from 'jsonwebtoken';
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
 import { badRequest, notFound, unauthorized } from '../../utils/http';
@@ -20,6 +20,11 @@ type GoogleLoginInput = {
   accessToken?: string;
   idToken?: string;
   role?: UserRole;
+};
+
+export type SessionContext = {
+  userAgent?: string | null;
+  ipAddress?: string | null;
 };
 
 type GoogleProfile = {
@@ -74,6 +79,72 @@ function authPayload(user: {
   };
 }
 
+function hashToken(token: string) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+const FALLBACK_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+// Persists a session record for the issued refresh token so the admin panel
+// can show active devices/IPs per account. Never blocks authentication.
+async function persistSession(userId: string, refreshToken: string, ctx?: SessionContext) {
+  try {
+    const decoded = jwt.decode(refreshToken) as { exp?: number } | null;
+    const expiresAt = decoded?.exp
+      ? new Date(decoded.exp * 1000)
+      : new Date(Date.now() + FALLBACK_SESSION_TTL_MS);
+    await prisma.refreshToken.create({
+      data: {
+        userId,
+        tokenHash: hashToken(refreshToken),
+        userAgent: ctx?.userAgent ?? null,
+        ipAddress: ctx?.ipAddress ?? null,
+        expiresAt,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to persist session', { userId, error });
+  }
+}
+
+async function revokeSession(refreshToken: string) {
+  try {
+    await prisma.refreshToken.updateMany({
+      where: { tokenHash: hashToken(refreshToken), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  } catch (error) {
+    console.error('Failed to revoke session', { error });
+  }
+}
+
+// Stamps lastSeenAt and writes an audit trail entry so the admin dashboard can
+// show registration/login history. Failures must never block authentication.
+async function recordAuthEvent(
+  userId: string,
+  action: 'USER_REGISTERED' | 'USER_LOGIN',
+  metadata: Prisma.InputJsonValue
+) {
+  try {
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() } }),
+      prisma.auditLog.create({
+        data: { actorId: userId, action, entity: 'User', entityId: userId, metadata },
+      }),
+    ]);
+  } catch (error) {
+    console.error('Failed to record auth event', { userId, action, error });
+  }
+}
+
+async function touchLastSeen(userId: string) {
+  try {
+    await prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date() } });
+  } catch (error) {
+    console.error('Failed to update lastSeenAt', { userId, error });
+  }
+}
+
 function isEmailVerified(value: GoogleProfile['email_verified']) {
   return value === true || value === 'true';
 }
@@ -101,7 +172,7 @@ async function getGoogleProfile(input: GoogleLoginInput): Promise<GoogleProfile>
   throw unauthorized('Google token is required');
 }
 
-export async function register(input: RegisterInput) {
+export async function register(input: RegisterInput, ctx?: SessionContext) {
   const existing = await prisma.user.findFirst({
     where: {
       OR: [{ phone: input.phone }, ...(input.email ? [{ email: input.email }] : [])],
@@ -138,12 +209,14 @@ export async function register(input: RegisterInput) {
     },
   });
 
-  return {
-    ...authPayload(user),
-  };
+  await recordAuthEvent(user.id, 'USER_REGISTERED', { role: user.role, method: 'password' });
+
+  const payload = authPayload(user);
+  await persistSession(user.id, payload.tokens.refreshToken, ctx);
+  return payload;
 }
 
-export async function refresh(refreshToken: string) {
+export async function refresh(refreshToken: string, ctx?: SessionContext) {
   let payload: { sub: string; role: UserRole };
   try {
     payload = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as { sub: string; role: UserRole };
@@ -154,21 +227,30 @@ export async function refresh(refreshToken: string) {
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user) throw unauthorized('Invalid or expired refresh token');
 
+  await touchLastSeen(user.id);
+
   // Rotate both tokens so a fresh 30-day refresh window starts on every use.
-  return authPayload(user);
+  const result = authPayload(user);
+  await revokeSession(refreshToken);
+  await persistSession(user.id, result.tokens.refreshToken, ctx);
+  return result;
 }
 
-export async function login(phone: string, password: string) {
+export async function login(phone: string, password: string, ctx?: SessionContext) {
   const user = await prisma.user.findUnique({ where: { phone } });
   if (!user?.passwordHash) throw unauthorized('Invalid credentials');
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw unauthorized('Invalid credentials');
 
-  return authPayload(user);
+  await recordAuthEvent(user.id, 'USER_LOGIN', { method: 'password' });
+
+  const payload = authPayload(user);
+  await persistSession(user.id, payload.tokens.refreshToken, ctx);
+  return payload;
 }
 
-export async function googleLogin(input: GoogleLoginInput) {
+export async function googleLogin(input: GoogleLoginInput, ctx?: SessionContext) {
   let profile: GoogleProfile;
   try {
     profile = await getGoogleProfile(input);
@@ -200,7 +282,10 @@ export async function googleLogin(input: GoogleLoginInput) {
         lastSeenAt: new Date(),
       },
     });
-    return authPayload(user);
+    await recordAuthEvent(user.id, 'USER_LOGIN', { method: 'google' });
+    const payload = authPayload(user);
+    await persistSession(user.id, payload.tokens.refreshToken, ctx);
+    return payload;
   }
 
   const user = await prisma.user.create({
@@ -216,7 +301,11 @@ export async function googleLogin(input: GoogleLoginInput) {
     },
   });
 
-  return authPayload(user);
+  await recordAuthEvent(user.id, 'USER_REGISTERED', { role, method: 'google' });
+
+  const payload = authPayload(user);
+  await persistSession(user.id, payload.tokens.refreshToken, ctx);
+  return payload;
 }
 
 export async function forgotPassword(phone: string) {

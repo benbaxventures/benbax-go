@@ -372,9 +372,11 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
       }
 
       await markPendingCapture('SELFIE');
+      // No `allowsEditing` here: on Android the cropper runs as a separate
+      // activity that frequently makes the OS destroy MainActivity, losing the
+      // captured selfie so the flow snaps back to the "Take a selfie" button.
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
         quality: 0.5,
       });
       await clearPendingCapture();

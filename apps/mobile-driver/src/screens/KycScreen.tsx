@@ -120,9 +120,11 @@ export function KycScreen() {
         return;
       }
 
+      // No `allowsEditing` for selfies: on Android the cropper runs as a
+      // separate activity that frequently makes the OS destroy MainActivity,
+      // losing the captured photo and snapping the flow back to the start.
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: type === 'SELFIE',
         quality: 0.5,
       });
       if (!result.canceled && result.assets) {
@@ -155,9 +157,10 @@ export function KycScreen() {
         return;
       }
 
+      // Same reason as the camera path: the selfie cropper activity can make
+      // Android destroy MainActivity and drop the picked image.
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: type === 'SELFIE',
         quality: 0.5,
       });
       if (!result.canceled && result.assets) {

@@ -3,6 +3,7 @@ import type { Server } from 'socket.io';
 import { prisma } from '../../config/prisma';
 import { realtimeEvents } from '../../realtime/events';
 import { sendExpoPushToUser } from '../notifications/push';
+import { recordDeliveryStatusEvent, recordTripStatusEvent } from '../orders/status-events';
 import { rankRiders } from './dispatch.engine';
 
 export async function dispatchRide(tripId: string, io?: Server) {
@@ -65,6 +66,12 @@ export async function dispatchRide(tripId: string, io?: Server) {
   const updatedTrip = await prisma.rideTrip.update({
     where: { id: trip.id },
     data: { status: 'ASSIGNING' },
+  });
+
+  await recordTripStatusEvent(trip.id, {
+    fromStatus: trip.status,
+    toStatus: 'ASSIGNING',
+    note: `Offered to ${assignment.driverProfile.user.name}`,
   });
 
   io?.to(`driver:${assignment.driverProfile.userId}`).emit(realtimeEvents.driverOffer, assignment);
@@ -134,6 +141,12 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
   await prisma.delivery.update({
     where: { id: delivery.id },
     data: { status: 'ASSIGNING' },
+  });
+
+  await recordDeliveryStatusEvent(delivery.id, {
+    fromStatus: delivery.status,
+    toStatus: 'ASSIGNING',
+    note: `Offered to ${assignment.riderProfile.user.name}`,
   });
 
   io?.to(`rider:${assignment.riderProfile.userId}`).emit(realtimeEvents.riderOffer, assignment);

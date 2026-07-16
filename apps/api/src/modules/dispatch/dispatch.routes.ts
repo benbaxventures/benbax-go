@@ -6,6 +6,7 @@ import { realtimeEvents } from '../../realtime/events';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { badRequest, notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
+import { recordDeliveryStatusEvent } from '../orders/status-events';
 import { rankRiders } from './dispatch.engine';
 
 export const dispatchRouter = Router();
@@ -72,6 +73,13 @@ dispatchRouter.post(
       data: { status: 'ASSIGNING' },
     });
 
+    await recordDeliveryStatusEvent(delivery.id, {
+      fromStatus: delivery.status,
+      toStatus: 'ASSIGNING',
+      actorId: req.user!.id,
+      note: `Manually dispatched to ${assignment.riderProfile.user.name}`,
+    });
+
     req.app
       .get('io')
       ?.to(`rider:${assignment.riderProfile.userId}`)
@@ -100,6 +108,13 @@ dispatchRouter.post(
         riderProfile: { update: { status: 'ON_DELIVERY' } },
       },
       include: { delivery: true },
+    });
+
+    await recordDeliveryStatusEvent(assignment.deliveryId, {
+      fromStatus: 'ASSIGNING',
+      toStatus: 'ASSIGNED',
+      actorId: req.user!.id,
+      note: 'Rider accepted the offer',
     });
 
     req.app

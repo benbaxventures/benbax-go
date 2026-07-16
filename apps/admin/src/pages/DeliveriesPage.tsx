@@ -1,6 +1,8 @@
 import { realtimeEvents } from '@benbax/shared';
 import { useQuery } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { formatDateTime, formatRelativeTime } from '../lib/format';
 import { apiRequest } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
 
@@ -27,14 +29,33 @@ type AdminAlert = {
   createdAt: string;
 };
 
+type SupplyUnit = {
+  id: string;
+  kind: 'RIDER' | 'DRIVER';
+  name: string;
+  phone: string;
+  status: string;
+  latitude: string;
+  longitude: string;
+  lastLocationAt: string | null;
+  isBusy: boolean;
+};
+
 export function DeliveriesPage() {
   const [alerts, setAlerts] = useState<AdminAlert[]>([]);
+  const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['live-deliveries'],
     queryFn: () => apiRequest<LiveDelivery[]>('/admin/deliveries/live'),
   });
-  const deliveries = data ?? [];
-  const mapBounds = useMemo(() => getMapBounds(deliveries), [deliveries]);
+  const { data: supplyData } = useQuery({
+    queryKey: ['live-supply'],
+    queryFn: () => apiRequest<SupplyUnit[]>('/admin/supply/live'),
+    refetchInterval: 15_000,
+  });
+  const deliveries = useMemo(() => data ?? [], [data]);
+  const supply = useMemo(() => supplyData ?? [], [supplyData]);
+  const mapBounds = useMemo(() => getMapBounds(deliveries, supply), [deliveries, supply]);
 
   useEffect(() => {
     const socket = createRealtimeClient();
@@ -61,10 +82,34 @@ export function DeliveriesPage() {
       <div className="panel-grid">
         <div className="panel span-2">
           <div className="panel-header">
-            <h2>Live map</h2>
-            <span className="live-dot">GPS</span>
+            <h2>Live map — orders &amp; online supply</h2>
+            <div className="map-legend">
+              <span className="legend-item">
+                <span className="map-pin supply-idle legend-pin" /> Idle (
+                {supply.filter((unit) => !unit.isBusy).length})
+              </span>
+              <span className="legend-item">
+                <span className="map-pin supply-busy legend-pin" /> On job (
+                {supply.filter((unit) => unit.isBusy).length})
+              </span>
+              <span className="live-dot">GPS</span>
+            </div>
           </div>
           <div className="ops-map">
+            {supply.map((unit) => {
+              const point = projectPoint(
+                { latitude: Number(unit.latitude), longitude: Number(unit.longitude) },
+                mapBounds
+              );
+              return (
+                <span
+                  key={`${unit.kind}-${unit.id}`}
+                  className={`map-pin ${unit.isBusy ? 'supply-busy' : 'supply-idle'}`}
+                  style={{ left: `${point.x}%`, top: `${point.y}%` }}
+                  title={`${unit.name} (${unit.kind}) · ${unit.status} · GPS ${formatRelativeTime(unit.lastLocationAt)}`}
+                />
+              );
+            })}
             {deliveries.map((delivery) => {
               const latestPoint = delivery.trackingPoints?.[0];
               const pickup = projectPoint(
@@ -113,7 +158,9 @@ export function DeliveriesPage() {
                 </div>
               );
             })}
-            {!deliveries.length ? <span className="muted">No live deliveries to map.</span> : null}
+            {!deliveries.length && !supply.length ? (
+              <span className="muted">No live deliveries or online supply to map.</span>
+            ) : null}
           </div>
         </div>
 
@@ -159,7 +206,11 @@ export function DeliveriesPage() {
               </tr>
             ) : deliveries.length ? (
               deliveries.map((delivery) => (
-                <tr key={delivery.id}>
+                <tr
+                  key={delivery.id}
+                  className={`row-clickable${selectedDeliveryId === delivery.id ? ' row-selected' : ''}`}
+                  onClick={() => setSelectedDeliveryId(delivery.id)}
+                >
                   <td>{delivery.trackingCode}</td>
                   <td>
                     <span className="status-chip">{delivery.status}</span>
@@ -178,11 +229,128 @@ export function DeliveriesPage() {
           </tbody>
         </table>
       </div>
+
+      {selectedDeliveryId ? (
+        <OrderTimelinePanel
+          deliveryId={selectedDeliveryId}
+          onClose={() => setSelectedDeliveryId(null)}
+        />
+      ) : null}
     </section>
   );
 }
 
-function getMapBounds(deliveries: LiveDelivery[]) {
+type OrderTimeline = {
+  kind: string;
+  order: {
+    id: string;
+    trackingCode: string;
+    status: string;
+    totalFare: string;
+    cancelledBy: string | null;
+    cancellationReason: string | null;
+    createdAt: string;
+    customer: { name: string; phone: string };
+    payment: { method: string; status: string; amount: string } | null;
+    statusEvents: Array<{
+      id: string;
+      fromStatus: string | null;
+      toStatus: string;
+      note: string | null;
+      createdAt: string;
+    }>;
+    assignments: Array<{
+      status: string;
+      offeredAt: string;
+      respondedAt: string | null;
+      riderProfile: { user: { name: string; phone: string } };
+    }>;
+  };
+};
+
+function OrderTimelinePanel({ deliveryId, onClose }: { deliveryId: string; onClose: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['order-timeline', deliveryId],
+    queryFn: () => apiRequest<OrderTimeline>(`/admin/orders/delivery/${deliveryId}/timeline`),
+  });
+
+  const order = data?.order;
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <h2>Order timeline {order ? `— ${order.trackingCode}` : ''}</h2>
+        <button type="button" className="icon-button" aria-label="Close timeline" onClick={onClose}>
+          <X size={16} />
+        </button>
+      </div>
+      {isLoading || !order ? (
+        <p className="muted">Loading timeline...</p>
+      ) : (
+        <>
+          <dl className="definition-grid">
+            <dt>Customer</dt>
+            <dd>
+              {order.customer.name} · {order.customer.phone}
+            </dd>
+            <dt>Status</dt>
+            <dd>{order.status}</dd>
+            <dt>Fare</dt>
+            <dd>GHS {order.totalFare}</dd>
+            {order.payment ? (
+              <>
+                <dt>Payment</dt>
+                <dd>
+                  {order.payment.method} · {order.payment.status}
+                </dd>
+              </>
+            ) : null}
+            {order.cancelledBy ? (
+              <>
+                <dt>Cancelled by</dt>
+                <dd>
+                  {order.cancelledBy}
+                  {order.cancellationReason ? ` — ${order.cancellationReason}` : ''}
+                </dd>
+              </>
+            ) : null}
+            {order.assignments[0] ? (
+              <>
+                <dt>Rider</dt>
+                <dd>
+                  {order.assignments[0].riderProfile.user.name} ({order.assignments[0].status})
+                </dd>
+              </>
+            ) : null}
+          </dl>
+          <h3 className="timeline-heading">Lifecycle</h3>
+          {order.statusEvents.length ? (
+            <ul className="timeline">
+              {order.statusEvents.map((event) => (
+                <li key={event.id}>
+                  <div className="timeline-row">
+                    <strong>
+                      {event.fromStatus ? `${event.fromStatus} → ` : ''}
+                      {event.toStatus}
+                    </strong>
+                    <time>{formatDateTime(event.createdAt)}</time>
+                  </div>
+                  {event.note ? <span className="muted">{event.note}</span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="muted">
+              No lifecycle events recorded yet (events start once the new tracking is deployed).
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function getMapBounds(deliveries: LiveDelivery[], supply: SupplyUnit[] = []) {
   const coordinates = deliveries.flatMap((delivery) => [
     { latitude: Number(delivery.pickupLatitude), longitude: Number(delivery.pickupLongitude) },
     { latitude: Number(delivery.dropoffLatitude), longitude: Number(delivery.dropoffLongitude) },
@@ -195,8 +363,15 @@ function getMapBounds(deliveries: LiveDelivery[]) {
         ]
       : []),
   ]);
-  const latitudes = coordinates.map((coordinate) => coordinate.latitude).filter(Number.isFinite);
-  const longitudes = coordinates.map((coordinate) => coordinate.longitude).filter(Number.isFinite);
+  const supplyCoordinates = supply.map((unit) => ({
+    latitude: Number(unit.latitude),
+    longitude: Number(unit.longitude),
+  }));
+  const allCoordinates = [...coordinates, ...supplyCoordinates];
+  const latitudes = allCoordinates.map((coordinate) => coordinate.latitude).filter(Number.isFinite);
+  const longitudes = allCoordinates
+    .map((coordinate) => coordinate.longitude)
+    .filter(Number.isFinite);
 
   return {
     minLatitude: Math.min(...latitudes, 5.5),

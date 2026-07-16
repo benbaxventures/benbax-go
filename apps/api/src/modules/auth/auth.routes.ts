@@ -11,6 +11,14 @@ import * as service from './auth.service';
 
 export const authRouter = Router();
 
+function sessionContext(req: { headers: Record<string, unknown>; ip?: string | undefined }) {
+  const userAgent = req.headers['user-agent'];
+  return {
+    userAgent: typeof userAgent === 'string' ? userAgent.slice(0, 255) : null,
+    ipAddress: req.ip ?? null,
+  };
+}
+
 const registerSchema = z.object({
   body: z.object({
     name: z.string().min(2),
@@ -50,7 +58,7 @@ authRouter.post(
   '/register',
   validate(registerSchema),
   asyncHandler(async (req, res) => {
-    const result = await service.register(req.body);
+    const result = await service.register(req.body, sessionContext(req));
 
     // Notify drivers when a new passenger joins: an in-app realtime event for
     // drivers who are online, plus a push for those who aren't.
@@ -75,13 +83,17 @@ authRouter.post(
 authRouter.post(
   '/login',
   validate(loginSchema),
-  asyncHandler(async (req, res) => ok(res, await service.login(req.body.phone, req.body.password)))
+  asyncHandler(async (req, res) =>
+    ok(res, await service.login(req.body.phone, req.body.password, sessionContext(req)))
+  )
 );
 
 authRouter.post(
   '/refresh',
   validate(refreshSchema),
-  asyncHandler(async (req, res) => ok(res, await service.refresh(req.body.refreshToken)))
+  asyncHandler(async (req, res) =>
+    ok(res, await service.refresh(req.body.refreshToken, sessionContext(req)))
+  )
 );
 
 authRouter.post(
@@ -90,11 +102,14 @@ authRouter.post(
   asyncHandler(async (req, res) =>
     ok(
       res,
-      await service.googleLogin({
-        accessToken: req.body.accessToken,
-        idToken: req.body.idToken,
-        role: req.body.role,
-      })
+      await service.googleLogin(
+        {
+          accessToken: req.body.accessToken,
+          idToken: req.body.idToken,
+          role: req.body.role,
+        },
+        sessionContext(req)
+      )
     )
   )
 );

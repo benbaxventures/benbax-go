@@ -95,6 +95,14 @@ enum RideAssignmentStatus {
   COMPLETED
 }
 
+enum CancelActor {
+  CUSTOMER
+  RIDER
+  DRIVER
+  ADMIN
+  SYSTEM
+}
+
 enum PaymentMethod {
   MTN_MOMO
   PAYSTACK_CARD
@@ -282,9 +290,12 @@ model Delivery {
   totalFare             Decimal                 @db.Decimal(10, 2)
   notes                 String?
   metadata              Json?
+  cancelledBy           CancelActor?
+  cancellationReason    String?
   customer              User                    @relation("CustomerDeliveries", fields: [customerId], references: [id], onDelete: Restrict)
   stops                 DeliveryStop[]
   assignments           DeliveryAssignment[]
+  statusEvents          DeliveryStatusEvent[]
   trackingPoints        DeliveryTrackingPoint[]
   payment               Payment?
   proof                 DeliveryProof?
@@ -327,8 +338,11 @@ model RideTrip {
   totalFare            Decimal                @db.Decimal(10, 2)
   notes                String?
   metadata             Json?
+  cancelledBy          CancelActor?
+  cancellationReason   String?
   passenger            User                   @relation("PassengerRideTrips", fields: [passengerId], references: [id], onDelete: Restrict)
   assignments          RideAssignment[]
+  statusEvents         TripStatusEvent[]
   trackingPoints       RideTrackingPoint[]
   payment              RidePayment?
   rating               RideRating?
@@ -338,6 +352,32 @@ model RideTrip {
   @@index([passengerId, createdAt])
   @@index([status])
   @@index([pickupLatitude, pickupLongitude])
+}
+
+model DeliveryStatusEvent {
+  id         String          @id @default(cuid())
+  deliveryId String
+  fromStatus DeliveryStatus?
+  toStatus   DeliveryStatus
+  actorId    String?
+  note       String?
+  createdAt  DateTime        @default(now())
+  delivery   Delivery        @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, createdAt])
+}
+
+model TripStatusEvent {
+  id         String          @id @default(cuid())
+  tripId     String
+  fromStatus RideTripStatus?
+  toStatus   RideTripStatus
+  actorId    String?
+  note       String?
+  createdAt  DateTime        @default(now())
+  trip       RideTrip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId, createdAt])
 }
 
 model RideAssignment {

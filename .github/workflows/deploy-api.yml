@@ -1,0 +1,63 @@
+name: Deploy API
+
+# CI-gated deploy: on every push to main that touches the API (or shared code),
+# typecheck first, then trigger a Render deploy ONLY if it passes. This stops
+# broken code from ever reaching production.
+#
+# One-time setup:
+#   1. Render dashboard -> your API service -> Settings -> Deploy Hook -> copy URL.
+#   2. GitHub repo -> Settings -> Secrets and variables -> Actions -> New secret
+#      named RENDER_DEPLOY_HOOK_URL, paste the URL.
+#   3. In Render, set Settings -> Auto-Deploy to "No" so pushes deploy ONLY
+#      through this gated workflow (otherwise every push deploys twice).
+#
+# The Render service runs `prisma migrate deploy` on start (see Dockerfile),
+# so database migrations ship automatically with each deploy.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'packages/shared/**'
+      - 'Dockerfile'
+      - 'package-lock.json'
+  workflow_dispatch: {} # manual "Deploy now" button in the Actions tab
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: true
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.0
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck API
+        run: npm run typecheck --workspace apps/api
+
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK_URL secret is not set. Add it in repo Settings -> Secrets -> Actions."
+            exit 1
+          fi
+          echo "Typecheck passed — triggering Render deploy."
+          # Render responds with a JSON deploy record on success.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "$HOOK")
+          echo "Render deploy hook responded: $code"
+          case "$code" in
+            2*) echo "Deploy queued on Render." ;;
+            *) echo "::error::Render deploy hook returned $code"; exit 1 ;;
+          esac
