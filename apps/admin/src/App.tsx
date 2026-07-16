@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Shell } from './components/Shell';
 import { DashboardPage } from './pages/DashboardPage';
 import { DeliveriesPage } from './pages/DeliveriesPage';
+import { DocumentsPage } from './pages/DocumentsPage';
 import { GeofencesPage } from './pages/GeofencesPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingPage } from './pages/PricingPage';
@@ -23,6 +24,7 @@ export function App() {
         <Route path="/deliveries" element={<DeliveriesPage />} />
         <Route path="/riders" element={<RidersPage />} />
         <Route path="/users" element={<UsersPage />} />
+        <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/geofences" element={<GeofencesPage />} />
         <Route path="/support" element={<SupportPage />} />
