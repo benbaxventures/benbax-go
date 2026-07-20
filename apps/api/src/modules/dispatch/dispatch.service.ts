@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { Server } from 'socket.io';
 import { prisma } from '../../config/prisma';
 import { realtimeEvents } from '../../realtime/events';
-import { sendExpoPushToUser } from '../notifications/push';
+import { notify } from '../notifications/notify';
 import { recordDeliveryStatusEvent, recordTripStatusEvent } from '../orders/status-events';
 import { rankRiders } from './dispatch.engine';
 
@@ -81,12 +81,16 @@ export async function dispatchRide(tripId: string, io?: Server) {
   io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, updatedTrip);
   io?.to('admins').emit(realtimeEvents.rideAssigned, assignment);
 
-  // Push the offer so the driver is alerted even with the app backgrounded.
-  void sendExpoPushToUser(assignment.driverProfile.userId, {
-    title: 'New ride request',
-    body: 'A nearby passenger is waiting. Tap to accept or reject.',
-    data: { type: 'ride-offer', assignmentId: assignment.id, tripId: trip.id },
-  });
+  // Alert the offered driver even with the app backgrounded: in-app + push, plus
+  // WhatsApp/SMS when those gateways are configured (1:1, so never spammy).
+  void notify(
+    { userIds: [assignment.driverProfile.userId], channels: ['inapp', 'push', 'whatsapp', 'sms'] },
+    {
+      title: 'New ride request',
+      body: 'A nearby passenger is waiting. Open the app to accept or reject.',
+      data: { type: 'ride-offer', assignmentId: assignment.id, tripId: trip.id },
+    }
+  );
 }
 
 export async function dispatchDelivery(deliveryId: string, io?: Server) {
@@ -152,10 +156,14 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
   io?.to(`rider:${assignment.riderProfile.userId}`).emit(realtimeEvents.riderOffer, assignment);
   io?.to('admins').emit(realtimeEvents.deliveryAssigned, assignment);
 
-  // Push the offer so the rider is alerted even with the app backgrounded.
-  void sendExpoPushToUser(assignment.riderProfile.userId, {
-    title: 'New delivery offer',
-    body: 'A nearby customer delivery is waiting. Tap to accept or reject.',
-    data: { type: 'delivery-offer', assignmentId: assignment.id, deliveryId: delivery.id },
-  });
+  // Alert the offered rider even with the app backgrounded: in-app + push, plus
+  // WhatsApp/SMS when those gateways are configured (1:1, so never spammy).
+  void notify(
+    { userIds: [assignment.riderProfile.userId], channels: ['inapp', 'push', 'whatsapp', 'sms'] },
+    {
+      title: 'New delivery offer',
+      body: 'A nearby customer delivery is waiting. Open the app to accept or reject.',
+      data: { type: 'delivery-offer', assignmentId: assignment.id, deliveryId: delivery.id },
+    }
+  );
 }

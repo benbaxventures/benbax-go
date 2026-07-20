@@ -13,6 +13,7 @@ export type RootStackParamList = {
   PriorityDetails: undefined;
   ShiftSchedule: undefined;
   News: undefined;
+  Notifications: undefined;
 };
 
 export type MainTabsParamList = {

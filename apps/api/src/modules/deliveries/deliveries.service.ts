@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { badRequest, forbidden, notFound } from '../../utils/http';
 import { estimateDelivery } from '../dispatch/dispatch.engine';
+import { notifyDeliveryRequested } from '../notifications/triggers';
 import { recordDeliveryStatusEvent } from '../orders/status-events';
 import { buildExpectedRoute } from '../tracking/routeSafety';
 
@@ -112,6 +113,9 @@ export async function createDelivery(input: CreateDeliveryInput) {
     actorId: input.customerId,
     note: 'Delivery requested',
   });
+
+  // Alert the rider fleet and ops team that a new delivery is up for grabs.
+  notifyDeliveryRequested(delivery);
 
   return delivery;
 }

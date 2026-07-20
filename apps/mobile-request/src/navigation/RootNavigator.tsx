@@ -10,6 +10,7 @@ import { BiometricGateScreen } from '../screens/BiometricGateScreen';
 import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { HomeScreen } from '../screens/HomeScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { PaymentCheckoutScreen } from '../screens/PaymentCheckoutScreen';
 import { PrivacyProtectionScreen } from '../screens/PrivacyProtectionScreen';
@@ -169,6 +170,7 @@ export function RootNavigator() {
             <Stack.Screen name="WalletCheckout" component={WalletCheckoutScreen} />
             <Stack.Screen name="PrivacyProtection" component={PrivacyProtectionScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
         ) : (
           <>

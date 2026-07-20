@@ -1,7 +1,9 @@
 import type { NavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bell,
+  BellRing,
   Calendar,
   Car,
   ChevronRight,
@@ -17,6 +19,7 @@ import { Button } from '../components/Button';
 import { DistanceSlider } from '../components/DistanceSlider';
 import { Screen } from '../components/Screen';
 import type { RootStackParamList } from '../navigation/types';
+import { apiRequest } from '../services/api';
 import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
 import { useAuthStore } from '../store/authStore';
 import { useDriverStore } from '../store/driverStore';
@@ -53,6 +56,14 @@ export function ProfileScreen() {
     setServiceClass,
     newsUnreadCount,
   } = useDriverStore();
+
+  // Poll the in-app notification feed so the badge stays current.
+  const { data: unread } = useQuery<{ count: number }>({
+    queryKey: ['notifications-unread'],
+    queryFn: () => apiRequest('/notifications/unread-count'),
+    refetchInterval: 60_000,
+  });
+  const notificationsUnread = unread?.count ?? 0;
 
   function handleSafetyCenter() {
     Alert.alert('Safety Center', 'Your safety is our priority. Here are important resources:', [
@@ -203,6 +214,55 @@ export function ProfileScreen() {
             <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>Shift Schedule</Text>
             <Text style={{ color: theme.colors.muted, fontSize: 12 }}>Set your driving hours</Text>
           </View>
+          <ChevronRight size={18} color={theme.colors.muted} />
+        </Pressable>
+
+        <Pressable
+          onPress={() => navigation.navigate('Notifications')}
+          style={{
+            backgroundColor: theme.colors.surface,
+            borderRadius: 10,
+            padding: 14,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              backgroundColor: theme.colors.primary + '15',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <BellRing size={18} color={theme.colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>Notifications</Text>
+            <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
+              Requests, offers & order updates
+            </Text>
+          </View>
+          {notificationsUnread > 0 && (
+            <View
+              style={{
+                backgroundColor: theme.colors.danger,
+                borderRadius: 10,
+                minWidth: 20,
+                height: 20,
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingHorizontal: 6,
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '800' }}>
+                {notificationsUnread > 99 ? '99+' : notificationsUnread}
+              </Text>
+            </View>
+          )}
           <ChevronRight size={18} color={theme.colors.muted} />
         </Pressable>
 

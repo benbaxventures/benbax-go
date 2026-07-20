@@ -17,6 +17,7 @@ export type RootStackParamList = {
   };
   PrivacyProtection: undefined;
   EditProfile: undefined;
+  Notifications: undefined;
 };
 
 export type MainTabsParamList = {

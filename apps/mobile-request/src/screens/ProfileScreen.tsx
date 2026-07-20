@@ -1,19 +1,36 @@
 import type { NavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
+import { useQuery } from '@tanstack/react-query';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Updates from 'expo-updates';
-import { DownloadCloud, Fingerprint, LogOut, MapPinned, ShieldCheck } from 'lucide-react-native';
+import {
+  Bell,
+  DownloadCloud,
+  Fingerprint,
+  LogOut,
+  MapPinned,
+  ShieldCheck,
+} from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { Alert, Switch, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import type { RootStackParamList } from '../navigation/types';
+import { apiRequest } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
 export function ProfileScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const { user, logout, biometricEnabled, setBiometricEnabled } = useAuthStore();
+
+  // Poll the in-app notification feed so the badge count stays current.
+  const { data: unread } = useQuery<{ count: number }>({
+    queryKey: ['notifications-unread'],
+    queryFn: () => apiRequest('/notifications/unread-count'),
+    refetchInterval: 60_000,
+  });
+  const notificationsUnread = unread?.count ?? 0;
   const [isCheckingForUpdate, setIsCheckingForUpdate] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState<boolean | null>(null);
   const [togglingBiometric, setTogglingBiometric] = useState(false);
@@ -154,6 +171,12 @@ export function ProfileScreen() {
           thumbColor="#fff"
         />
       </View>
+      <Button
+        label={notificationsUnread > 0 ? `Notifications (${notificationsUnread})` : 'Notifications'}
+        icon={<Bell size={18} color={theme.colors.ink} />}
+        onPress={() => navigation.navigate('Notifications')}
+        variant="secondary"
+      />
       <Button
         label="Edit profile"
         icon={<MapPinned size={18} color={theme.colors.ink} />}

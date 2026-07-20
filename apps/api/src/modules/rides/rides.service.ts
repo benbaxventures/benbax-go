@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { badRequest, forbidden, notFound } from '../../utils/http';
 import { estimateRide } from '../dispatch/dispatch.engine';
+import { notifyRideRequested } from '../notifications/triggers';
 import { recordTripStatusEvent } from '../orders/status-events';
 import { settleRideTrip } from '../payments/settlement';
 import { buildExpectedRoute } from '../tracking/routeSafety';
@@ -101,6 +102,9 @@ export async function createRide(input: CreateRideInput) {
     actorId: input.passengerId,
     note: 'Ride requested',
   });
+
+  // Alert the driver fleet and ops team that a new ride is up for grabs.
+  notifyRideRequested(trip);
 
   return trip;
 }

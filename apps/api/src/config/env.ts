@@ -38,6 +38,40 @@ const envSchema = z.object({
   MTN_MOMO_SUBSCRIPTION_KEY: z.string().optional(),
   MTN_MOMO_API_USER: z.string().optional(),
   MTN_MOMO_API_KEY: z.string().optional(),
+
+  // --- Multi-channel notifications ---------------------------------------
+  // Every channel is best-effort and no-op unless its keys are present, so the
+  // API runs fully on the free channels (in-app + Expo push) out of the box.
+
+  // Email via Resend (free tier: 3k/month). EMAIL_FROM must be a verified sender.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().optional(),
+
+  // WhatsApp via the Meta WhatsApp Cloud API (free tier: 1k conversations/month).
+  WHATSAPP_CLOUD_TOKEN: z.string().optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+
+  // SMS gateway. No free tier exists, so it stays off until a provider is chosen.
+  SMS_PROVIDER: z.enum(['none', 'hubtel', 'twilio']).default('none'),
+  HUBTEL_CLIENT_ID: z.string().optional(),
+  HUBTEL_CLIENT_SECRET: z.string().optional(),
+  HUBTEL_SENDER_ID: z.string().optional(),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_SMS_FROM: z.string().optional(),
+
+  // Extra channels used when broadcasting a new request to the whole fleet.
+  // Defaults to the free channels only — blasting SMS/WhatsApp to every driver
+  // on every request is costly and spammy. Set e.g. "whatsapp,sms" to widen it.
+  NOTIFY_FLEET_BROADCAST_CHANNELS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((channel) => channel.trim().toLowerCase())
+        .filter(Boolean)
+    ),
 });
 
 export const env = envSchema.parse(process.env);

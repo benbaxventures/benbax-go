@@ -6,7 +6,7 @@ import { validate } from '../../middleware/validate';
 import { realtimeEvents } from '../../realtime/events';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { created, ok } from '../../utils/response';
-import { sendExpoPushToRole } from '../notifications/push';
+import { notifyClientRegistered } from '../notifications/triggers';
 import * as service from './auth.service';
 
 export const authRouter = Router();
@@ -63,8 +63,9 @@ authRouter.post(
   asyncHandler(async (req, res) => {
     const result = await service.register(req.body, sessionContext(req));
 
-    // Notify drivers when a new passenger joins: an in-app realtime event for
-    // drivers who are online, plus a push for those who aren't.
+    // Notify drivers when a new passenger joins: a realtime event for drivers
+    // who are online now, plus in-app + push (via the dispatcher) for the rest,
+    // and an ops-feed alert.
     if (result.user.role === UserRole.CUSTOMER) {
       const io = req.app.get('io');
       io?.to('drivers').emit(realtimeEvents.clientRegistered, {
@@ -72,11 +73,7 @@ authRouter.post(
         name: result.user.name,
         joinedAt: new Date().toISOString(),
       });
-      void sendExpoPushToRole(UserRole.DRIVER, {
-        title: 'New passenger on Benbax',
-        body: `${result.user.name} just joined. More riders means more trips.`,
-        data: { type: 'client-registered', clientId: result.user.id },
-      });
+      notifyClientRegistered(result.user);
     }
 
     return created(res, result);

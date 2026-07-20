@@ -16,6 +16,7 @@ import { EditProfileScreen } from '../screens/EditProfileScreen';
 import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { KycScreen } from '../screens/KycScreen';
 import { NewsScreen } from '../screens/NewsScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { OnboardingFlow } from '../screens/OnboardingFlow';
 import { PriorityDetailsScreen } from '../screens/PriorityDetailsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -252,6 +253,7 @@ export function RootNavigator() {
             <Stack.Screen name="PriorityDetails" component={PriorityDetailsScreen} />
             <Stack.Screen name="ShiftSchedule" component={ShiftScheduleScreen} />
             <Stack.Screen name="News" component={NewsScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
         ) : (
           <Stack.Group screenOptions={{ headerShown: false }}>

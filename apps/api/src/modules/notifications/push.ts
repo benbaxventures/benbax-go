@@ -45,6 +45,26 @@ export async function sendExpoPushToUser(userId: string, message: PushMessage): 
 }
 
 /**
+ * Sends a push to every device registered to any of the given users. Used by
+ * the multi-channel dispatcher, which resolves recipients once and reuses the
+ * list across channels. Never throws.
+ */
+export async function sendExpoPushToUserIds(
+  userIds: string[],
+  message: PushMessage
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const devices = await prisma.deviceToken.findMany({
+    where: { userId: { in: userIds } },
+    select: { token: true },
+  });
+  return sendExpoPushToTokens(
+    devices.map((d) => d.token),
+    message
+  );
+}
+
+/**
  * Sends a push to every device belonging to any user with the given role.
  * Best-effort — used for broadcast-style alerts such as notifying all drivers
  * that a new passenger just registered. Never throws.

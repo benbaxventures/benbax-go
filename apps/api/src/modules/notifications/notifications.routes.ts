@@ -48,3 +48,38 @@ notificationsRouter.get(
     return ok(res, notifications);
   })
 );
+
+notificationsRouter.get(
+  '/unread-count',
+  asyncHandler(async (req, res) => {
+    const count = await prisma.notification.count({
+      where: { userId: req.user!.id, readAt: null },
+    });
+    return ok(res, { count });
+  })
+);
+
+// Mark a single notification read. Scoped to the caller so one user can never
+// mutate another's feed.
+notificationsRouter.patch(
+  '/:id/read',
+  validate(z.object({ params: z.object({ id: z.string().min(1) }) })),
+  asyncHandler(async (req, res) => {
+    const result = await prisma.notification.updateMany({
+      where: { id: req.params.id!, userId: req.user!.id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return ok(res, { updated: result.count });
+  })
+);
+
+notificationsRouter.post(
+  '/read-all',
+  asyncHandler(async (req, res) => {
+    const result = await prisma.notification.updateMany({
+      where: { userId: req.user!.id, readAt: null },
+      data: { readAt: new Date() },
+    });
+    return ok(res, { updated: result.count });
+  })
+);
