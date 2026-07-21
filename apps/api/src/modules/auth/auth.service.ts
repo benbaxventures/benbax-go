@@ -7,6 +7,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
 import { badRequest, notFound, unauthorized } from '../../utils/http';
+import { notify } from '../notifications/notify';
 
 type RegisterInput = {
   name: string;
@@ -318,6 +319,25 @@ export async function forgotPassword(phone: string) {
   await prisma.passwordResetToken.create({
     data: { userId: user.id, token, expiresAt },
   });
+
+  // Actually deliver the code. Fan it out across every 1:1 channel the account
+  // can receive on (email, SMS, WhatsApp) plus the in-app feed. Best-effort:
+  // any unconfigured channel silently no-ops, so whichever gateway is set up
+  // delivers it. Without this the code was only ever written to the DB.
+  void notify(
+    { userIds: [user.id], channels: ['inapp', 'email', 'sms', 'whatsapp'] },
+    {
+      title: 'Benbax password reset code',
+      body: `Your password reset code is ${token}. It expires in 15 minutes. If you didn't request this, you can ignore this message.`,
+    }
+  );
+
+  // Dev fallback: when no paid SMS/email gateway is configured, surface the code
+  // in the server log so the reset flow stays usable locally. Never in prod —
+  // logging or returning the code there would let anyone reset any account.
+  if (env.NODE_ENV !== 'production') {
+    console.info(`[auth] Password reset code for ${phone}: ${token}`);
+  }
 
   return { message: 'Reset code sent' };
 }
