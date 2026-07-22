@@ -24,6 +24,7 @@ type AuthState = {
   register: (input: {
     name: string;
     phone: string;
+    email: string;
     password: string;
     role: 'RIDER' | 'DRIVER';
   }) => Promise<void>;

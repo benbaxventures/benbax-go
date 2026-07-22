@@ -48,6 +48,7 @@ export function SignInScreen() {
     route.params?.role ?? 'DRIVER'
   );
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -59,11 +60,18 @@ export function SignInScreen() {
   const googleSignInUnavailableReason = getGoogleSignInUnavailableReason();
 
   async function submit() {
+    // Email is required at signup: password reset codes are delivered by email
+    // (SMS is disabled), so an account with no email can never be recovered.
+    if (mode === 'register' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Enter a valid email address to receive password reset codes.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       if (mode === 'login') await login(phone, password, rememberMe);
-      else await register({ name, phone, password, role: partnerRole });
+      else await register({ name, phone, email, password, role: partnerRole });
     } catch (err) {
       if (isApiConnectionError(err)) {
         setError(
@@ -155,6 +163,19 @@ export function SignInScreen() {
                 autoCapitalize="words"
                 autoComplete="name"
                 accessibilityLabel="Full name"
+                style={inputStyle}
+              />
+            </View>
+            <View style={{ gap: 8 }}>
+              <FieldLabel>Email</FieldLabel>
+              <TextInput
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                placeholder="you@example.com (for password reset codes)"
+                accessibilityLabel="Email"
                 style={inputStyle}
               />
             </View>

@@ -42,6 +42,7 @@ const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
 export function SignInScreen() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('+233');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -75,7 +76,7 @@ export function SignInScreen() {
   }
 
   async function submit() {
-    const validationError = validateCredentials({ mode, name, phone, password });
+    const validationError = validateCredentials({ mode, name, email, phone, password });
     if (validationError) {
       setError(validationError);
       return;
@@ -85,7 +86,7 @@ export function SignInScreen() {
     setError(null);
     try {
       if (mode === 'login') await login(phone, password, rememberMe);
-      else await register({ name, phone, password });
+      else await register({ name, phone, email, password });
     } catch (err) {
       if (isApiConnectionError(err)) {
         setApiStatus('api_offline');
@@ -176,12 +177,23 @@ export function SignInScreen() {
         ) : null}
 
         {mode === 'register' ? (
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Full name"
-            style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
-          />
+          <>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Full name"
+              style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+            />
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="Email (for password reset codes)"
+              style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+            />
+          </>
         ) : null}
 
         <TextInput
@@ -275,6 +287,7 @@ export function SignInScreen() {
 function validateCredentials(input: {
   mode: 'login' | 'register';
   name: string;
+  email: string;
   phone: string;
   password: string;
 }) {
@@ -283,6 +296,12 @@ function validateCredentials(input: {
 
   if (input.mode === 'register' && input.name.trim().length < 2) {
     return 'Enter your full name.';
+  }
+
+  // Email is required at signup: password reset codes are delivered by email
+  // (SMS is disabled), so an account with no email can never be recovered.
+  if (input.mode === 'register' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) {
+    return 'Enter a valid email address to receive password reset codes.';
   }
 
   if (!phone.startsWith('+233') || phone.length < 12) {

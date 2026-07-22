@@ -27,7 +27,12 @@ type AuthState = {
     tokens: { accessToken?: string; idToken?: string },
     rememberMe?: boolean
   ) => Promise<void>;
-  register: (input: { name: string; phone: string; password: string }) => Promise<void>;
+  register: (input: {
+    name: string;
+    phone: string;
+    email: string;
+    password: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
 };

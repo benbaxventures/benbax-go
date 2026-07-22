@@ -23,7 +23,9 @@ const registerSchema = z.object({
   body: z.object({
     name: z.string().min(2),
     phone: z.string().min(8),
-    email: z.string().email().optional(),
+    // Required: password reset codes are delivered by email (SMS is off), so an
+    // account with no email on file could never be recovered.
+    email: z.string().email(),
     password: z.string().min(8),
     // Public self-registration is for end users only. Staff accounts (ADMIN,
     // OPERATIONS, SUPPORT) must be provisioned by an existing admin or seed —
