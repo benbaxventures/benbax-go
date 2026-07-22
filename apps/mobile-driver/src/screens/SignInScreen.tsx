@@ -160,6 +160,7 @@ export function SignInScreen() {
                 value={name}
                 onChangeText={setName}
                 placeholder="Enter your legal name"
+                placeholderTextColor={theme.colors.muted}
                 autoCapitalize="words"
                 autoComplete="name"
                 accessibilityLabel="Full name"
@@ -175,6 +176,7 @@ export function SignInScreen() {
                 autoCapitalize="none"
                 autoComplete="email"
                 placeholder="you@example.com (for password reset codes)"
+                placeholderTextColor={theme.colors.muted}
                 accessibilityLabel="Email"
                 style={inputStyle}
               />
@@ -188,6 +190,7 @@ export function SignInScreen() {
             onChangeText={setPhone}
             keyboardType="phone-pad"
             placeholder="+233 phone number"
+            placeholderTextColor={theme.colors.muted}
             autoComplete="tel"
             accessibilityLabel="Phone number"
             style={inputStyle}
@@ -203,6 +206,7 @@ export function SignInScreen() {
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
               placeholder="Enter password"
+              placeholderTextColor={theme.colors.muted}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
               accessibilityLabel="Password"
               style={{ flex: 1, color: theme.colors.ink, fontSize: 16, paddingVertical: 14 }}

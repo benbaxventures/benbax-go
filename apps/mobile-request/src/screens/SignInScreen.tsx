@@ -182,7 +182,14 @@ export function SignInScreen() {
               value={name}
               onChangeText={setName}
               placeholder="Full name"
-              style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+              placeholderTextColor={theme.colors.muted}
+              style={{
+                backgroundColor: '#fff',
+                borderRadius: 8,
+                padding: 14,
+                fontSize: 16,
+                color: theme.colors.ink,
+              }}
             />
             <TextInput
               value={email}
@@ -191,7 +198,14 @@ export function SignInScreen() {
               autoCapitalize="none"
               autoComplete="email"
               placeholder="Email (for password reset codes)"
-              style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+              placeholderTextColor={theme.colors.muted}
+              style={{
+                backgroundColor: '#fff',
+                borderRadius: 8,
+                padding: 14,
+                fontSize: 16,
+                color: theme.colors.ink,
+              }}
             />
           </>
         ) : null}
@@ -201,7 +215,14 @@ export function SignInScreen() {
           onChangeText={setPhone}
           keyboardType="phone-pad"
           placeholder="+233 phone number"
-          style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+          placeholderTextColor={theme.colors.muted}
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 8,
+            padding: 14,
+            fontSize: 16,
+            color: theme.colors.ink,
+          }}
         />
         <View
           style={{
@@ -218,7 +239,8 @@ export function SignInScreen() {
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
             placeholder="Password"
-            style={{ flex: 1, padding: 14, fontSize: 16 }}
+            placeholderTextColor={theme.colors.muted}
+            style={{ flex: 1, padding: 14, fontSize: 16, color: theme.colors.ink }}
           />
           <TouchableOpacity
             onPress={() => setShowPassword((s) => !s)}

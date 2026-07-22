@@ -107,6 +107,7 @@ export function ResetPasswordScreen({ navigation, route }: any) {
             keyboardType="number-pad"
             maxLength={6}
             placeholder="000000"
+            placeholderTextColor={theme.colors.muted}
             style={inputStyle}
           />
         </View>
@@ -123,6 +124,7 @@ export function ResetPasswordScreen({ navigation, route }: any) {
               onChangeText={setNewPassword}
               secureTextEntry={!showPassword}
               placeholder="Enter new password"
+              placeholderTextColor={theme.colors.muted}
               autoComplete="new-password"
               style={{ flex: 1, color: theme.colors.ink, fontSize: 16, paddingVertical: 14 }}
             />

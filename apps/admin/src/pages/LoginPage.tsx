@@ -83,6 +83,7 @@ export function LoginPage() {
         <input
           value={password}
           type={isPasswordVisible ? 'text' : 'password'}
+          placeholder={label}
           autoComplete={autoComplete}
           minLength={8}
           required
@@ -113,6 +114,7 @@ export function LoginPage() {
             <input
               value={phone}
               autoComplete="tel"
+              placeholder="Phone number"
               required
               onChange={(event) => setPhone(event.target.value)}
             />
@@ -138,6 +140,7 @@ export function LoginPage() {
             <input
               value={phone}
               autoComplete="tel"
+              placeholder="Phone number"
               required
               onChange={(event) => setPhone(event.target.value)}
             />
@@ -160,6 +163,7 @@ export function LoginPage() {
             Reset code
             <input
               value={resetCode}
+              placeholder="6-digit code"
               inputMode="numeric"
               pattern="\d{6}"
               maxLength={6}

@@ -96,7 +96,14 @@ export function ResetPasswordScreen({ navigation, route }: any) {
           keyboardType="number-pad"
           maxLength={6}
           placeholder="000000"
-          style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+          placeholderTextColor={theme.colors.muted}
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 8,
+            padding: 14,
+            fontSize: 16,
+            color: theme.colors.ink,
+          }}
         />
 
         <View
@@ -114,8 +121,9 @@ export function ResetPasswordScreen({ navigation, route }: any) {
             onChangeText={setNewPassword}
             secureTextEntry={!showPassword}
             placeholder="New password"
+            placeholderTextColor={theme.colors.muted}
             autoComplete="new-password"
-            style={{ flex: 1, padding: 14, fontSize: 16 }}
+            style={{ flex: 1, padding: 14, fontSize: 16, color: theme.colors.ink }}
           />
           <TouchableOpacity
             onPress={() => setShowPassword((s) => !s)}

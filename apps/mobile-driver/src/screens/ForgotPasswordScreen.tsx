@@ -77,6 +77,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
             onChangeText={setPhone}
             keyboardType="phone-pad"
             placeholder="+233 phone number"
+            placeholderTextColor={theme.colors.muted}
             autoComplete="tel"
             style={{
               backgroundColor: '#fff',

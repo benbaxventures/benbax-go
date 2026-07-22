@@ -77,7 +77,14 @@ export function ForgotPasswordScreen({ navigation }: any) {
           onChangeText={setPhone}
           keyboardType="phone-pad"
           placeholder="+233 phone number"
-          style={{ backgroundColor: '#fff', borderRadius: 8, padding: 14, fontSize: 16 }}
+          placeholderTextColor={theme.colors.muted}
+          style={{
+            backgroundColor: '#fff',
+            borderRadius: 8,
+            padding: 14,
+            fontSize: 16,
+            color: theme.colors.ink,
+          }}
         />
 
         {error ? <Text style={{ color: theme.colors.danger }}>{error}</Text> : null}
