@@ -4,14 +4,17 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash('BenbaxDemo123!', 12);
+  // Admin seed password is sourced from the environment so no real credential
+  // is ever committed. Set SEED_ADMIN_PASSWORD in the API env before seeding;
+  // the fallback is a throwaway value for fresh local databases only.
+  const passwordHash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!', 12);
 
   await prisma.user.upsert({
-    where: { phone: '+233200000001' },
+    where: { phone: '+2330594172522' },
     update: {},
     create: {
       name: 'Benbax Admin',
-      phone: '+233200000001',
+      phone: '+2330594172522',
       email: 'admin@benbax.com',
       role: UserRole.ADMIN,
       passwordHash,
