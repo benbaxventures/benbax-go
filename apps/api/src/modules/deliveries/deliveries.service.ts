@@ -1,4 +1,4 @@
-import type { DeliveryCategory, UserRole } from '@prisma/client';
+import type { Delivery, DeliveryCategory, UserRole } from '@prisma/client';
 import { CancelActor, DeliveryStatus, Prisma } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
@@ -120,13 +120,54 @@ export async function createDelivery(input: CreateDeliveryInput) {
   return delivery;
 }
 
+// The Delivery row stores pickup/dropoff/fare as flat columns, but the client
+// contract (DeliverySummary) expects nested `pickup`, `dropoff`, and `quote`
+// objects. Returning the raw row makes `delivery.pickup` undefined on the
+// client, which crashes the Orders list. Map to the nested shape here so the
+// API response matches the shared contract.
+function toDeliverySummary(d: Delivery) {
+  return {
+    id: d.id,
+    trackingCode: d.trackingCode,
+    category: d.category,
+    status: d.status,
+    pickup: {
+      label: d.pickupLabel,
+      formattedAddress: d.pickupAddress ?? undefined,
+      landmark: d.pickupLandmark ?? undefined,
+      latitude: Number(d.pickupLatitude),
+      longitude: Number(d.pickupLongitude),
+    },
+    dropoff: {
+      label: d.dropoffLabel,
+      formattedAddress: d.dropoffAddress ?? undefined,
+      landmark: d.dropoffLandmark ?? undefined,
+      latitude: Number(d.dropoffLatitude),
+      longitude: Number(d.dropoffLongitude),
+    },
+    quote: {
+      distanceKm: Number(d.distanceKm),
+      estimatedMinutes: d.etaMinutes,
+      baseFare: Number(d.baseFare),
+      surgeMultiplier: Number(d.surgeMultiplier),
+      serviceFee: Number(d.serviceFee),
+      total: Number(d.totalFare),
+      currency: 'GHS' as const,
+    },
+    scheduledFor: d.scheduledFor?.toISOString(),
+    createdAt: d.createdAt.toISOString(),
+  };
+}
+
 export async function listCustomerDeliveries(customerId: string) {
-  return prisma.delivery.findMany({
+  const deliveries = await prisma.delivery.findMany({
     where: { customerId },
     orderBy: { createdAt: 'desc' },
     take: 50,
     include: { payment: true, assignments: { take: 1, orderBy: { offeredAt: 'desc' } } },
   });
+
+  return deliveries.map(toDeliverySummary);
 }
 
 export async function getDelivery(id: string, requesterId: string) {
