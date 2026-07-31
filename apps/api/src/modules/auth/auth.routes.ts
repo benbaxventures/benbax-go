@@ -34,11 +34,19 @@ const registerSchema = z.object({
   }),
 });
 
+// Sign-in accepts a phone or an email under `identifier`. `phone` is still
+// accepted for older clients (admin/driver) that have not migrated yet.
 const loginSchema = z.object({
-  body: z.object({
-    phone: z.string().min(8),
-    password: z.string().min(8),
-  }),
+  body: z
+    .object({
+      identifier: z.string().min(1).optional(),
+      phone: z.string().min(1).optional(),
+      password: z.string().min(8),
+    })
+    .refine((body) => Boolean(body.identifier ?? body.phone), {
+      message: 'Enter your phone number or email',
+      path: ['identifier'],
+    }),
 });
 
 const refreshSchema = z.object({
@@ -86,7 +94,14 @@ authRouter.post(
   '/login',
   validate(loginSchema),
   asyncHandler(async (req, res) =>
-    ok(res, await service.login(req.body.phone, req.body.password, sessionContext(req)))
+    ok(
+      res,
+      await service.login(
+        req.body.identifier ?? req.body.phone,
+        req.body.password,
+        sessionContext(req)
+      )
+    )
   )
 );
 
@@ -116,29 +131,54 @@ authRouter.post(
   )
 );
 
+// `identifier` may be a phone or an email. `phone` stays accepted for older
+// clients (driver app) that still send the phone field.
 const forgotPasswordSchema = z.object({
-  body: z.object({ phone: z.string().min(8) }),
+  body: z
+    .object({
+      identifier: z.string().min(1).optional(),
+      phone: z.string().min(1).optional(),
+    })
+    .refine((body) => Boolean(body.identifier ?? body.phone), {
+      message: 'Enter your phone number or email',
+      path: ['identifier'],
+    }),
 });
 
 const resetPasswordSchema = z.object({
-  body: z.object({
-    phone: z.string().min(8),
-    token: z.string().length(6),
-    newPassword: z.string().min(8),
-  }),
+  body: z
+    .object({
+      identifier: z.string().min(1).optional(),
+      phone: z.string().min(1).optional(),
+      token: z.string().length(6),
+      newPassword: z.string().min(8),
+    })
+    .refine((body) => Boolean(body.identifier ?? body.phone), {
+      message: 'Enter your phone number or email',
+      path: ['identifier'],
+    }),
 });
 
 authRouter.post(
   '/forgot-password',
   validate(forgotPasswordSchema),
-  asyncHandler(async (req, res) => ok(res, await service.forgotPassword(req.body.phone)))
+  asyncHandler(async (req, res) =>
+    ok(res, await service.forgotPassword(req.body.identifier ?? req.body.phone))
+  )
 );
 
 authRouter.post(
   '/reset-password',
   validate(resetPasswordSchema),
   asyncHandler(async (req, res) =>
-    ok(res, await service.resetPassword(req.body.phone, req.body.token, req.body.newPassword))
+    ok(
+      res,
+      await service.resetPassword(
+        req.body.identifier ?? req.body.phone,
+        req.body.token,
+        req.body.newPassword
+      )
+    )
   )
 );
 

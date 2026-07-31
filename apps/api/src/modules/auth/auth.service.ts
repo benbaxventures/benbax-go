@@ -84,6 +84,16 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+// Sign-in and password recovery both accept a single identifier that may be
+// either the account phone or email. Both columns are unique, so an OR lookup
+// resolves to at most one user.
+function findUserByIdentifier(identifier: string) {
+  const value = identifier.trim();
+  return prisma.user.findFirst({
+    where: { OR: [{ phone: value }, { email: value }] },
+  });
+}
+
 const FALLBACK_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Persists a session record for the issued refresh token so the admin panel
@@ -237,8 +247,8 @@ export async function refresh(refreshToken: string, ctx?: SessionContext) {
   return result;
 }
 
-export async function login(phone: string, password: string, ctx?: SessionContext) {
-  const user = await prisma.user.findUnique({ where: { phone } });
+export async function login(identifier: string, password: string, ctx?: SessionContext) {
+  const user = await findUserByIdentifier(identifier);
   if (!user?.passwordHash) throw unauthorized('Invalid credentials');
 
   const valid = await bcrypt.compare(password, user.passwordHash);
@@ -309,9 +319,9 @@ export async function googleLogin(input: GoogleLoginInput, ctx?: SessionContext)
   return payload;
 }
 
-export async function forgotPassword(phone: string) {
-  const user = await prisma.user.findUnique({ where: { phone } });
-  if (!user) throw notFound('No account found with this phone number');
+export async function forgotPassword(identifier: string) {
+  const user = await findUserByIdentifier(identifier);
+  if (!user) throw notFound('No account found with that email or phone number');
 
   const token = randomInt(100000, 999999).toString();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
@@ -336,15 +346,15 @@ export async function forgotPassword(phone: string) {
   // in the server log so the reset flow stays usable locally. Never in prod —
   // logging or returning the code there would let anyone reset any account.
   if (env.NODE_ENV !== 'production') {
-    console.info(`[auth] Password reset code for ${phone}: ${token}`);
+    console.info(`[auth] Password reset code for ${identifier}: ${token}`);
   }
 
   return { message: 'Reset code sent' };
 }
 
-export async function resetPassword(phone: string, token: string, newPassword: string) {
-  const user = await prisma.user.findUnique({ where: { phone } });
-  if (!user) throw notFound('No account found with this phone number');
+export async function resetPassword(identifier: string, token: string, newPassword: string) {
+  const user = await findUserByIdentifier(identifier);
+  if (!user) throw notFound('No account found with that email or phone number');
 
   const resetToken = await prisma.passwordResetToken.findFirst({
     where: { token, userId: user.id, usedAt: null, expiresAt: { gte: new Date() } },
