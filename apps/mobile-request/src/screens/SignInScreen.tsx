@@ -44,6 +44,9 @@ export function SignInScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('+233');
+  // Login accepts either a phone number or an email; register keeps a dedicated
+  // +233 phone field, so the two flows track their inputs separately.
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -76,7 +79,7 @@ export function SignInScreen() {
   }
 
   async function submit() {
-    const validationError = validateCredentials({ mode, name, email, phone, password });
+    const validationError = validateCredentials({ mode, name, email, phone, identifier, password });
     if (validationError) {
       setError(validationError);
       return;
@@ -85,7 +88,7 @@ export function SignInScreen() {
     setLoading(true);
     setError(null);
     try {
-      if (mode === 'login') await login(phone, password, rememberMe);
+      if (mode === 'login') await login(identifier, password, rememberMe);
       else await register({ name, phone, email, password });
     } catch (err) {
       if (isApiConnectionError(err)) {
@@ -96,7 +99,7 @@ export function SignInScreen() {
       } else {
         // Provide more helpful messages for common auth failures.
         if (err instanceof ApiResponseError) {
-          if (err.status === 401) setError('Invalid phone or password.');
+          if (err.status === 401) setError('Invalid phone/email or password.');
           else if (err.status === 400 && err.code === 'VALIDATION_ERROR')
             setError(String(err.details ?? err.message));
           else if (err.status === 503 || err.code === 'DATABASE_UNAVAILABLE') {
@@ -210,20 +213,38 @@ export function SignInScreen() {
           </>
         ) : null}
 
-        <TextInput
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-          placeholder="+233 phone number"
-          placeholderTextColor={theme.colors.muted}
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: 8,
-            padding: 14,
-            fontSize: 16,
-            color: theme.colors.ink,
-          }}
-        />
+        {mode === 'register' ? (
+          <TextInput
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            placeholder="+233 phone number"
+            placeholderTextColor={theme.colors.muted}
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: 8,
+              padding: 14,
+              fontSize: 16,
+              color: theme.colors.ink,
+            }}
+          />
+        ) : (
+          <TextInput
+            value={identifier}
+            onChangeText={setIdentifier}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            placeholder="Phone number or email"
+            placeholderTextColor={theme.colors.muted}
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: 8,
+              padding: 14,
+              fontSize: 16,
+              color: theme.colors.ink,
+            }}
+          />
+        )}
         <View
           style={{
             backgroundColor: '#fff',
@@ -311,21 +332,36 @@ function validateCredentials(input: {
   name: string;
   email: string;
   phone: string;
+  identifier: string;
   password: string;
 }) {
-  const phone = input.phone.trim();
   const password = input.password.trim();
 
-  if (input.mode === 'register' && input.name.trim().length < 2) {
+  // Login accepts either a phone number or an email, so only require a
+  // non-empty identifier and let the API resolve which one it is.
+  if (input.mode === 'login') {
+    if (input.identifier.trim().length === 0) {
+      return 'Enter your phone number or email.';
+    }
+
+    if (password.length < 6) {
+      return 'Password must be at least 6 characters.';
+    }
+
+    return null;
+  }
+
+  if (input.name.trim().length < 2) {
     return 'Enter your full name.';
   }
 
   // Email is required at signup: password reset codes are delivered by email
   // (SMS is disabled), so an account with no email can never be recovered.
-  if (input.mode === 'register' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) {
     return 'Enter a valid email address to receive password reset codes.';
   }
 
+  const phone = input.phone.trim();
   if (!phone.startsWith('+233') || phone.length < 12) {
     return 'Enter a valid Ghana phone number starting with +233.';
   }

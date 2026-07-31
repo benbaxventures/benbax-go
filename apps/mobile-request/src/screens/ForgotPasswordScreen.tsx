@@ -5,15 +5,18 @@ import { Button } from '../components/Button';
 import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../services/api';
 import { theme } from '../theme/tokens';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function ForgotPasswordScreen({ navigation }: any) {
-  const [phone, setPhone] = useState('+233');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
   async function handleSubmit() {
-    if (!phone.startsWith('+233') || phone.length < 12) {
-      setError('Enter a valid Ghana phone number starting with +233.');
+    const trimmedEmail = email.trim();
+    if (!EMAIL_PATTERN.test(trimmedEmail)) {
+      setError('Enter the email address on your account.');
       return;
     }
 
@@ -24,7 +27,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
       const response = await fetch(`${getApiBaseUrl()}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ identifier: trimmedEmail }),
       });
 
       const body = await response.json();
@@ -36,7 +39,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
         );
       }
 
-      navigation.navigate('ResetPassword', { phone, resetToken: body.data.resetToken });
+      navigation.navigate('ResetPassword', { email: trimmedEmail });
     } catch (err) {
       if (isApiConnectionError(err)) {
         setError(`Cannot reach the API at ${getApiBaseUrl()}.`);
@@ -68,15 +71,17 @@ export function ForgotPasswordScreen({ navigation }: any) {
             Forgot password
           </Text>
           <Text style={{ color: theme.colors.muted, fontSize: 16 }}>
-            Enter your phone number to receive a 6-digit reset code.
+            Enter your email to receive a 6-digit reset code.
           </Text>
         </View>
 
         <TextInput
-          value={phone}
-          onChangeText={setPhone}
-          keyboardType="phone-pad"
-          placeholder="+233 phone number"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="email"
+          placeholder="Email address"
           placeholderTextColor={theme.colors.muted}
           style={{
             backgroundColor: '#fff',

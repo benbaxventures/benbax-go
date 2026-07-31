@@ -15,8 +15,8 @@ import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../servic
 import { theme } from '../theme/tokens';
 
 export function ResetPasswordScreen({ navigation, route }: any) {
-  const { phone, resetToken: initialToken } = route.params;
-  const [token, setToken] = useState(initialToken || '');
+  const { email } = route.params;
+  const [token, setToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -40,7 +40,7 @@ export function ResetPasswordScreen({ navigation, route }: any) {
       const response = await fetch(`${getApiBaseUrl()}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, token, newPassword }),
+        body: JSON.stringify({ identifier: email, token, newPassword }),
       });
 
       const body = await response.json();
@@ -86,7 +86,7 @@ export function ResetPasswordScreen({ navigation, route }: any) {
             Reset password
           </Text>
           <Text style={{ color: theme.colors.muted, fontSize: 16 }}>
-            Enter the 6-digit code sent to {phone} and your new password.
+            Enter the 6-digit code sent to {email} and your new password.
           </Text>
         </View>
 

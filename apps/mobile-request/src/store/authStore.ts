@@ -22,7 +22,7 @@ type AuthState = {
   isHydrating: boolean;
   biometricEnabled: boolean;
   setBiometricEnabled: (enabled: boolean) => Promise<void>;
-  login: (phone: string, password: string, rememberMe?: boolean) => Promise<void>;
+  login: (identifier: string, password: string, rememberMe?: boolean) => Promise<void>;
   loginWithGoogle: (
     tokens: { accessToken?: string; idToken?: string },
     rememberMe?: boolean
@@ -45,13 +45,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     await setBiometricEnabled(enabled);
     set({ biometricEnabled: enabled });
   },
-  async login(phone, password, rememberMe = true) {
+  async login(identifier, password, rememberMe = true) {
     const data = await apiRequest<{
       user: User;
       tokens: { accessToken: string; refreshToken: string };
     }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ phone, password }),
+      // `identifier` may be a phone number or an email; the API resolves either.
+      body: JSON.stringify({ identifier: identifier.trim(), password }),
       skipAuth: true,
     });
     await saveAuthSession({ ...data.tokens, user: data.user }, rememberMe);
