@@ -15,6 +15,7 @@ import {
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Image,
@@ -34,6 +35,7 @@ import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
 import { useInitializePayment } from '../hooks/usePayments';
 import { useCreateTrip, useTripQuote } from '../hooks/useTrips';
 import type { RootStackParamList } from '../navigation/types';
+import { geocodePlace, type GeoPoint } from '../services/geocoding';
 import type { AddressPoint, DeliveryCategory } from '../shared';
 import { useAuthStore } from '../store/authStore';
 import { useDeliveryStore } from '../store/deliveryStore';
@@ -42,6 +44,9 @@ import { theme } from '../theme/tokens';
 
 const PANEL_MIN_HEIGHT = 200;
 const PANEL_FORM_HEIGHT = 500;
+
+// Central Accra — used only until the device location or a chosen place resolves.
+const FALLBACK_COORD: GeoPoint = { latitude: 5.6508, longitude: -0.1668 };
 
 type Mode = 'delivery' | 'rides';
 
@@ -221,16 +226,52 @@ export function HomeScreen() {
   const [dropoffLandmark] = useState('');
   const [showForm, setShowForm] = useState(false);
 
-  const usingDetectedPickup =
-    pickupText === 'Current location' || pickupText === detectedLocationLabel;
+  // Resolved coordinates for each end of the trip. `pickupCoord` is an override
+  // set when the customer types/picks a named pickup; when null we fall back to
+  // the detected device location. `dropoffCoord` is null until a destination is
+  // resolved. `resolvingField` drives the inline "locating" spinner.
+  const [pickupCoord, setPickupCoord] = useState<GeoPoint | null>(null);
+  const [dropoffCoord, setDropoffCoord] = useState<GeoPoint | null>(null);
+  const [resolvingField, setResolvingField] = useState<'pickup' | 'dropoff' | null>(null);
+  const mapRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+
   const hasLocation = latitude !== null && longitude !== null;
-  const currentLat = usingDetectedPickup && hasLocation ? latitude : 5.6508;
-  const currentLng = usingDetectedPickup && hasLocation ? longitude : -0.1668;
+  const detectedCoord: GeoPoint | null = hasLocation ? { latitude, longitude } : null;
+  const usingDetectedPickup =
+    !pickupCoord && (pickupText === 'Current location' || pickupText === detectedLocationLabel);
+  const activePickupCoord = pickupCoord ?? detectedCoord ?? FALLBACK_COORD;
+  const currentLat = activePickupCoord.latitude;
+  const currentLng = activePickupCoord.longitude;
 
   const handleUseLocation = useCallback(() => {
+    setPickupCoord(null);
     setPickupText('Current location');
     requestLocation();
   }, [requestLocation]);
+
+  // Resolve a typed place name into coordinates and move the map there.
+  const resolvePlace = useCallback(async (field: 'pickup' | 'dropoff', text: string) => {
+    const query = text.trim();
+    if (query.length < 3) return;
+    setResolvingField(field);
+    const result = await geocodePlace(query);
+    setResolvingField(null);
+    if (!result) {
+      Alert.alert(
+        'Location not found',
+        `We couldn't locate "${query}". Try a nearby landmark or pick a suggestion.`
+      );
+      return;
+    }
+    const coord: GeoPoint = { latitude: result.latitude, longitude: result.longitude };
+    if (field === 'pickup') {
+      setPickupText(result.label || query);
+      setPickupCoord(coord);
+    } else {
+      setDropoffText(result.label || query);
+      setDropoffCoord(coord);
+    }
+  }, []);
 
   useEffect(() => {
     if (!hasLocation || !detectedLocationLabel) return;
@@ -282,33 +323,83 @@ export function HomeScreen() {
     [currentLat, currentLng, detectedAddress, pickupLandmark, pickupText, usingDetectedPickup]
   );
 
-  const dropoff = useMemo(
-    () => ({
-      label: dropoffText || 'Destination',
-      latitude: 5.556,
-      longitude: -0.1824,
+  // Keep the map framed on the trip in realtime: fit both points once a
+  // destination is chosen, otherwise centre on the pickup.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (dropoffCoord && typeof map.fitToCoordinates === 'function') {
+      map.fitToCoordinates([activePickupCoord, dropoffCoord], {
+        edgePadding: { top: 120, right: 60, bottom: PANEL_FORM_HEIGHT + 40, left: 60 },
+        animated: true,
+      });
+    } else if (typeof map.animateToRegion === 'function') {
+      map.animateToRegion(
+        {
+          latitude: activePickupCoord.latitude,
+          longitude: activePickupCoord.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        },
+        600
+      );
+    }
+    // Depend on primitive lat/lng (not the coord object, which is recreated
+    // every render) so this only fires when the location actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePickupCoord.latitude, activePickupCoord.longitude, dropoffCoord]);
+
+  // Guarantee we have destination coordinates before quoting/booking: if the
+  // customer typed a name but never submitted it, resolve it now.
+  const ensureDropoffResolved = useCallback(async (): Promise<AddressPoint | null> => {
+    if (dropoffCoord) {
+      return {
+        label: dropoffText || 'Destination',
+        latitude: dropoffCoord.latitude,
+        longitude: dropoffCoord.longitude,
+        landmark: dropoffLandmark,
+      };
+    }
+    const query = dropoffText.trim();
+    if (!query) return null;
+    setResolvingField('dropoff');
+    const result = await geocodePlace(query);
+    setResolvingField(null);
+    if (!result) return null;
+    const coord: GeoPoint = { latitude: result.latitude, longitude: result.longitude };
+    setDropoffText(result.label || query);
+    setDropoffCoord(coord);
+    return {
+      label: result.label || query,
+      latitude: coord.latitude,
+      longitude: coord.longitude,
       landmark: dropoffLandmark,
-    }),
-    [dropoffLandmark, dropoffText]
-  );
+    };
+  }, [dropoffCoord, dropoffText, dropoffLandmark]);
 
   async function handleQuote() {
+    const resolvedDropoff = await ensureDropoffResolved();
+    if (!resolvedDropoff) {
+      Alert.alert('Add a destination', 'Enter or pick where the package is going.');
+      return;
+    }
+
     deliveryStore.setPickup(pickup);
-    deliveryStore.setDropoff(dropoff);
+    deliveryStore.setDropoff(resolvedDropoff);
     tripStore.setPickup(pickup);
-    tripStore.setDropoff(dropoff);
+    tripStore.setDropoff(resolvedDropoff);
 
     if (mode === 'delivery') {
       const result = await deliveryQuoteMutation.mutateAsync({
         category: deliveryStore.draft.category,
         pickup,
-        dropoff,
+        dropoff: resolvedDropoff,
       });
       deliveryStore.setQuote(result);
     } else {
       const result = await tripQuoteMutation.mutateAsync({
         pickup,
-        dropoff,
+        dropoff: resolvedDropoff,
         requestedVehicleType: tripStore.draft.vehicleType,
       });
       tripStore.setQuote(result);
@@ -317,11 +408,16 @@ export function HomeScreen() {
 
   async function handleBook() {
     try {
+      const resolvedDropoff = await ensureDropoffResolved();
+      if (!resolvedDropoff) {
+        Alert.alert('Add a destination', 'Enter or pick where the package is going.');
+        return;
+      }
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
           category: deliveryStore.draft.category,
           pickup,
-          dropoff,
+          dropoff: resolvedDropoff,
           paymentMethod: 'PAYSTACK_CARD',
         });
         const initialized = await initializePayment.mutateAsync({
@@ -340,7 +436,7 @@ export function HomeScreen() {
       } else {
         const carTrip = await createTripMutation.mutateAsync({
           pickup,
-          dropoff,
+          dropoff: resolvedDropoff,
           requestedVehicleType: tripStore.draft.vehicleType,
         });
         navigation.navigate('TripTracking', { tripId: carTrip.id });
@@ -356,11 +452,16 @@ export function HomeScreen() {
   async function handleSchedule() {
     const scheduledFor = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     try {
+      const resolvedDropoff = await ensureDropoffResolved();
+      if (!resolvedDropoff) {
+        Alert.alert('Add a destination', 'Enter or pick where the package is going.');
+        return;
+      }
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
           category: deliveryStore.draft.category,
           pickup,
-          dropoff,
+          dropoff: resolvedDropoff,
           paymentMethod: 'PAYSTACK_CARD',
           scheduledFor,
         });
@@ -372,7 +473,7 @@ export function HomeScreen() {
       } else {
         const carTrip = await createTripMutation.mutateAsync({
           pickup,
-          dropoff,
+          dropoff: resolvedDropoff,
           requestedVehicleType: tripStore.draft.vehicleType,
           scheduledFor,
         });
@@ -420,6 +521,7 @@ export function HomeScreen() {
       {/* === FULL-SCREEN MAP === */}
       <View style={{ ...StyleSheet.absoluteFillObject }}>
         <MapView
+          mapRef={mapRef}
           initialRegion={{
             latitude: currentLat,
             longitude: currentLng,
@@ -431,11 +533,16 @@ export function HomeScreen() {
           style={{ flex: 1 }}
           padding={{ top: 0, right: 0, bottom: PANEL_FORM_HEIGHT, left: 0 }}
         >
-          {/* Dropoff marker if set */}
-          {dropoffText ? (
+          <MapMarker
+            coordinate={activePickupCoord}
+            title="Pickup"
+            description={pickupText}
+            pinColor={theme.colors.primary}
+          />
+          {dropoffCoord ? (
             <MapMarker
-              coordinate={{ latitude: 5.556, longitude: -0.1824 }}
-              title="Destination"
+              coordinate={dropoffCoord}
+              title={dropoffText || 'Destination'}
               pinColor={theme.colors.accent}
             />
           ) : null}
@@ -633,6 +740,7 @@ export function HomeScreen() {
                     key={index}
                     onPress={() => {
                       setDropoffText(location.name);
+                      setDropoffCoord({ latitude: location.lat, longitude: location.lng });
                       handleWhereTo();
                     }}
                     style={{
@@ -756,10 +864,28 @@ export function HomeScreen() {
                       <Text style={{ fontSize: 11, fontWeight: '600', color: theme.colors.muted }}>
                         PICKUP
                       </Text>
-                      <Text style={{ fontSize: 15, fontWeight: '600', color: theme.colors.ink }}>
-                        {pickupText}
-                      </Text>
+                      <TextInput
+                        style={{
+                          fontSize: 15,
+                          fontWeight: '600',
+                          color: theme.colors.ink,
+                          padding: 0,
+                          margin: 0,
+                        }}
+                        placeholder="Pickup location"
+                        placeholderTextColor={theme.colors.muted}
+                        value={pickupText}
+                        onChangeText={(text) => {
+                          setPickupText(text);
+                          setPickupCoord(null);
+                        }}
+                        onSubmitEditing={() => resolvePlace('pickup', pickupText)}
+                        returnKeyType="search"
+                      />
                     </View>
+                    {resolvingField === 'pickup' ? (
+                      <ActivityIndicator size="small" color={theme.colors.primary} />
+                    ) : null}
                     <Pressable onPress={handleUseLocation} style={{ padding: 4 }}>
                       <Navigation size={18} color={theme.colors.primary} />
                     </Pressable>
@@ -811,9 +937,17 @@ export function HomeScreen() {
                             placeholder="Enter destination"
                             placeholderTextColor={theme.colors.muted}
                             value={dropoffText}
-                            onChangeText={setDropoffText}
+                            onChangeText={(text) => {
+                              setDropoffText(text);
+                              setDropoffCoord(null);
+                            }}
+                            onSubmitEditing={() => resolvePlace('dropoff', dropoffText)}
+                            returnKeyType="search"
                           />
                         </View>
+                        {resolvingField === 'dropoff' ? (
+                          <ActivityIndicator size="small" color={theme.colors.primary} />
+                        ) : null}
                       </View>
                     </View>
                   </View>
