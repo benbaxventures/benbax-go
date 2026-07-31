@@ -22,3 +22,5 @@ export const unauthorized = (message = 'Authentication required') =>
 export const forbidden = (message = 'Permission denied') => new AppError(403, 'FORBIDDEN', message);
 export const badRequest = (message = 'Invalid request', details?: Record<string, unknown>) =>
   new AppError(400, 'BAD_REQUEST', message, details);
+export const badGateway = (message = 'Upstream service error', details?: Record<string, unknown>) =>
+  new AppError(502, 'BAD_GATEWAY', message, details);
