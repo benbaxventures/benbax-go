@@ -26,7 +26,7 @@ export function OrdersScreen() {
         >
           <StatusPill label={delivery.status} />
           <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
-            {delivery.pickup.label} to {delivery.dropoff.label}
+            {delivery.pickup?.label ?? 'Pickup'} to {delivery.dropoff?.label ?? 'Destination'}
           </Text>
           <Text style={{ color: theme.colors.muted }}>
             GHS {delivery.quote?.total ?? '--'} · {delivery.category}
