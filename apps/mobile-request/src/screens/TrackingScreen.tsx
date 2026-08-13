@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { MapPinLabel } from '../components/MapPinLabel';
 import { MapMarker, MapPolyline, MapView } from '../components/MapView';
 import { StatusPill } from '../components/StatusPill';
 import type { RootStackParamList } from '../navigation/types';
@@ -21,8 +22,10 @@ type Coordinate = {
 
 type DeliveryDetail = {
   id: string;
+  pickupLabel?: string;
   pickupLatitude: string;
   pickupLongitude: string;
+  dropoffLabel?: string;
   dropoffLatitude: string;
   dropoffLongitude: string;
   metadata?: {
@@ -146,15 +149,36 @@ export function TrackingScreen({ route, navigation }: Props) {
         showsMyLocationButton={false}
         style={{ flex: 1 }}
       >
-        <MapMarker coordinate={pickup} title="Pickup" pinColor={theme.colors.primary} />
-        <MapMarker coordinate={dropoff} title="Drop-off" pinColor="#EF4444" />
+        <MapMarker
+          coordinate={pickup}
+          title="Pickup"
+          pinColor={theme.colors.primary}
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <MapPinLabel
+            color={theme.colors.primary}
+            title="Pickup"
+            subtitle={delivery?.pickupLabel}
+          />
+        </MapMarker>
+        <MapMarker
+          coordinate={dropoff}
+          title="Drop-off"
+          pinColor="#EF4444"
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <MapPinLabel color="#EF4444" title="Dropoff" subtitle={delivery?.dropoffLabel} />
+        </MapMarker>
         {latestPoint ? (
           <MapMarker
             coordinate={latestPoint}
             title="Rider"
             pinColor={theme.colors.accent}
             zIndex={10}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <MapPinLabel color={theme.colors.accent} title="Rider" />
+          </MapMarker>
         ) : null}
         <MapPolyline coordinates={routePoints} strokeColor={theme.colors.primary} strokeWidth={4} />
       </MapView>

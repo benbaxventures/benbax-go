@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { MapPinLabel } from '../components/MapPinLabel';
 import { MapMarker, MapPolyline, MapView } from '../components/MapView';
 import { StatusPill } from '../components/StatusPill';
 import type { RootStackParamList } from '../navigation/types';
@@ -104,15 +105,6 @@ export function TripTrackingScreen({ route, navigation }: Props) {
         setLiveStatus(assignment.status === 'ACCEPTED' ? 'ASSIGNED' : 'ASSIGNING');
         if (assignment.driverProfile) {
           setAssignedDriver(assignment.driverProfile);
-          if (
-            assignment.driverProfile.currentLatitude &&
-            assignment.driverProfile.currentLongitude
-          ) {
-            setDriverPoint({
-              latitude: Number(assignment.driverProfile.currentLatitude),
-              longitude: Number(assignment.driverProfile.currentLongitude),
-            });
-          }
         }
         Alert.alert(
           assignment.status === 'ACCEPTED' ? 'Driver assigned' : 'Driver found',
@@ -153,6 +145,9 @@ export function TripTrackingScreen({ route, navigation }: Props) {
     [trip?.dropoffLatitude, trip?.dropoffLongitude]
   );
 
+  // Only a real, live driver position is shown — never the driver profile's
+  // stored coordinates, which can be stale (from a previous trip/session) and
+  // would put the yellow pin in the wrong place.
   const latestPoint: Coordinate | null = useMemo(() => {
     if (driverPoint) return driverPoint;
     if (trip?.trackingPoints?.[0]) {
@@ -161,14 +156,8 @@ export function TripTrackingScreen({ route, navigation }: Props) {
         longitude: Number(trip.trackingPoints[0].longitude),
       };
     }
-    if (assignedDriver?.currentLatitude && assignedDriver?.currentLongitude) {
-      return {
-        latitude: Number(assignedDriver.currentLatitude),
-        longitude: Number(assignedDriver.currentLongitude),
-      };
-    }
     return null;
-  }, [driverPoint, trip?.trackingPoints, assignedDriver]);
+  }, [driverPoint, trip?.trackingPoints]);
 
   const routePoints = useMemo(() => {
     if (trip?.metadata?.expectedRoute?.polyline?.length) {
@@ -264,15 +253,32 @@ export function TripTrackingScreen({ route, navigation }: Props) {
         showsMyLocationButton={false}
         style={{ flex: 1 }}
       >
-        <MapMarker coordinate={pickup} title="Pickup" pinColor={theme.colors.primary} />
-        <MapMarker coordinate={dropoff} title="Destination" pinColor="#EF4444" />
+        <MapMarker
+          coordinate={pickup}
+          title="Pickup"
+          pinColor={theme.colors.primary}
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <MapPinLabel color={theme.colors.primary} title="Pickup" subtitle={trip?.pickupLabel} />
+        </MapMarker>
+        <MapMarker
+          coordinate={dropoff}
+          title="Destination"
+          pinColor="#EF4444"
+          anchor={{ x: 0.5, y: 1 }}
+        >
+          <MapPinLabel color="#EF4444" title="Dropoff" subtitle={trip?.dropoffLabel} />
+        </MapMarker>
         {latestPoint ? (
           <MapMarker
             coordinate={latestPoint}
             title="Driver"
             pinColor={theme.colors.accent}
             zIndex={10}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <MapPinLabel color={theme.colors.accent} title="Driver" subtitle={driverName} />
+          </MapMarker>
         ) : null}
         <MapPolyline coordinates={routePoints} strokeColor={theme.colors.primary} strokeWidth={4} />
       </MapView>

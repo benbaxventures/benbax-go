@@ -2,11 +2,12 @@ import type { NavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { Bike, CheckCircle2, Crosshair, Flame, Power, XCircle } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { ErrorState } from '../components/ErrorState';
 import { HotZoneOverlay } from '../components/HotZoneOverlay';
+import { OfferMarker } from '../components/OfferMarker';
 import { OfflineBanner } from '../components/OfflineBanner';
 import { Screen } from '../components/Screen';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
@@ -28,7 +29,7 @@ async function loadMaps() {
 import type { MapViewProps } from 'react-native-maps';
 
 type MapsModule = {
-  default: React.ComponentType<MapViewProps>;
+  default: React.ComponentType<MapViewProps & { ref?: React.Ref<any> }>; // eslint-disable-line @typescript-eslint/no-explicit-any
   Marker: React.ComponentType<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
   Polyline: React.ComponentType<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 };
@@ -51,6 +52,36 @@ export function DeliveryDispatchScreen() {
   const [mapsModule, setMapsModule] = useState<MapsModule | null>(null);
   const MapView = mapsModule?.default;
   const Marker = mapsModule?.Marker;
+  const mapRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  // Focus the map on the incoming request so pickup and dropoff are both visible.
+  useEffect(() => {
+    const coords = [currentOffer?.pickup, currentOffer?.dropoff].filter(
+      (p): p is { latitude: number; longitude: number } => Boolean(p)
+    );
+    if (currentOffer && coords.length) {
+      mapRef.current?.fitToCoordinates(coords, {
+        edgePadding: { top: 180, right: 60, bottom: 420, left: 60 },
+        animated: true,
+      });
+    }
+  }, [currentOffer]);
+
+  // Live countdown of the offer's acceptance window.
+  const [offerSecondsLeft, setOfferSecondsLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (!currentOffer?.expiresAt) return;
+    const tick = () => {
+      const left = Math.max(
+        0,
+        Math.round((new Date(currentOffer.expiresAt).getTime() - Date.now()) / 1000)
+      );
+      setOfferSecondsLeft(left);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [currentOffer?.expiresAt]);
 
   useEffect(() => {
     loadMaps().then(setMapsModule);
@@ -148,6 +179,7 @@ export function DeliveryDispatchScreen() {
     <View style={{ flex: 1, backgroundColor: theme.colors.canvas }}>
       {isOnline && MapView && Marker && latitude && longitude ? (
         <MapView
+          ref={mapRef}
           style={{ flex: 1, position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
           initialCamera={{
             center: { latitude, longitude },
@@ -163,6 +195,20 @@ export function DeliveryDispatchScreen() {
           pitchEnabled
         >
           <HotZoneOverlay zones={hotZones ?? []} MapView={MapView} Marker={Marker} />
+          {currentOffer?.pickup ? (
+            <OfferMarker
+              pickup={currentOffer.pickup}
+              dropoff={currentOffer.dropoff}
+              clientName={currentOffer.customerName}
+              offerType="delivery"
+              Marker={Marker}
+              onPress={() => {
+                const p = currentOffer.pickup;
+                if (p)
+                  mapRef.current?.animateCamera({ center: p, pitch: 55, heading: 0, zoom: 15 });
+              }}
+            />
+          ) : null}
         </MapView>
       ) : null}
 
@@ -318,10 +364,44 @@ export function DeliveryDispatchScreen() {
           </View>
           {currentOffer ? (
             <>
-              <Text style={{ color: theme.colors.muted }}>Delivery {currentOffer.deliveryId}</Text>
-              <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>
-                Dispatch score {currentOffer.score}
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
+                  New delivery request
+                </Text>
+                {offerSecondsLeft != null ? (
+                  <Text style={{ color: '#DC2626', fontWeight: '900' }}>{offerSecondsLeft}s</Text>
+                ) : null}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View
+                  style={{
+                    width: 26,
+                    height: 26,
+                    borderRadius: 13,
+                    backgroundColor: theme.colors.primary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 12 }}>
+                    {(currentOffer.customerName || 'C').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 14 }}>
+                  {currentOffer.customerName || 'Customer'}
+                </Text>
+              </View>
+              {currentOffer.pickup?.label ? (
+                <Text style={{ color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
+                  Pickup: {currentOffer.pickup.label}
+                </Text>
+              ) : null}
+              {currentOffer.dropoff?.label ? (
+                <Text style={{ color: theme.colors.muted, fontSize: 13 }} numberOfLines={2}>
+                  Destination: {currentOffer.dropoff.label}
+                </Text>
+              ) : null}
+              <Text style={{ color: theme.colors.muted }}>Dispatch score {currentOffer.score}</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Button

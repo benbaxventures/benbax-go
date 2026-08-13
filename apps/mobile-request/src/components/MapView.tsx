@@ -165,6 +165,7 @@ export function MapMarker({
   flat,
   anchor,
   zIndex,
+  children,
 }: {
   coordinate: { latitude: number; longitude: number };
   title?: string;
@@ -174,6 +175,7 @@ export function MapMarker({
   flat?: boolean;
   anchor?: { x: number; y: number };
   zIndex?: number;
+  children?: ReactNode;
 }) {
   const [mods, setMods] = useState<MapModules | null>(null);
 
@@ -196,7 +198,9 @@ export function MapMarker({
       flat={flat}
       anchor={anchor}
       zIndex={zIndex}
-    />
+    >
+      {children}
+    </Marker>
   );
 }
 

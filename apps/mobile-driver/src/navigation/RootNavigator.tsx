@@ -30,6 +30,7 @@ import { presentLocalOffer } from '../services/notifications';
 import { createRealtimeClient } from '../services/realtime';
 import { setSentryUser } from '../services/sentry';
 import { useAuthStore } from '../store/authStore';
+import type { OfferPoint } from '../store/driverStore';
 import { useDriverStore } from '../store/driverStore';
 import { useRiderStore } from '../store/riderStore';
 import { theme } from '../theme/tokens';
@@ -38,6 +39,22 @@ import type { MainTabsParamList, RootStackParamList } from './types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabsParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+function toOfferPoint(leg?: {
+  label?: string;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+}): OfferPoint | undefined {
+  if (!leg) return undefined;
+  const latitude = Number(leg.latitude);
+  const longitude = Number(leg.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return undefined;
+  return {
+    latitude,
+    longitude,
+    ...(leg.label ? { label: leg.label } : {}),
+  };
+}
 
 function goToDispatch() {
   if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
@@ -56,11 +73,24 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
 
     createRealtimeClient().then((socket) => {
       socket.on(realtimeEvents.driverOffer, (offer) => {
+        const pickup = toOfferPoint({
+          label: offer.trip?.pickupLabel,
+          latitude: offer.trip?.pickupLatitude,
+          longitude: offer.trip?.pickupLongitude,
+        });
+        const dropoff = toOfferPoint({
+          label: offer.trip?.dropoffLabel,
+          latitude: offer.trip?.dropoffLatitude,
+          longitude: offer.trip?.dropoffLongitude,
+        });
         setCurrentRideOffer({
           id: offer.id,
           tripId: offer.tripId,
           score: Number(offer.score),
           expiresAt: offer.expiresAt,
+          ...(offer.trip?.passenger?.name ? { passengerName: offer.trip.passenger.name } : {}),
+          ...(pickup ? { pickup } : {}),
+          ...(dropoff ? { dropoff } : {}),
         });
         void presentLocalOffer({
           title: 'New ride request',
@@ -80,11 +110,24 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
         );
       });
       socket.on(realtimeEvents.riderOffer, (offer) => {
+        const pickup = toOfferPoint({
+          label: offer.delivery?.pickupLabel,
+          latitude: offer.delivery?.pickupLatitude,
+          longitude: offer.delivery?.pickupLongitude,
+        });
+        const dropoff = toOfferPoint({
+          label: offer.delivery?.dropoffLabel,
+          latitude: offer.delivery?.dropoffLatitude,
+          longitude: offer.delivery?.dropoffLongitude,
+        });
         setCurrentDeliveryOffer({
           id: offer.id,
           deliveryId: offer.deliveryId,
           score: Number(offer.score),
           expiresAt: offer.expiresAt,
+          ...(offer.delivery?.customer?.name ? { customerName: offer.delivery.customer.name } : {}),
+          ...(pickup ? { pickup } : {}),
+          ...(dropoff ? { dropoff } : {}),
         });
         void presentLocalOffer({
           title: 'New delivery offer',

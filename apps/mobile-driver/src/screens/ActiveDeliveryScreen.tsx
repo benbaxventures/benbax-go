@@ -47,6 +47,7 @@ type DeliveryDetail = {
   estimatedDistance?: number;
   estimatedDuration?: number;
   customerName?: string;
+  customer?: { name?: string };
   customerRating?: number;
   stops?: Array<{
     id: string;
@@ -117,6 +118,8 @@ export function ActiveDeliveryScreen({ route, navigation }: Props) {
     queryKey: ['delivery', route.params.deliveryId],
     queryFn: () => apiRequest<DeliveryDetail>(`/deliveries/${route.params.deliveryId}`),
   });
+
+  const customerName = delivery?.customer?.name ?? delivery?.customerName;
 
   useEffect(() => {
     loadMaps().then(setMapsModule);
@@ -688,7 +691,7 @@ export function ActiveDeliveryScreen({ route, navigation }: Props) {
         </View>
 
         {/* Customer info */}
-        {delivery?.customerName ? (
+        {customerName ? (
           <View
             style={{
               marginHorizontal: 16,
@@ -709,13 +712,13 @@ export function ActiveDeliveryScreen({ route, navigation }: Props) {
               }}
             >
               <Text style={{ color: theme.colors.primary, fontWeight: '900', fontSize: 13 }}>
-                {delivery.customerName.charAt(0).toUpperCase()}
+                {customerName.charAt(0).toUpperCase()}
               </Text>
             </View>
             <Text style={{ color: theme.colors.ink, fontWeight: '600', fontSize: 13 }}>
-              {delivery.customerName}
+              {customerName}
             </Text>
-            {delivery.customerRating != null && (
+            {delivery?.customerRating != null && (
               <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
                 ★ {delivery.customerRating.toFixed(1)}
               </Text>

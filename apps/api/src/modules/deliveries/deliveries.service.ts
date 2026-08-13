@@ -182,6 +182,7 @@ export async function getDelivery(id: string, requesterId: string) {
     include: {
       payment: true,
       proof: true,
+      customer: { select: { id: true, name: true, phone: true } },
       trackingPoints: { orderBy: { capturedAt: 'desc' }, take: 25 },
       assignments: {
         include: { riderProfile: { include: { user: true, vehicle: true } } },

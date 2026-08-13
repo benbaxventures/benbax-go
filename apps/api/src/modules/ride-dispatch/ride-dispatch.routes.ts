@@ -65,7 +65,11 @@ rideDispatchRouter.post(
       },
       include: {
         driverProfile: { include: { user: true, vehicle: true } },
-        trip: true,
+        trip: {
+          include: {
+            passenger: { select: { id: true, name: true, phone: true } },
+          },
+        },
       },
     });
 

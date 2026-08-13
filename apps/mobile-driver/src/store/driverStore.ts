@@ -1,11 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 
+/** A pickup or dropoff point shown on the map for an incoming request. */
+export type OfferPoint = {
+  label?: string;
+  latitude: number;
+  longitude: number;
+};
+
 type DriverOffer = {
   id: string;
   tripId: string;
   score: number;
   expiresAt: string;
+  /** Name of the passenger who requested the ride, when the API provides it. */
+  passengerName?: string;
+  pickup?: OfferPoint;
+  dropoff?: OfferPoint;
 };
 
 type HotZone = {

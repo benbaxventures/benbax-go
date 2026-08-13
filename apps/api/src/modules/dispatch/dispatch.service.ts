@@ -59,7 +59,11 @@ export async function dispatchRide(tripId: string, io?: Server) {
     },
     include: {
       driverProfile: { include: { user: true, vehicle: true } },
-      trip: true,
+      trip: {
+        include: {
+          passenger: { select: { id: true, name: true, phone: true } },
+        },
+      },
     },
   });
 
@@ -138,7 +142,11 @@ export async function dispatchDelivery(deliveryId: string, io?: Server) {
     },
     include: {
       riderProfile: { include: { user: true } },
-      delivery: true,
+      delivery: {
+        include: {
+          customer: { select: { id: true, name: true, phone: true } },
+        },
+      },
     },
   });
 

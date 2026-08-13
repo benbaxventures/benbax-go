@@ -54,6 +54,7 @@ type TripDetail = {
   estimatedDistance?: number;
   estimatedDuration?: number;
   passengerName?: string;
+  passenger?: { name?: string };
   passengerRating?: number;
   passengerCount?: number;
   stops?: Stop[];
@@ -118,6 +119,8 @@ export function ActiveTripScreen({ route, navigation }: Props) {
     queryKey: ['ride-trip', route.params.tripId],
     queryFn: () => apiRequest<TripDetail>(`/rides/${route.params.tripId}`),
   });
+
+  const passengerName = trip?.passenger?.name ?? trip?.passengerName;
 
   useEffect(() => {
     loadMaps().then(setMapsModule);
@@ -767,7 +770,7 @@ export function ActiveTripScreen({ route, navigation }: Props) {
         </View>
 
         {/* Passenger info */}
-        {trip?.passengerName ? (
+        {passengerName ? (
           <View
             style={{
               marginHorizontal: 16,
@@ -788,18 +791,18 @@ export function ActiveTripScreen({ route, navigation }: Props) {
               }}
             >
               <Text style={{ color: theme.colors.primary, fontWeight: '900', fontSize: 13 }}>
-                {trip.passengerName.charAt(0).toUpperCase()}
+                {passengerName.charAt(0).toUpperCase()}
               </Text>
             </View>
             <Text style={{ color: theme.colors.ink, fontWeight: '600', fontSize: 13 }}>
-              {trip.passengerName}
+              {passengerName}
             </Text>
-            {trip.passengerRating != null && (
+            {trip?.passengerRating != null && (
               <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
                 ★ {trip.passengerRating.toFixed(1)}
               </Text>
             )}
-            {trip.passengerCount != null && trip.passengerCount > 1 ? (
+            {trip?.passengerCount != null && trip.passengerCount > 1 ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Users size={14} color={theme.colors.muted} />
                 <Text style={{ color: theme.colors.muted, fontSize: 12 }}>

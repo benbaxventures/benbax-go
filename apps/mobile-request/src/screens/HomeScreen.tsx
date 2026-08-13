@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Clock,
   CreditCard,
+  MapPin as MapPinIcon,
   Navigation,
   PackageCheck,
   Search,
@@ -28,6 +29,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { MapPinLabel } from '../components/MapPinLabel';
 import { MapMarker, MapView } from '../components/MapView';
 import { useClientPresence } from '../hooks/useClientPresence';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
@@ -35,7 +37,14 @@ import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
 import { useInitializePayment } from '../hooks/usePayments';
 import { useCreateTrip, useTripQuote } from '../hooks/useTrips';
 import type { RootStackParamList } from '../navigation/types';
-import { geocodePlace, type GeoPoint } from '../services/geocoding';
+import {
+  geocodePlace,
+  resolvePlaceId,
+  reverseGeocodePoint,
+  suggestPlaces,
+  type GeoPoint,
+  type PlaceSuggestion,
+} from '../services/geocoding';
 import type { AddressPoint, DeliveryCategory } from '../shared';
 import { useAuthStore } from '../store/authStore';
 import { useDeliveryStore } from '../store/deliveryStore';
@@ -59,8 +68,7 @@ const categories: Array<{ key: DeliveryCategory; label: string; icon: string }> 
 
 const vehicleTypes = [
   { key: 'ECONOMY', label: 'Economy', multiplier: '1x', icon: '🚗' },
-  { key: 'COMFORT', label: 'Comfort', multiplier: '1.25x', icon: '🚙' },
-  { key: 'SUV', label: 'SUV', multiplier: '1.45x', icon: '🚐' },
+  { key: 'MOTO', label: 'Moto', multiplier: '1x', icon: '🏍️' },
 ];
 
 const suggestedLocations = [
@@ -223,8 +231,15 @@ export function HomeScreen() {
   const [pickupText, setPickupText] = useState('Current location');
   const [dropoffText, setDropoffText] = useState('');
   const [pickupLandmark, setPickupLandmark] = useState('');
-  const [dropoffLandmark] = useState('');
+  const [pickupFormatted, setPickupFormatted] = useState<string | null>(null);
+  const [dropoffFormatted, setDropoffFormatted] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // Live place suggestions while typing a pickup/dropoff.
+  const [suggestionField, setSuggestionField] = useState<'pickup' | 'dropoff' | null>(null);
+  const [pickupSuggestions, setPickupSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [dropoffSuggestions, setDropoffSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
 
   // Resolved coordinates for each end of the trip. `pickupCoord` is an override
   // set when the customer types/picks a named pickup; when null we fall back to
@@ -245,6 +260,7 @@ export function HomeScreen() {
 
   const handleUseLocation = useCallback(() => {
     setPickupCoord(null);
+    setPickupFormatted(null);
     setPickupText('Current location');
     requestLocation();
   }, [requestLocation]);
@@ -266,12 +282,115 @@ export function HomeScreen() {
     const coord: GeoPoint = { latitude: result.latitude, longitude: result.longitude };
     if (field === 'pickup') {
       setPickupText(result.label || query);
+      setPickupFormatted(result.formattedAddress ?? null);
       setPickupCoord(coord);
     } else {
       setDropoffText(result.label || query);
+      setDropoffFormatted(result.formattedAddress ?? null);
       setDropoffCoord(coord);
     }
   }, []);
+
+  // Tapping the map places the destination at that spot and reverse-geocodes it
+  // to a readable name (street or nearby landmark) so the marker never shows a
+  // bare pin. Only active inside the booking form.
+  const handleMapPress = useCallback(
+    async (lat: number, lng: number) => {
+      if (!showForm) return;
+      setResolvingField('dropoff');
+      const info = await reverseGeocodePoint(lat, lng);
+      setResolvingField(null);
+      const label = info?.label ?? 'Dropped pin';
+      setDropoffText(label);
+      setDropoffFormatted(info?.formattedAddress ?? null);
+      setDropoffCoord({ latitude: lat, longitude: lng });
+    },
+    [showForm]
+  );
+
+  // Debounced live suggestions: fetch nearby places while the customer types.
+  useEffect(() => {
+    if (!showForm || !suggestionField) return;
+    const text = suggestionField === 'pickup' ? pickupText : dropoffText;
+    const set = suggestionField === 'pickup' ? setPickupSuggestions : setDropoffSuggestions;
+    const clear = suggestionField === 'pickup' ? setDropoffSuggestions : setPickupSuggestions;
+
+    const timer = setTimeout(async () => {
+      if (text.trim().length < 3) {
+        set([]);
+        return;
+      }
+      setSuggestionsLoading(true);
+      const results = await suggestPlaces(text);
+      set(results);
+      clear([]);
+      setSuggestionsLoading(false);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [showForm, suggestionField, pickupText, dropoffText]);
+
+  const closeSuggestions = useCallback(() => {
+    setSuggestionField(null);
+    setPickupSuggestions([]);
+    setDropoffSuggestions([]);
+  }, []);
+
+  // Pick a suggestion: resolve its exact coordinates + real name.
+  const selectSuggestion = useCallback(
+    async (field: 'pickup' | 'dropoff', suggestion: PlaceSuggestion) => {
+      setResolvingField(field);
+      const result = await resolvePlaceId(suggestion.placeId);
+      setResolvingField(null);
+      if (!result) {
+        // Fall back to a plain geocode of the description so the flow still works.
+        await resolvePlace(field, suggestion.description);
+        closeSuggestions();
+        return;
+      }
+      const coord: GeoPoint = { latitude: result.latitude, longitude: result.longitude };
+      if (field === 'pickup') {
+        setPickupText(suggestion.description);
+        setPickupFormatted(result.formattedAddress ?? null);
+        setPickupCoord(coord);
+      } else {
+        setDropoffText(suggestion.description);
+        setDropoffFormatted(result.formattedAddress ?? null);
+        setDropoffCoord(coord);
+      }
+      closeSuggestions();
+    },
+    [closeSuggestions, resolvePlace]
+  );
+
+  // Fill the active field with the user's own device location.
+  const applyCurrentLocation = useCallback(
+    (field: 'pickup' | 'dropoff') => {
+      if (!hasLocation) {
+        requestLocation();
+        closeSuggestions();
+        return;
+      }
+      if (field === 'pickup') {
+        handleUseLocation();
+      } else {
+        setDropoffText(detectedLocationLabel ?? 'Current location');
+        setDropoffFormatted(detectedAddress ?? null);
+        setDropoffCoord({ latitude, longitude });
+      }
+      closeSuggestions();
+    },
+    [
+      closeSuggestions,
+      detectedAddress,
+      detectedLocationLabel,
+      handleUseLocation,
+      hasLocation,
+      latitude,
+      longitude,
+      requestLocation,
+    ]
+  );
 
   useEffect(() => {
     if (!hasLocation || !detectedLocationLabel) return;
@@ -312,16 +431,26 @@ export function HomeScreen() {
     hasLocation,
   ]);
 
-  const pickup = useMemo(
-    (): AddressPoint => ({
+  const pickup = useMemo((): AddressPoint => {
+    const formattedAddress = pickupFormatted ?? (usingDetectedPickup ? detectedAddress : undefined);
+    return {
       label: pickupText,
-      ...(usingDetectedPickup && detectedAddress ? { formattedAddress: detectedAddress } : {}),
+      ...(formattedAddress ? { formattedAddress } : {}),
       latitude: currentLat,
       longitude: currentLng,
-      landmark: pickupLandmark || 'Near you',
-    }),
-    [currentLat, currentLng, detectedAddress, pickupLandmark, pickupText, usingDetectedPickup]
-  );
+      landmark:
+        pickupLandmark || (usingDetectedPickup && nearbyName ? `Near ${nearbyName}` : 'Near you'),
+    };
+  }, [
+    currentLat,
+    currentLng,
+    detectedAddress,
+    pickupFormatted,
+    pickupLandmark,
+    pickupText,
+    usingDetectedPickup,
+    nearbyName,
+  ]);
 
   // Keep the map framed on the trip in realtime: fit both points once a
   // destination is chosen, otherwise centre on the pickup.
@@ -357,7 +486,10 @@ export function HomeScreen() {
         label: dropoffText || 'Destination',
         latitude: dropoffCoord.latitude,
         longitude: dropoffCoord.longitude,
-        landmark: dropoffLandmark,
+        ...(dropoffFormatted ? { formattedAddress: dropoffFormatted } : {}),
+        ...(dropoffText || dropoffFormatted
+          ? { landmark: dropoffText || dropoffFormatted || '' }
+          : {}),
       };
     }
     const query = dropoffText.trim();
@@ -368,21 +500,22 @@ export function HomeScreen() {
     if (!result) return null;
     const coord: GeoPoint = { latitude: result.latitude, longitude: result.longitude };
     setDropoffText(result.label || query);
+    setDropoffFormatted(result.formattedAddress ?? null);
     setDropoffCoord(coord);
     return {
       label: result.label || query,
       latitude: coord.latitude,
       longitude: coord.longitude,
-      landmark: dropoffLandmark,
+      ...(result.formattedAddress ? { formattedAddress: result.formattedAddress } : {}),
+      landmark: result.label || query,
     };
-  }, [dropoffCoord, dropoffText, dropoffLandmark]);
+  }, [dropoffCoord, dropoffText, dropoffFormatted]);
 
-  async function handleQuote() {
+  // Compute the fare/ETA quote behind the scenes once both ends are resolved.
+  // Used by the "Get quote" button and by the auto-quote effect below.
+  const runQuote = useCallback(async (): Promise<boolean> => {
     const resolvedDropoff = await ensureDropoffResolved();
-    if (!resolvedDropoff) {
-      Alert.alert('Add a destination', 'Enter or pick where the package is going.');
-      return;
-    }
+    if (!resolvedDropoff) return false;
 
     deliveryStore.setPickup(pickup);
     deliveryStore.setDropoff(resolvedDropoff);
@@ -404,10 +537,50 @@ export function HomeScreen() {
       });
       tripStore.setQuote(result);
     }
+    return true;
+  }, [
+    deliveryQuoteMutation,
+    ensureDropoffResolved,
+    mode,
+    pickup,
+    tripQuoteMutation,
+    deliveryStore,
+    tripStore,
+  ]);
+
+  // Auto-quote: whenever the destination resolves and the booking form is open,
+  // refresh the fare/ETA preview automatically so the math happens in the
+  // background. Gated on primitive coords so typing text doesn't spam requests.
+  useEffect(() => {
+    if (!showForm || !dropoffCoord) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!cancelled) await runQuote();
+      } catch {
+        // Background quote refresh only — never surface an error for this.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showForm, dropoffCoord, mode, pickup.latitude, pickup.longitude]);
+
+  async function handleQuote() {
+    closeSuggestions();
+    const resolvedDropoff = await ensureDropoffResolved();
+    if (!resolvedDropoff) {
+      Alert.alert('Add a destination', 'Enter or pick where the package is going.');
+      return;
+    }
+
+    await runQuote();
   }
 
   async function handleBook() {
     try {
+      closeSuggestions();
       const resolvedDropoff = await ensureDropoffResolved();
       if (!resolvedDropoff) {
         Alert.alert('Add a destination', 'Enter or pick where the package is going.');
@@ -452,6 +625,7 @@ export function HomeScreen() {
   async function handleSchedule() {
     const scheduledFor = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     try {
+      closeSuggestions();
       const resolvedDropoff = await ensureDropoffResolved();
       if (!resolvedDropoff) {
         Alert.alert('Add a destination', 'Enter or pick where the package is going.');
@@ -522,6 +696,7 @@ export function HomeScreen() {
       <View style={{ ...StyleSheet.absoluteFillObject }}>
         <MapView
           mapRef={mapRef}
+          onPress={handleMapPress}
           initialRegion={{
             latitude: currentLat,
             longitude: currentLng,
@@ -535,16 +710,35 @@ export function HomeScreen() {
         >
           <MapMarker
             coordinate={activePickupCoord}
-            title="Pickup"
-            description={pickupText}
+            title={pickupText !== 'Current location' ? pickupText : 'Pickup'}
+            description={pickupFormatted ?? pickupText ?? 'Pickup'}
             pinColor={theme.colors.primary}
-          />
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <MapPinLabel
+              color={theme.colors.primary}
+              title="Pickup"
+              subtitle={pickupText !== 'Current location' ? pickupText : null}
+            />
+          </MapMarker>
+          {!usingDetectedPickup && detectedCoord ? (
+            <MapMarker coordinate={detectedCoord} anchor={{ x: 0.5, y: 1 }} zIndex={1}>
+              <MapPinLabel
+                color="#2563EB"
+                title="Current location"
+                subtitle={detectedLocationLabel}
+              />
+            </MapMarker>
+          ) : null}
           {dropoffCoord ? (
             <MapMarker
               coordinate={dropoffCoord}
               title={dropoffText || 'Destination'}
-              pinColor={theme.colors.accent}
-            />
+              description={dropoffFormatted ?? dropoffText ?? 'Destination'}
+              pinColor="#EF4444"
+            >
+              <MapPinLabel color="#EF4444" title="Dropoff" subtitle={dropoffText} />
+            </MapMarker>
           ) : null}
         </MapView>
       </View>
@@ -740,6 +934,7 @@ export function HomeScreen() {
                     key={index}
                     onPress={() => {
                       setDropoffText(location.name);
+                      setDropoffFormatted(location.description);
                       setDropoffCoord({ latitude: location.lat, longitude: location.lng });
                       handleWhereTo();
                     }}
@@ -878,7 +1073,9 @@ export function HomeScreen() {
                         onChangeText={(text) => {
                           setPickupText(text);
                           setPickupCoord(null);
+                          setPickupFormatted(null);
                         }}
+                        onFocus={() => setSuggestionField('pickup')}
                         onSubmitEditing={() => resolvePlace('pickup', pickupText)}
                         returnKeyType="search"
                       />
@@ -940,7 +1137,9 @@ export function HomeScreen() {
                             onChangeText={(text) => {
                               setDropoffText(text);
                               setDropoffCoord(null);
+                              setDropoffFormatted(null);
                             }}
+                            onFocus={() => setSuggestionField('dropoff')}
                             onSubmitEditing={() => resolvePlace('dropoff', dropoffText)}
                             returnKeyType="search"
                           />
@@ -952,6 +1151,115 @@ export function HomeScreen() {
                     </View>
                   </View>
                 </View>
+
+                {/* Live location suggestions while typing */}
+                {suggestionField ? (
+                  <View
+                    style={{
+                      backgroundColor: '#fff',
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      marginBottom: 16,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Pressable
+                      onPress={() => applyCurrentLocation(suggestionField)}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 12,
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        borderBottomWidth: 1,
+                        borderBottomColor: theme.colors.border,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 10,
+                          backgroundColor: '#E0F2FE',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Navigation size={17} color="#2563EB" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 14, fontWeight: '700', color: theme.colors.ink }}>
+                          Use my current location
+                        </Text>
+                        <Text style={{ fontSize: 11, color: theme.colors.muted }}>
+                          {suggestionField === 'pickup'
+                            ? 'Set pickup to where you are right now'
+                            : 'Set the destination to where you are right now'}
+                        </Text>
+                      </View>
+                    </Pressable>
+                    {suggestionsLoading ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={theme.colors.primary}
+                        style={{ marginVertical: 14 }}
+                      />
+                    ) : null}
+                    {(suggestionField === 'pickup' ? pickupSuggestions : dropoffSuggestions).map(
+                      (suggestion) => (
+                        <Pressable
+                          key={suggestion.placeId}
+                          onPress={() => selectSuggestion(suggestionField, suggestion)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 12,
+                            paddingVertical: 13,
+                            paddingHorizontal: 16,
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 34,
+                              height: 34,
+                              borderRadius: 10,
+                              backgroundColor: theme.colors.surfaceMuted,
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <MapPinIcon size={17} color={theme.colors.primary} />
+                          </View>
+                          <Text
+                            style={{
+                              flex: 1,
+                              fontSize: 14,
+                              fontWeight: '600',
+                              color: theme.colors.ink,
+                            }}
+                          >
+                            {suggestion.description}
+                          </Text>
+                        </Pressable>
+                      )
+                    )}
+                    {!suggestionsLoading &&
+                    (suggestionField === 'pickup' ? pickupSuggestions : dropoffSuggestions)
+                      .length === 0 ? (
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: theme.colors.muted,
+                          paddingVertical: 12,
+                          paddingHorizontal: 16,
+                        }}
+                      >
+                        Keep typing to see nearby places…
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
 
                 {/* Vehicle / Category selection */}
                 {mode === 'delivery' ? (

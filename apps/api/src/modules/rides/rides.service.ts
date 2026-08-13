@@ -130,6 +130,7 @@ export async function getRide(id: string, requesterId: string) {
     include: {
       payment: true,
       rating: true,
+      passenger: { select: { id: true, name: true, phone: true } },
       trackingPoints: { orderBy: { capturedAt: 'desc' }, take: 25 },
       assignments: {
         include: { driverProfile: { include: { user: true, vehicle: true } } },

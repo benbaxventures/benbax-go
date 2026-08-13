@@ -64,7 +64,11 @@ dispatchRouter.post(
       },
       include: {
         riderProfile: { include: { user: true } },
-        delivery: true,
+        delivery: {
+          include: {
+            customer: { select: { id: true, name: true, phone: true } },
+          },
+        },
       },
     });
 

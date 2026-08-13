@@ -22,6 +22,7 @@ import { DriverMarker } from '../components/DriverMarker';
 import { ErrorState } from '../components/ErrorState';
 import { HotZoneOverlay } from '../components/HotZoneOverlay';
 import { NearbyClientMarker } from '../components/NearbyClientMarker';
+import { OfferMarker } from '../components/OfferMarker';
 import { OfflineBanner } from '../components/OfflineBanner';
 import { PriorityBadge } from '../components/PriorityBadge';
 import { useLiveLocation } from '../hooks/useLiveLocation';
@@ -120,6 +121,35 @@ export function DispatchScreen() {
   useEffect(() => {
     if (currentOffer) sheetRef.current?.snapToIndex(1);
   }, [currentOffer]);
+
+  // Focus the map on the incoming request so pickup and dropoff are both visible.
+  useEffect(() => {
+    const coords = [currentOffer?.pickup, currentOffer?.dropoff].filter(
+      (p): p is { latitude: number; longitude: number } => Boolean(p)
+    );
+    if (currentOffer && coords.length) {
+      mapRef.current?.fitToCoordinates(coords, {
+        edgePadding: { top: 180, right: 60, bottom: 420, left: 60 },
+        animated: true,
+      });
+    }
+  }, [currentOffer]);
+
+  // Live countdown of the offer's acceptance window.
+  const [offerSecondsLeft, setOfferSecondsLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (!currentOffer?.expiresAt) return;
+    const tick = () => {
+      const left = Math.max(
+        0,
+        Math.round((new Date(currentOffer.expiresAt).getTime() - Date.now()) / 1000)
+      );
+      setOfferSecondsLeft(left);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [currentOffer?.expiresAt]);
 
   const { data: priorityData } = useQuery<PriorityData>({
     queryKey: ['driver-priority'],
@@ -334,6 +364,16 @@ export function DispatchScreen() {
                 <NearbyClientMarker key={client.id} client={client} Marker={Marker} />
               ))
             : null}
+          {currentOffer?.pickup && Marker ? (
+            <OfferMarker
+              pickup={currentOffer.pickup}
+              dropoff={currentOffer.dropoff}
+              clientName={currentOffer.passengerName}
+              offerType="ride"
+              Marker={Marker}
+              onPress={() => animateCameraTo(currentOffer.pickup!, is3D ? MAP_PITCH_3D : 0)}
+            />
+          ) : null}
         </MapView>
       ) : (
         <View
@@ -496,12 +536,45 @@ export function DispatchScreen() {
                 gap: 10,
               }}
             >
-              <Text style={{ color: theme.colors.primary, fontWeight: '900', fontSize: 13 }}>
-                NEW RIDE REQUEST
-              </Text>
-              <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>
-                Trip {currentOffer.tripId}
-              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: theme.colors.primary, fontWeight: '900', fontSize: 13 }}>
+                  NEW RIDE REQUEST
+                </Text>
+                {offerSecondsLeft != null ? (
+                  <Text style={{ color: '#DC2626', fontWeight: '900', fontSize: 13 }}>
+                    {offerSecondsLeft}s
+                  </Text>
+                ) : null}
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: theme.colors.primary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>
+                    {(currentOffer.passengerName || 'P').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 15 }}>
+                  {currentOffer.passengerName || 'Passenger'}
+                </Text>
+              </View>
+              {currentOffer.pickup?.label ? (
+                <Text style={{ color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
+                  Pickup: {currentOffer.pickup.label}
+                </Text>
+              ) : null}
+              {currentOffer.dropoff?.label ? (
+                <Text style={{ color: theme.colors.muted, fontSize: 13 }} numberOfLines={2}>
+                  Dropoff: {currentOffer.dropoff.label}
+                </Text>
+              ) : null}
               <Text style={{ color: theme.colors.muted }}>Match score {currentOffer.score}</Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
