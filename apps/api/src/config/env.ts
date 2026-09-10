@@ -87,6 +87,8 @@ export const corsOrigins = env.CORS_ORIGINS.split(',')
 const ADMIN_DASHBOARD_ORIGIN_PATTERNS = [
   /^https:\/\/admin-henna-eta-88\.vercel\.app$/,
   /^https:\/\/admin-[a-z0-9]+-bright-anyawes-projects\.vercel\.app$/,
+  /^https:\/\/benbax-go-admin(?:-[a-z0-9]+)*\.vercel\.app$/,
+  /^https:\/\/benbax-go-admin(?:-[a-z0-9]+)*-benbaxventures-2038s-projects\.vercel\.app$/,
 ];
 
 export function isAllowedOrigin(origin: string): boolean {

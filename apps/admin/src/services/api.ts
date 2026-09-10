@@ -12,6 +12,19 @@ const STORAGE_KEYS = {
   user: 'benbax.admin.user',
 } as const;
 
+async function readApiResponse<T>(response: Response): Promise<ApiResponse<T>> {
+  const text = await response.text();
+  if (!text.trim()) {
+    throw new Error(`API returned an empty response (${response.status})`);
+  }
+
+  try {
+    return JSON.parse(text) as ApiResponse<T>;
+  } catch {
+    throw new Error(`API returned invalid JSON (${response.status})`);
+  }
+}
+
 // Single-flight so a burst of concurrent 401s triggers only one refresh call.
 let refreshInFlight: Promise<boolean> | null = null;
 
@@ -25,9 +38,9 @@ async function tryRefreshTokens(): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
     });
-    const body = (await response.json()) as ApiResponse<{
+    const body = await readApiResponse<{
       tokens: { accessToken: string; refreshToken: string };
-    }>;
+    }>(response);
     if (!response.ok || !body.ok) return false;
 
     localStorage.setItem(STORAGE_KEYS.accessToken, body.data.tokens.accessToken);
@@ -73,7 +86,7 @@ export async function apiRequest<T>(
     throw new Error('Session expired — please sign in again');
   }
 
-  const body = (await response.json()) as ApiResponse<T>;
+  const body = await readApiResponse<T>(response);
   if (!response.ok || !body.ok) {
     const message = body.ok ? 'Request failed' : body.error.message;
     throw new Error(message);
