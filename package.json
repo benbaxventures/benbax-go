@@ -16,6 +16,7 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:request\" \"npm run dev:admin\"",
+    "dev:api": "npm run dev --workspace apps/api",
     "dev:request": "npm run start --workspace apps/mobile-request",
     "dev:request:phone": "npm run start:phone --workspace apps/mobile-request",
     "dev:request:tunnel": "npm run start:tunnel --workspace apps/mobile-request",
@@ -24,6 +25,7 @@
     "dev:driver:phone": "npm run start:phone --workspace apps/mobile-driver",
     "dev:driver:tunnel": "npm run start:tunnel --workspace apps/mobile-driver",
     "dev:admin": "npm run dev --workspace apps/admin",
+    "dev:admin:full": "concurrently \"npm run dev:api\" \"npm run dev:admin\"",
     "android": "npm run android --workspace apps/mobile-request",
     "request:build:dev": "npm run eas:build:dev --workspace apps/mobile-request",
     "request:build:preview": "npm run eas:build:preview --workspace apps/mobile-request",
