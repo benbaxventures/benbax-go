@@ -9,6 +9,7 @@ import { clientsNear } from '../../realtime/presence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
+import { haversineKm } from '../dispatch/dispatch.engine';
 import { commissionRate } from '../payments/settlement';
 
 export const driversRouter = Router();
@@ -49,7 +50,64 @@ const kycSchema = z.object({
   }),
 });
 
+const nearbyDriversSchema = z.object({
+  query: z.object({
+    latitude: z.coerce.number().min(-90).max(90),
+    longitude: z.coerce.number().min(-180).max(180),
+    radiusKm: z.coerce.number().min(1).max(100).default(10),
+  }),
+});
+
 driversRouter.use(requireAuth);
+
+driversRouter.get(
+  '/nearby',
+  requireRoles(
+    UserRole.CUSTOMER,
+    UserRole.RIDER,
+    UserRole.DRIVER,
+    UserRole.ADMIN,
+    UserRole.OPERATIONS
+  ),
+  validate(nearbyDriversSchema),
+  asyncHandler(async (req, res) => {
+    const latitude = Number(req.query.latitude);
+    const longitude = Number(req.query.longitude);
+
+    const drivers = await prisma.driverProfile.findMany({
+      where: {
+        isOnline: true,
+        status: 'ACTIVE',
+        currentLatitude: { not: null },
+        currentLongitude: { not: null },
+      },
+      select: {
+        id: true,
+        currentLatitude: true,
+        currentLongitude: true,
+        vehicle: { select: { type: true } },
+      },
+    });
+
+    const nearby = drivers
+      .map((driver) => {
+        const point = {
+          latitude: Number(driver.currentLatitude),
+          longitude: Number(driver.currentLongitude),
+        };
+        return {
+          id: driver.id,
+          ...point,
+          distanceKm: haversineKm({ latitude, longitude }, point),
+          vehicleType: driver.vehicle?.type ?? null,
+        };
+      })
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .map((driver) => ({ ...driver, distanceKm: Number(driver.distanceKm.toFixed(1)) }));
+
+    return ok(res, nearby);
+  })
+);
 
 driversRouter.get(
   '/me',
@@ -220,21 +278,44 @@ driversRouter.get(
     });
     if (!driver) throw notFound('Driver profile not found');
 
-    // Without a known location we can't scope by distance; return an empty
+    // Without a known location we can't compute distances; return an empty
     // snapshot and let the live socket stream fill in as the driver moves.
     if (driver.currentLatitude == null || driver.currentLongitude == null) {
       return ok(res, []);
     }
 
-    const radiusKm = Number(req.query.radiusKm) || 10;
-    const nearby = clientsNear(
-      {
-        latitude: Number(driver.currentLatitude),
-        longitude: Number(driver.currentLongitude),
-      },
-      radiusKm
-    );
+    const nearby = clientsNear({
+      latitude: Number(driver.currentLatitude),
+      longitude: Number(driver.currentLongitude),
+    });
     return ok(res, nearby);
+  })
+);
+
+driversRouter.get(
+  '/me/news',
+  requireRoles(UserRole.DRIVER),
+  asyncHandler(async (req, res) => {
+    const notifications = await prisma.notification.findMany({
+      where: { userId: req.user!.id },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return ok(
+      res,
+      notifications.map((item) => {
+        const data = item.data && typeof item.data === 'object' ? item.data : null;
+        const type = data && 'type' in data ? data.type : null;
+        return {
+          id: item.id,
+          title: item.title,
+          body: item.body,
+          createdAt: item.createdAt,
+          type: type === 'warning' || type === 'update' || type === 'promotion' ? type : 'info',
+        };
+      })
+    );
   })
 );
 

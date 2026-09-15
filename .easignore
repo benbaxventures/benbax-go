@@ -27,7 +27,6 @@ apps/*/ios/Pods/
 # ---------- IDE / tooling noise ----------
 .idea/
 .vscode/
-.husky/
 .claude/
 
 # ---------- not needed for mobile builds ----------

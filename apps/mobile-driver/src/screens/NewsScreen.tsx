@@ -16,6 +16,14 @@ type NewsItem = {
   type: 'info' | 'warning' | 'update' | 'promotion';
 };
 
+type NotificationItem = {
+  id: string;
+  title: string;
+  body: string;
+  createdAt: string;
+  data?: unknown;
+};
+
 const TYPE_CONFIG = {
   info: { color: '#2563EB', icon: Info, label: 'Info' },
   warning: { color: '#D97706', icon: AlertTriangle, label: 'Warning' },
@@ -34,7 +42,20 @@ export function NewsScreen() {
     refetch,
   } = useQuery<NewsItem[]>({
     queryKey: ['driver-news'],
-    queryFn: () => apiRequest('/drivers/me/news'),
+    queryFn: async () => {
+      const notifications = await apiRequest<NotificationItem[]>('/notifications');
+      return notifications.map((item) => {
+        const data = item.data && typeof item.data === 'object' ? item.data : null;
+        const type = data && 'type' in data ? data.type : null;
+        return {
+          id: item.id,
+          title: item.title,
+          body: item.body,
+          createdAt: item.createdAt,
+          type: type === 'warning' || type === 'update' || type === 'promotion' ? type : 'info',
+        };
+      });
+    },
   });
 
   if (isLoading) {

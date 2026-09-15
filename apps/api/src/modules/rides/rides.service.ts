@@ -3,6 +3,7 @@ import { CancelActor, Prisma, RideTripStatus } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { badRequest, forbidden, notFound } from '../../utils/http';
+import { normalizePhoneNumber } from '../../utils/phone';
 import { estimateRide } from '../dispatch/dispatch.engine';
 import { notifyRideRequested } from '../notifications/triggers';
 import { recordTripStatusEvent } from '../orders/status-events';
@@ -133,14 +134,37 @@ export async function getRide(id: string, requesterId: string) {
       passenger: { select: { id: true, name: true, phone: true } },
       trackingPoints: { orderBy: { capturedAt: 'desc' }, take: 25 },
       assignments: {
-        include: { driverProfile: { include: { user: true, vehicle: true } } },
+        include: {
+          driverProfile: {
+            include: {
+              user: { select: { id: true, name: true, phone: true } },
+              vehicle: true,
+            },
+          },
+        },
         orderBy: { offeredAt: 'desc' },
       },
     },
   });
 
   if (!ride) throw notFound('Ride trip not found');
-  return ride;
+
+  // Existing accounts may contain a locally formatted number. Normalize it at
+  // the contact boundary as well as during registration so old driver records
+  // still produce a valid dial/WhatsApp target.
+  return {
+    ...ride,
+    assignments: ride.assignments.map((assignment) => ({
+      ...assignment,
+      driverProfile: {
+        ...assignment.driverProfile,
+        user: {
+          ...assignment.driverProfile.user,
+          phone: normalizePhoneNumber(assignment.driverProfile.user.phone),
+        },
+      },
+    })),
+  };
 }
 
 export async function updateRideStatus(id: string, status: RideTripStatus, actorId?: string) {
@@ -170,6 +194,56 @@ export async function updateRideStatus(id: string, status: RideTripStatus, actor
     where: { id },
     include: { payment: true },
   });
+}
+
+/**
+ * Apply a status action from the assigned driver. The generic status endpoint
+ * is also used by operations, but driver actions must not be able to modify a
+ * different driver's trip.
+ */
+export async function updateDriverRideStatus(
+  id: string,
+  status: Extract<RideTripStatus, 'ARRIVED' | 'COMPLETED'>,
+  driverUserId: string
+) {
+  const assignment = await prisma.rideAssignment.findFirst({
+    where: {
+      tripId: id,
+      driverProfile: { userId: driverUserId },
+      status: { in: ['ACCEPTED', 'COMPLETED'] },
+    },
+    select: { id: true, status: true },
+  });
+  if (!assignment) throw forbidden('You are not assigned to this ride');
+
+  const trip = await prisma.rideTrip.findUnique({ where: { id }, select: { status: true } });
+  if (!trip) throw notFound('Ride trip not found');
+
+  const allowedStatuses: RideTripStatus[] =
+    status === RideTripStatus.ARRIVED
+      ? [RideTripStatus.ASSIGNED, RideTripStatus.DRIVER_ARRIVING, RideTripStatus.ARRIVED]
+      : [
+          RideTripStatus.ASSIGNED,
+          RideTripStatus.DRIVER_ARRIVING,
+          RideTripStatus.ARRIVED,
+          RideTripStatus.IN_PROGRESS,
+          RideTripStatus.COMPLETED,
+        ];
+  if (!allowedStatuses.includes(trip.status)) {
+    throw badRequest(`Ride cannot be updated from status: ${trip.status}`);
+  }
+
+  const updated = await updateRideStatus(id, status, driverUserId);
+  if (!updated) throw notFound('Ride trip not found');
+
+  if (status === RideTripStatus.COMPLETED && assignment.status === 'ACCEPTED') {
+    await prisma.rideAssignment.update({
+      where: { id: assignment.id },
+      data: { status: 'COMPLETED', respondedAt: new Date() },
+    });
+  }
+
+  return updated;
 }
 
 function resolveCancelActor(

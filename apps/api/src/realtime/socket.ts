@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import type { Server, Socket } from 'socket.io';
 import { env } from '../config/env';
 import { prisma } from '../config/prisma';
+import { notify } from '../modules/notifications/notify';
 import { realtimeEvents } from './events';
 import {
   clientsNear,
@@ -23,7 +24,7 @@ type DriverWatch = {
   radiusKm: number;
 };
 
-const DEFAULT_WATCH_RADIUS_KM = 10;
+const DEFAULT_WATCH_RADIUS_KM = 25;
 
 /** Live driver sockets watching for nearby passengers, keyed by socket id. */
 const watchingDrivers = new Map<string, { socket: Socket; watch: DriverWatch }>();
@@ -32,13 +33,11 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-/** Emits a passenger event to every watching driver within their own radius. */
+/** Emits a passenger event to every watching driver regardless of distance. */
 function broadcastClientToDrivers(client: OnlineClient, event: string) {
   for (const { socket, watch } of watchingDrivers.values()) {
     const distanceKm = haversineKm(watch, client);
-    if (distanceKm <= watch.radiusKm) {
-      socket.emit(event, { ...client, distanceKm: Math.round(distanceKm * 10) / 10 });
-    }
+    socket.emit(event, { ...client, distanceKm: Math.round(distanceKm * 10) / 10 });
   }
 }
 
@@ -154,6 +153,33 @@ export function registerRealtimeHandlers(io: Server) {
 
     socket.on('client:unwatch', () => {
       watchingDrivers.delete(socket.id);
+    });
+
+    socket.on('navigation:start', (payload: unknown) => {
+      if (user.role !== 'DRIVER' || !payload || typeof payload !== 'object') return;
+      const data = payload as Record<string, unknown>;
+      const clientId = typeof data.clientId === 'string' ? data.clientId : '';
+      if (!clientId) return;
+      io.to(`user:${clientId}`).emit('navigation:started', {
+        driverId: user.id,
+        clientId,
+        message: 'Your driver is on the way!',
+      });
+      void notify(
+        { userIds: [clientId], channels: ['inapp', 'push'] },
+        {
+          title: 'Your driver is on the way!',
+          body: 'Your driver is heading to your pickup location.',
+          data: { driverId: user.id },
+        }
+      );
+    });
+
+    socket.on('driver:location', (payload: unknown) => {
+      if (user.role !== 'DRIVER' || !payload || typeof payload !== 'object') return;
+      const data = payload as Record<string, unknown>;
+      if (typeof data.clientId !== 'string') return;
+      io.to(`user:${data.clientId}`).emit('driver:location', { ...data, driverId: user.id });
     });
 
     socket.on(realtimeEvents.chatMessage, (payload) => {

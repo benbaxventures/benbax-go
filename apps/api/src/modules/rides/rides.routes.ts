@@ -40,6 +40,10 @@ const statusSchema = z.object({
   body: z.object({ status: z.nativeEnum(RideTripStatus) }),
 });
 
+const rideActionSchema = z.object({
+  params: z.object({ id: z.string().min(1) }),
+});
+
 const cancelSchema = z.object({
   params: z.object({ id: z.string().min(1) }),
   body: z
@@ -101,6 +105,42 @@ ridesRouter.get(
 ridesRouter.get(
   '/:id',
   asyncHandler(async (req, res) => ok(res, await service.getRide(req.params.id!, req.user!.id)))
+);
+
+ridesRouter.post(
+  '/:id/arrived',
+  requireRoles(UserRole.DRIVER),
+  validate(rideActionSchema),
+  asyncHandler(async (req, res) => {
+    const trip = await service.updateDriverRideStatus(
+      req.params.id!,
+      RideTripStatus.ARRIVED,
+      req.user!.id
+    );
+    const io = req.app.get('io');
+    io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, trip);
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, trip);
+    io?.to('admins').emit(realtimeEvents.rideUpdated, trip);
+    return ok(res, trip);
+  })
+);
+
+ridesRouter.post(
+  '/:id/complete',
+  requireRoles(UserRole.DRIVER),
+  validate(rideActionSchema),
+  asyncHandler(async (req, res) => {
+    const trip = await service.updateDriverRideStatus(
+      req.params.id!,
+      RideTripStatus.COMPLETED,
+      req.user!.id
+    );
+    const io = req.app.get('io');
+    io?.to(`ride:${trip.id}`).emit(realtimeEvents.rideUpdated, trip);
+    io?.to(`user:${trip.passengerId}`).emit(realtimeEvents.rideUpdated, trip);
+    io?.to('admins').emit(realtimeEvents.rideUpdated, trip);
+    return ok(res, trip);
+  })
 );
 
 ridesRouter.patch(

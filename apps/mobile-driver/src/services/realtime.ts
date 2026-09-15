@@ -32,3 +32,17 @@ export async function createRealtimeClient(onReady?: SocketHandler) {
 
   return socket;
 }
+
+export function emitDriverLocation(
+  socket: Socket | null,
+  payload: {
+    driverId: string;
+    clientId: string;
+    latitude: number;
+    longitude: number;
+    bearing: number;
+    eta: number;
+  }
+) {
+  socket?.emit('driver:location', payload);
+}

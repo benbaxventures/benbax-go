@@ -79,19 +79,18 @@ export function getOnlineClient(id: string): OnlineClient | undefined {
 }
 
 /**
- * Returns every online passenger within `radiusKm` of the given point, each
- * annotated with distance and sorted nearest-first.
+ * Returns every online passenger, each annotated with distance from the given
+ * point and sorted nearest-first. Radius filtering is intentionally removed so
+ * clients and drivers can always see each other regardless of distance.
  */
 export function clientsNear(
   point: { latitude: number; longitude: number },
-  radiusKm: number
+  _radiusKm?: number
 ): NearbyClient[] {
   const results: NearbyClient[] = [];
   for (const client of onlineClients.values()) {
     const distanceKm = haversineKm(point, client);
-    if (distanceKm <= radiusKm) {
-      results.push({ ...client, distanceKm: Math.round(distanceKm * 10) / 10 });
-    }
+    results.push({ ...client, distanceKm: Math.round(distanceKm * 10) / 10 });
   }
   return results.sort((a, b) => a.distanceKm - b.distanceKm);
 }

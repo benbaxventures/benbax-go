@@ -13,11 +13,11 @@ export function DistanceSlider({
   value,
   onValueChange,
   minimumValue = 1,
-  maximumValue = 25,
+  maximumValue = 100,
 }: Props) {
   const percentage = ((value - minimumValue) / (maximumValue - minimumValue)) * 100;
 
-  const presetValues = [3, 5, 10, 15, 25];
+  const presetValues = [5, 10, 25, 50, 100];
 
   return (
     <View style={{ gap: 8 }}>

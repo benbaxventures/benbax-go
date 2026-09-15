@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(curl -s -o /dev/null -w \"health: %{http_code} \\(%{time_total}s\\)\\\\n\" https://benbaxapi-production.up.railway.app/health --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"api/v1: %{http_code}\\\\n\" https://benbaxapi-production.up.railway.app/api/v1 --max-time 20)",
+      "Bash(echo \"=== refresh endpoint ===\")",
+      "Bash(curl -s -o /dev/null -w 'POST /auth/refresh: %{http_code}\\\\n' -X POST https://benbaxapi-production.up.railway.app/api/v1/auth/refresh -H 'Content-Type: application/json' -d '{\"refreshToken\":\"x\"}' --max-time 20)",
+      "Bash(echo \"=== login shape \\(bad creds\\) ===\")",
+      "Bash(curl -s -X POST https://benbaxapi-production.up.railway.app/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"phone\":\"+233000000000\",\"password\":\"x\"}' --max-time 20)",
+      "Bash(echo \"=== login \\(bad creds\\) ===\")",
+      "Bash(curl -s -w '\\\\n[status:%{http_code}]\\\\n' -X POST https://benbaxapi-production.up.railway.app/api/v1/auth/login -H 'Content-Type: application/json' -d '{\"phone\":\"+233000000000\",\"password\":\"wrongpass\"}' --max-time 25)",
+      "Bash(echo \"=== POST /auth/refresh \\(dummy token\\) ===\")",
+      "Bash(curl -s -w '\\\\n[status:%{http_code}]\\\\n' -X POST https://benbaxapi-production.up.railway.app/api/v1/auth/refresh -H 'Content-Type: application/json' -d '{\"refreshToken\":\"dummy\"}' --max-time 25)",
+      "Bash(echo \"=== tsc exit: $? ===\")",
+      "Bash(echo \"=== PWD ===\" && pwd && echo \"\" && echo \"=== monorepo root ===\" && ls ../../ 2>/dev/null | head -30)",
+      "Bash(cd ../.. && echo \"=== apps ===\" && ls apps/ 2>/dev/null && echo \"\" && echo \"=== db hints \\(prisma/drizzle/schema\\) ===\" && find . -maxdepth 4 \\\\\\( -name \"schema.prisma\" -o -name \"drizzle.config.*\" -o -name \"*.sql\" \\\\\\) -not -path \"*/node_modules/*\" 2>/dev/null | head -20)",
+      "Bash(grep -iA6 \"postgres\\\\|mysql\\\\|mongo\\\\|redis\" ../../docker-compose.yml)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('workspaces:', JSON.stringify\\(p.workspaces\\)\\); console.log\\('pkgMgr:', p.packageManager||'n/a'\\)\")",
+      "Bash(ls yarn.lock pnpm-lock.yaml package-lock.json)",
+      "Bash(npm install *)",
+      "Bash(node -e \"try{console.log\\('installed:', require\\('./apps/mobile-driver/node_modules/@gorhom/bottom-sheet/package.json'\\).version\\)}catch\\(e\\){console.log\\('not yet in app node_modules, checking root...'\\); try{console.log\\('root:', require\\('./node_modules/@gorhom/bottom-sheet/package.json'\\).version\\)}catch\\(e2\\){console.log\\('not found yet'\\)}}\")",
+      "Bash(node -e \"try{console.log\\('bottom-sheet version:', require\\('./apps/mobile-driver/node_modules/@gorhom/bottom-sheet/package.json'\\).version\\)}catch\\(e\\){try{console.log\\('root version:', require\\('./node_modules/@gorhom/bottom-sheet/package.json'\\).version\\)}catch\\(e2\\){console.log\\('NOT installed'\\)}}\")",
+      "Bash(node -e \"const b=require\\('./node_modules/@gorhom/bottom-sheet'\\); console.log\\('default:', typeof b.default\\); console.log\\('BottomSheetScrollView:', typeof b.BottomSheetScrollView\\); console.log\\('BottomSheetView:', typeof b.BottomSheetView\\)\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({expo:p.dependencies.expo, 'react-native':p.dependencies['react-native'], react:p.dependencies.react, reanimated:p.dependencies['react-native-reanimated'], maps:p.dependencies['react-native-maps'], 'gesture-handler':p.dependencies['react-native-gesture-handler']},null,2\\)\\)\")",
+      "Bash(node -e ' *)",
+      "Bash(read f *)",
+      "Bash(node -e 'console.log\\(require\\('\\\\''./__TRACKED_VAR__'\\\\''\\).version\\)')",
+      "Bash(echo '__TRACKED_VAR__ => __CMDSUB_OUTPUT__')",
+      "Bash(echo \"\")",
+      "Bash(echo \"=== react copies ===\")",
+      "Bash(echo \"=== metro.config in driver app ===\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\({deps:p.dependencies, workspaces:p.workspaces},null,2\\)\\)\")",
+      "Bash(npm ls *)"
+    ]
+  }
+}

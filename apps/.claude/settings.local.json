@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/c/Users/brigh/webDev/benbax-go/**)",
+      "Bash(npm run *)",
+      "Read(//c/Users/brigh/webDev/benbax-go/apps/mobile-request/**)",
+      "Bash(npx tsc *)",
+      "Bash(npx eslint *)",
+      "Bash(cd /c/Users/brigh/webDev/benbax-go/apps/api && echo \"=== migrations dir ===\" && ls prisma/migrations 2>/dev/null | tail -10 && echo \"\" && echo \"=== db scripts ===\" && grep -n \"prisma\\\\|migrate\\\\|db:push\\\\|db push\" package.json)",
+      "Bash(npx prisma *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git check-ignore *)",
+      "Bash(git -C mobile-driver status --short)",
+      "Bash(grep -E \"expo-notifications|expo-device|@sentry/react-native\" \"/c/Users/brigh/webDev/benbax-go/apps/mobile-driver/package.json\")",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\brigh\\\\webDev\\\\benbax-go\\\\apps\\\\mobile-driver\"; npx tsc --noEmit 2>&1 | Select-Object -First 40; \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\brigh\\\\webDev\\\\benbax-go\\\\apps\\\\mobile-driver\"; npx expo config --type public 2>&1 | Select-String -Pattern \"plugin|sentry|notification|error|Error\" -SimpleMatch | Select-Object -First 20; \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\brigh\\\\webDev\\\\benbax-go\\\\apps\\\\mobile-driver\"; npx tsc --noEmit 2>&1 | Select-Object -First 20; \"TYPECHECK EXIT: $LASTEXITCODE\"; git -C \"C:\\\\Users\\\\brigh\\\\webDev\\\\benbax-go\" status --short -- apps/mobile-driver)",
+      "Bash(cd /c/Users/brigh/webDev/benbax-go && echo \"===OLD URL REFERENCES===\"; grep -rniE \"benbaxapi-production\\\\.up\\\\.railway\\\\.app|railway\\\\.app\" --include=*.ts --include=*.tsx --include=*.js --include=*.json --include=*.env -l apps 2>/dev/null | grep -v node_modules; echo \"\"; echo \"===ALSO IN .env FILES===\"; grep -rniE \"railway\\\\.app\" apps --include=.env -l 2>/dev/null; find apps -name \".env\" -not -path \"*/node_modules/*\" 2>/dev/null)",
+      "PowerShell(Set-Location \"C:\\\\Users\\\\brigh\\\\webDev\\\\benbax-go\\\\apps\\\\api\"; npm run typecheck 2>&1 | Select-Object -Last 30; \"EXIT: $LASTEXITCODE\")",
+      "PowerShell($f = \"C:\\\\Users\\\\brigh\\\\webDev\\\\benbax-go\\\\apps\\\\mobile-driver\\\\eas.json\"; try { $j = Get-Content $f -Raw | ConvertFrom-Json; \"JSON OK\"; \"preview DSN:    \" + $j.build.preview.env.EXPO_PUBLIC_SENTRY_DSN; \"production DSN: \" + $j.build.production.env.EXPO_PUBLIC_SENTRY_DSN } catch { \"BAD JSON: $_\" })",
+      "Bash(cd /c/Users/brigh/webDev/benbax-go/apps/api && echo \"=== server.ts ===\" && cat src/server.ts 2>/dev/null | head -60; echo \"=== env.ts ===\" && cat src/config/env.ts 2>/dev/null | head -60)"
+    ]
+  },
+  "enabledPlugins": {}
+}

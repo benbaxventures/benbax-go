@@ -3,6 +3,7 @@ import type { NavigationProp } from '@react-navigation/native';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import {
+  ArrowLeft,
   Box,
   CheckCircle2,
   Crosshair,
@@ -16,6 +17,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { Socket } from 'socket.io-client';
 import { Button } from '../components/Button';
 import { ClientOnlineToast } from '../components/ClientOnlineToast';
 import { DriverMarker } from '../components/DriverMarker';
@@ -29,6 +31,9 @@ import { useLiveLocation } from '../hooks/useLiveLocation';
 import { useNearbyClients } from '../hooks/useNearbyClients';
 import type { RootStackParamList } from '../navigation/types';
 import { ApiConnectionError, apiRequest } from '../services/api';
+import { fetchDrivingRoute, haversineMeters, type RouteCoordinate } from '../services/directions';
+import { createRealtimeClient, emitDriverLocation } from '../services/realtime';
+import { useAuthStore } from '../store/authStore';
 import { useDriverStore } from '../store/driverStore';
 import { theme } from '../theme/tokens';
 
@@ -74,6 +79,7 @@ const MAP_CAMERA_ALTITUDE = 600;
 export function DispatchScreen() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
+  const driverId = useAuthStore((s) => s.user?.id);
   const {
     isOnline,
     setOnline,
@@ -87,11 +93,17 @@ export function DispatchScreen() {
     setPriority,
     hotZones,
     setHotZones,
-    maxPickupDistance,
   } = useDriverStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [is3D, setIs3D] = useState(true);
+  const [navigationClientId, setNavigationClientId] = useState<string | null>(null);
+  const [routeCoordinates, setRouteCoordinates] = useState<RouteCoordinate[]>([]);
+  const [routeDistanceMeters, setRouteDistanceMeters] = useState(0);
+  const [routeDurationSeconds, setRouteDurationSeconds] = useState(0);
+  const [hasArrived, setHasArrived] = useState(false);
+  const navigationSocketRef = useRef<Socket | null>(null);
+  const lastPublishedLocationRef = useRef({ at: 0, latitude: 0, longitude: 0 });
   const {
     latitude,
     longitude,
@@ -104,14 +116,110 @@ export function DispatchScreen() {
   const [mapsModule, setMapsModule] = useState<MapsModule | null>(null);
   const mapRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const sheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ['42%', '90%'], []);
 
   // Live passengers coming online near the driver, streamed over the socket.
   const { nearbyClients, latestArrival, acknowledgeArrival } = useNearbyClients(isOnline, {
     latitude,
     longitude,
-    radiusKm: maxPickupDistance,
   });
+
+  // Keep the customer-facing nearby-driver map current while an online driver
+  // moves, without sending an availability request for every GPS callback.
+  useEffect(() => {
+    if (!isOnline || !latitude || !longitude) return;
+
+    const now = Date.now();
+    const previous = lastPublishedLocationRef.current;
+    const moved =
+      Math.abs(latitude - previous.latitude) >= 0.0002 ||
+      Math.abs(longitude - previous.longitude) >= 0.0002;
+    if (!moved && now - previous.at < 10_000) return;
+
+    lastPublishedLocationRef.current = { at: now, latitude, longitude };
+    void apiRequest('/drivers/me/availability', {
+      method: 'PATCH',
+      body: JSON.stringify({ isOnline: true, latitude, longitude }),
+    }).catch(() => undefined);
+  }, [isOnline, latitude, longitude]);
+
+  const navigationClient = nearbyClients.find((client) => client.id === navigationClientId) ?? null;
+
+  const defaultSnapPoints = useMemo(() => ['42%', '90%'], []);
+  const navSnapPoints = useMemo(() => ['14%', '42%', '90%'], []);
+  const snapPoints = navigationClient ? navSnapPoints : defaultSnapPoints;
+
+  const stopNavigation = useCallback(() => {
+    setNavigationClientId(null);
+    setRouteCoordinates([]);
+    setHasArrived(false);
+    navigationSocketRef.current?.disconnect();
+    navigationSocketRef.current = null;
+    sheetRef.current?.snapToIndex(0);
+  }, []);
+
+  const startNavigation = useCallback(
+    async (client: { id: string; latitude: number; longitude: number }) => {
+      if (!latitude || !longitude) return;
+      setNavigationClientId(client.id);
+      setHasArrived(false);
+      sheetRef.current?.close();
+      const route = await fetchDrivingRoute(
+        { latitude, longitude },
+        { latitude: client.latitude, longitude: client.longitude }
+      );
+      setRouteCoordinates(route.coordinates);
+      setRouteDistanceMeters(route.distanceMeters);
+      setRouteDurationSeconds(route.durationSeconds);
+      mapRef.current?.fitToCoordinates(route.coordinates, {
+        edgePadding: { top: 170, right: 45, bottom: 240, left: 45 },
+        animated: true,
+      });
+      const socket = await createRealtimeClient();
+      navigationSocketRef.current = socket;
+      socket.emit('navigation:start', { clientId: client.id });
+    },
+    [latitude, longitude]
+  );
+
+  useEffect(() => {
+    return () => {
+      navigationSocketRef.current?.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!navigationClient || !latitude || !longitude || !driverId) return;
+    const destination = {
+      latitude: navigationClient.latitude,
+      longitude: navigationClient.longitude,
+    };
+    const distance = haversineMeters({ latitude, longitude }, destination);
+    const speedMetersPerSecond = Math.max(heading >= 0 ? 8.3 : 5.5, 1);
+    setRouteDistanceMeters(distance);
+    setRouteDurationSeconds(distance / speedMetersPerSecond);
+
+    if (distance < 50 && !hasArrived) {
+      setHasArrived(true);
+    }
+
+    emitDriverLocation(navigationSocketRef.current, {
+      driverId,
+      clientId: navigationClient.id,
+      latitude,
+      longitude,
+      bearing: heading,
+      eta: Math.ceil(distance / speedMetersPerSecond),
+    });
+  }, [driverId, heading, latitude, longitude, navigationClient, hasArrived]);
+
+  useEffect(() => {
+    if (!navigationClient || !latitude || !longitude) return;
+    fetchDrivingRoute({ latitude, longitude }, navigationClient).then((route) => {
+      setRouteCoordinates(route.coordinates);
+      setRouteDistanceMeters(route.distanceMeters);
+      setRouteDurationSeconds(route.durationSeconds);
+    });
+  }, [latitude, longitude, navigationClient]);
 
   useEffect(() => {
     loadMaps().then((m) => setMapsModule(m as unknown as MapsModule | null));
@@ -324,6 +432,7 @@ export function DispatchScreen() {
   const Marker = mapsModule?.Marker;
   const MarkerAnimated = mapsModule?.MarkerAnimated;
   const AnimatedRegion = mapsModule?.AnimatedRegion;
+  const Polyline = mapsModule?.Polyline;
   const canShowMap = Boolean(MapView && hasFix && latitude && longitude);
 
   return (
@@ -354,6 +463,20 @@ export function DispatchScreen() {
               latitude={latitude}
               longitude={longitude}
               heading={heading}
+            />
+          ) : null}
+          {navigationClient && Marker ? (
+            <Marker
+              coordinate={navigationClient}
+              title={navigationClient.name ?? 'Passenger pickup'}
+              pinColor="#F59E0B"
+            />
+          ) : null}
+          {navigationClient && Polyline && routeCoordinates.length > 1 ? (
+            <Polyline
+              coordinates={routeCoordinates}
+              strokeColor={theme.colors.primary}
+              strokeWidth={5}
             />
           ) : null}
           {isOnline && Marker ? (
@@ -420,34 +543,55 @@ export function DispatchScreen() {
         }}
         pointerEvents="box-none"
       >
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 8,
-            backgroundColor: theme.colors.canvas,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 20,
-            ...theme.shadow,
-          }}
-        >
-          <Image
-            source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
-            style={{ width: 22, height: 22, borderRadius: 5 }}
-            resizeMode="contain"
-          />
-          <Text style={{ fontSize: 15, fontWeight: '900', color: theme.colors.ink }}>BENBAX</Text>
+        {navigationClient ? (
+          <Pressable
+            onPress={stopNavigation}
+            accessibilityRole="button"
+            accessibilityLabel="Exit passenger navigation"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              backgroundColor: theme.colors.canvas,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 22,
+              ...theme.shadow,
+            }}
+          >
+            <ArrowLeft size={18} color={theme.colors.ink} />
+            <Text style={{ color: theme.colors.ink, fontWeight: '800' }}>Back to panel</Text>
+          </Pressable>
+        ) : (
           <View
             style={{
-              width: 8,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: isOnline ? '#22C55E' : theme.colors.muted,
-              marginLeft: 2,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              backgroundColor: theme.colors.canvas,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 20,
+              ...theme.shadow,
             }}
-          />
-        </View>
+          >
+            <Image
+              source={require('../../assets/benbax-logo.png') as number} // eslint-disable-line @typescript-eslint/no-require-imports
+              style={{ width: 22, height: 22, borderRadius: 5 }}
+              resizeMode="contain"
+            />
+            <Text style={{ fontSize: 15, fontWeight: '900', color: theme.colors.ink }}>BENBAX</Text>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: isOnline ? '#22C55E' : theme.colors.muted,
+                marginLeft: 2,
+              }}
+            />
+          </View>
+        )}
 
         <View style={{ gap: 10, alignItems: 'flex-end' }}>
           <Pressable
@@ -495,6 +639,39 @@ export function DispatchScreen() {
         </View>
       </View>
 
+      {navigationClient ? (
+        <View
+          style={{
+            position: 'absolute',
+            top: insets.top + 76,
+            left: 16,
+            right: 16,
+            backgroundColor: hasArrived ? '#22C55E' : theme.colors.canvas,
+            borderRadius: 16,
+            padding: 14,
+            ...theme.shadow,
+          }}
+        >
+          <Text
+            style={{
+              color: hasArrived ? '#fff' : theme.colors.ink,
+              fontSize: 16,
+              fontWeight: '900',
+            }}
+          >
+            {hasArrived ? 'Arrived at pickup!' : `Pickup: ${navigationClient.name ?? 'Passenger'}`}
+          </Text>
+          {!hasArrived && (
+            <Text style={{ color: theme.colors.muted, marginTop: 4 }}>
+              {routeDistanceMeters >= 1000
+                ? `${(routeDistanceMeters / 1000).toFixed(1)} km`
+                : `${Math.round(routeDistanceMeters)} m`}{' '}
+              · {Math.max(1, Math.ceil(routeDurationSeconds / 60))} min away
+            </Text>
+          )}
+        </View>
+      ) : null}
+
       {/* Live "passenger online" toast */}
       <ClientOnlineToast
         client={latestArrival}
@@ -506,7 +683,7 @@ export function DispatchScreen() {
       {/* Control panel */}
       <BottomSheet
         ref={sheetRef}
-        index={0}
+        index={navigationClient ? 0 : 0}
         snapPoints={snapPoints}
         enableDynamicSizing={false}
         enablePanDownToClose={false}
@@ -520,294 +697,365 @@ export function DispatchScreen() {
             gap: 14,
           }}
         >
-          <OfflineBanner />
-
-          {error ? <ErrorState message={error} compact variant="error" /> : null}
-
-          {/* Current offer — shown first when present */}
-          {currentOffer ? (
+          {/* Collapsed navigation bar when navigating to a client */}
+          {navigationClient ? (
             <View
               style={{
-                backgroundColor: theme.colors.primary + '12',
-                borderWidth: 1,
-                borderColor: theme.colors.primary,
-                borderRadius: 12,
-                padding: 16,
+                flexDirection: 'row',
+                alignItems: 'center',
                 gap: 10,
-              }}
-            >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text style={{ color: theme.colors.primary, fontWeight: '900', fontSize: 13 }}>
-                  NEW RIDE REQUEST
-                </Text>
-                {offerSecondsLeft != null ? (
-                  <Text style={{ color: '#DC2626', fontWeight: '900', fontSize: 13 }}>
-                    {offerSecondsLeft}s
-                  </Text>
-                ) : null}
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 14,
-                    backgroundColor: theme.colors.primary,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>
-                    {(currentOffer.passengerName || 'P').charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 15 }}>
-                  {currentOffer.passengerName || 'Passenger'}
-                </Text>
-              </View>
-              {currentOffer.pickup?.label ? (
-                <Text style={{ color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
-                  Pickup: {currentOffer.pickup.label}
-                </Text>
-              ) : null}
-              {currentOffer.dropoff?.label ? (
-                <Text style={{ color: theme.colors.muted, fontSize: 13 }} numberOfLines={2}>
-                  Dropoff: {currentOffer.dropoff.label}
-                </Text>
-              ) : null}
-              <Text style={{ color: theme.colors.muted }}>Match score {currentOffer.score}</Text>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label="Accept"
-                    icon={<CheckCircle2 size={18} color="#fff" />}
-                    onPress={acceptOffer}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Button
-                    label="Reject"
-                    icon={<XCircle size={18} color="#fff" />}
-                    onPress={rejectOffer}
-                    variant="danger"
-                  />
-                </View>
-              </View>
-            </View>
-          ) : null}
-
-          {/* Online/Offline toggle */}
-          <Pressable
-            onPress={toggleOnline}
-            style={{
-              backgroundColor: isOnline ? theme.colors.primary : theme.colors.surface,
-              borderRadius: 12,
-              padding: 18,
-              gap: 6,
-              borderWidth: isOnline ? 0 : 1,
-              borderColor: theme.colors.border,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Power size={26} color={isOnline ? '#fff' : theme.colors.primary} />
-              <Text
-                style={{
-                  color: isOnline ? '#fff' : theme.colors.ink,
-                  fontSize: 22,
-                  fontWeight: '900',
-                }}
-              >
-                {isOnline ? 'Online' : 'Offline'}
-              </Text>
-            </View>
-            <Text style={{ color: isOnline ? '#D7FFF5' : theme.colors.muted }}>
-              {loading
-                ? 'Updating…'
-                : isOnline
-                  ? 'Receiving nearby trip requests'
-                  : 'Tap to go online and receive trips'}
-            </Text>
-          </Pressable>
-
-          {/* Priority badge */}
-          <PriorityBadge
-            priority={priority}
-            onPress={() => navigation.navigate('PriorityDetails')}
-          />
-
-          {/* Earning mode toggle */}
-          <View
-            style={{
-              flexDirection: 'row',
-              backgroundColor: theme.colors.surface,
-              borderRadius: 10,
-              padding: 4,
-              gap: 4,
-            }}
-          >
-            <Pressable
-              onPress={toggleEarningMode}
-              style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 8,
-                backgroundColor: earningMode === 'efficient' ? theme.colors.accent : 'transparent',
-                alignItems: 'center',
-              }}
-            >
-              <Text
-                style={{
-                  color: earningMode === 'efficient' ? '#fff' : theme.colors.muted,
-                  fontWeight: '800',
-                  fontSize: 13,
-                }}
-              >
-                Efficient
-              </Text>
-              <Text
-                style={{
-                  color: earningMode === 'efficient' ? '#fff' : theme.colors.muted,
-                  fontSize: 10,
-                }}
-              >
-                Weekly bonuses
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={toggleEarningMode}
-              style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 8,
-                backgroundColor: earningMode === 'flexible' ? theme.colors.primary : 'transparent',
-                alignItems: 'center',
-              }}
-            >
-              <Text
-                style={{
-                  color: earningMode === 'flexible' ? '#fff' : theme.colors.muted,
-                  fontWeight: '800',
-                  fontSize: 13,
-                }}
-              >
-                Flexible
-              </Text>
-              <Text
-                style={{
-                  color: earningMode === 'flexible' ? '#fff' : theme.colors.muted,
-                  fontSize: 10,
-                }}
-              >
-                Lower fee, destinations shown
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Pathfinder toggle */}
-          <Pressable
-            onPress={toggleHeadingHome}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
-              padding: 12,
-              borderRadius: 10,
-              backgroundColor: headingHome ? '#8B5CF615' : theme.colors.surface,
-              borderWidth: 1,
-              borderColor: headingHome ? '#8B5CF6' : theme.colors.border,
-            }}
-          >
-            <Home size={20} color={headingHome ? '#8B5CF6' : theme.colors.muted} />
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 14 }}>
-                Pathfinder
-              </Text>
-              <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
-                {headingHome
-                  ? 'Finding trips on your way home'
-                  : 'Head home with trips along the way'}
-              </Text>
-            </View>
-            <View
-              style={{
-                width: 44,
-                height: 26,
-                borderRadius: 13,
-                backgroundColor: headingHome ? '#8B5CF6' : theme.colors.border,
-                justifyContent: 'center',
-                paddingHorizontal: 3,
+                padding: 12,
+                borderRadius: 12,
+                backgroundColor: hasArrived ? '#22C55E18' : theme.colors.primary + '12',
+                borderWidth: 1,
+                borderColor: hasArrived ? '#22C55E' : theme.colors.primary,
               }}
             >
               <View
                 style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: 10,
-                  backgroundColor: '#fff',
-                  alignSelf: headingHome ? 'flex-end' : 'flex-start',
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: hasArrived ? '#22C55E' : theme.colors.primary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>
+                  {(navigationClient.name ?? 'P').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 14 }}>
+                  {hasArrived ? 'Arrived!' : (navigationClient.name ?? 'Passenger')}
+                </Text>
+                <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
+                  {hasArrived
+                    ? 'You are at the pickup location'
+                    : routeDistanceMeters >= 1000
+                      ? `${(routeDistanceMeters / 1000).toFixed(1)} km · ${Math.max(1, Math.ceil(routeDurationSeconds / 60))} min`
+                      : `${Math.round(routeDistanceMeters)} m · ${Math.max(1, Math.ceil(routeDurationSeconds / 60))} min`}
+                </Text>
+              </View>
+              <Pressable
+                onPress={stopNavigation}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 14,
+                  backgroundColor: hasArrived ? '#22C55E' : theme.colors.primary,
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>
+                  {hasArrived ? 'Done' : 'End nav'}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          <OfflineBanner />
+
+          {error ? <ErrorState message={error} compact variant="error" /> : null}
+
+          {/* Full control panel — hidden during navigation */}
+          {!navigationClient ? (
+            <>
+              {/* Current offer — shown first when present */}
+              {currentOffer ? (
+                <View
+                  style={{
+                    backgroundColor: theme.colors.primary + '12',
+                    borderWidth: 1,
+                    borderColor: theme.colors.primary,
+                    borderRadius: 12,
+                    padding: 16,
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text style={{ color: theme.colors.primary, fontWeight: '900', fontSize: 13 }}>
+                      NEW RIDE REQUEST
+                    </Text>
+                    {offerSecondsLeft != null ? (
+                      <Text style={{ color: '#DC2626', fontWeight: '900', fontSize: 13 }}>
+                        {offerSecondsLeft}s
+                      </Text>
+                    ) : null}
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        backgroundColor: theme.colors.primary,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>
+                        {(currentOffer.passengerName || 'P').charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 15 }}>
+                      {currentOffer.passengerName || 'Passenger'}
+                    </Text>
+                  </View>
+                  {currentOffer.pickup?.label ? (
+                    <Text style={{ color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
+                      Pickup: {currentOffer.pickup.label}
+                    </Text>
+                  ) : null}
+                  {currentOffer.dropoff?.label ? (
+                    <Text style={{ color: theme.colors.muted, fontSize: 13 }} numberOfLines={2}>
+                      Dropoff: {currentOffer.dropoff.label}
+                    </Text>
+                  ) : null}
+                  <Text style={{ color: theme.colors.muted }}>
+                    Match score {currentOffer.score}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label="Accept"
+                        icon={<CheckCircle2 size={18} color="#fff" />}
+                        onPress={acceptOffer}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Button
+                        label="Reject"
+                        icon={<XCircle size={18} color="#fff" />}
+                        onPress={rejectOffer}
+                        variant="danger"
+                      />
+                    </View>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Online/Offline toggle */}
+              <Pressable
+                onPress={toggleOnline}
+                style={{
+                  backgroundColor: isOnline ? theme.colors.primary : theme.colors.surface,
+                  borderRadius: 12,
+                  padding: 18,
+                  gap: 6,
+                  borderWidth: isOnline ? 0 : 1,
+                  borderColor: theme.colors.border,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Power size={26} color={isOnline ? '#fff' : theme.colors.primary} />
+                  <Text
+                    style={{
+                      color: isOnline ? '#fff' : theme.colors.ink,
+                      fontSize: 22,
+                      fontWeight: '900',
+                    }}
+                  >
+                    {isOnline ? 'Online' : 'Offline'}
+                  </Text>
+                </View>
+                <Text style={{ color: isOnline ? '#D7FFF5' : theme.colors.muted }}>
+                  {loading
+                    ? 'Updating…'
+                    : isOnline
+                      ? 'Receiving nearby trip requests'
+                      : 'Tap to go online and receive trips'}
+                </Text>
+              </Pressable>
+
+              {/* Priority badge */}
+              <PriorityBadge
+                priority={priority}
+                onPress={() => navigation.navigate('PriorityDetails')}
               />
-            </View>
-          </Pressable>
 
-          {/* Live nearby clients */}
-          {isOnline ? (
-            <Pressable
-              onPress={() => {
-                const first = nearbyClients[0];
-                if (first) focusClient(first);
-              }}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-                padding: 10,
-                borderRadius: 8,
-                backgroundColor: '#22C55E12',
-              }}
-            >
-              <Users size={16} color="#16A34A" />
-              <Text style={{ color: theme.colors.ink, fontSize: 12, flex: 1 }}>
-                {nearbyClients.length > 0
-                  ? `${nearbyClients.length} ${nearbyClients.length === 1 ? 'passenger' : 'passengers'} online nearby — tap to view`
-                  : 'Watching for passengers coming online nearby…'}
-              </Text>
-            </Pressable>
+              {/* Earning mode toggle */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  backgroundColor: theme.colors.surface,
+                  borderRadius: 10,
+                  padding: 4,
+                  gap: 4,
+                }}
+              >
+                <Pressable
+                  onPress={toggleEarningMode}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    backgroundColor:
+                      earningMode === 'efficient' ? theme.colors.accent : 'transparent',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: earningMode === 'efficient' ? '#fff' : theme.colors.muted,
+                      fontWeight: '800',
+                      fontSize: 13,
+                    }}
+                  >
+                    Efficient
+                  </Text>
+                  <Text
+                    style={{
+                      color: earningMode === 'efficient' ? '#fff' : theme.colors.muted,
+                      fontSize: 10,
+                    }}
+                  >
+                    Weekly bonuses
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={toggleEarningMode}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 10,
+                    borderRadius: 8,
+                    backgroundColor:
+                      earningMode === 'flexible' ? theme.colors.primary : 'transparent',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: earningMode === 'flexible' ? '#fff' : theme.colors.muted,
+                      fontWeight: '800',
+                      fontSize: 13,
+                    }}
+                  >
+                    Flexible
+                  </Text>
+                  <Text
+                    style={{
+                      color: earningMode === 'flexible' ? '#fff' : theme.colors.muted,
+                      fontSize: 10,
+                    }}
+                  >
+                    Lower fee, destinations shown
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* Pathfinder toggle */}
+              <Pressable
+                onPress={toggleHeadingHome}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 10,
+                  backgroundColor: headingHome ? '#8B5CF615' : theme.colors.surface,
+                  borderWidth: 1,
+                  borderColor: headingHome ? '#8B5CF6' : theme.colors.border,
+                }}
+              >
+                <Home size={20} color={headingHome ? '#8B5CF6' : theme.colors.muted} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 14 }}>
+                    Pathfinder
+                  </Text>
+                  <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
+                    {headingHome
+                      ? 'Finding trips on your way home'
+                      : 'Head home with trips along the way'}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    width: 44,
+                    height: 26,
+                    borderRadius: 13,
+                    backgroundColor: headingHome ? '#8B5CF6' : theme.colors.border,
+                    justifyContent: 'center',
+                    paddingHorizontal: 3,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      backgroundColor: '#fff',
+                      alignSelf: headingHome ? 'flex-end' : 'flex-start',
+                    }}
+                  />
+                </View>
+              </Pressable>
+
+              {/* Live nearby clients */}
+              {isOnline ? (
+                <Pressable
+                  onPress={() => {
+                    const first = nearbyClients[0];
+                    if (first) void startNavigation(first);
+                  }}
+                  disabled={nearbyClients.length === 0}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: 10,
+                    borderRadius: 8,
+                    backgroundColor: '#22C55E12',
+                  }}
+                >
+                  <Users size={16} color="#16A34A" />
+                  <Text style={{ color: theme.colors.ink, fontSize: 12, flex: 1 }}>
+                    {nearbyClients.length > 0
+                      ? `${nearbyClients.length} ${nearbyClients.length === 1 ? 'passenger' : 'passengers'} online nearby — tap to view`
+                      : 'Watching for passengers coming online nearby…'}
+                  </Text>
+                </Pressable>
+              ) : null}
+
+              {/* Hot zones legend */}
+              {isOnline && hotZones.length > 0 ? (
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: 10,
+                    borderRadius: 8,
+                    backgroundColor: '#8B5CF610',
+                  }}
+                >
+                  <Flame size={16} color="#8B5CF6" />
+                  <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
+                    {hotZones.length} hot {hotZones.length === 1 ? 'zone' : 'zones'} nearby — drive
+                    there for more requests
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Location status */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  justifyContent: 'center',
+                }}
+              >
+                <Crosshair size={12} color={theme.colors.muted} />
+                <Text style={{ color: theme.colors.muted, fontSize: 11 }}>
+                  {locationLoading
+                    ? 'Locating…'
+                    : latitude && longitude
+                      ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
+                      : 'Location unavailable'}
+                </Text>
+              </View>
+            </>
           ) : null}
-
-          {/* Hot zones legend */}
-          {isOnline && hotZones.length > 0 ? (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-                padding: 10,
-                borderRadius: 8,
-                backgroundColor: '#8B5CF610',
-              }}
-            >
-              <Flame size={16} color="#8B5CF6" />
-              <Text style={{ color: theme.colors.muted, fontSize: 12 }}>
-                {hotZones.length} hot {hotZones.length === 1 ? 'zone' : 'zones'} nearby — drive
-                there for more requests
-              </Text>
-            </View>
-          ) : null}
-
-          {/* Location status */}
-          <View
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' }}
-          >
-            <Crosshair size={12} color={theme.colors.muted} />
-            <Text style={{ color: theme.colors.muted, fontSize: 11 }}>
-              {locationLoading
-                ? 'Locating…'
-                : latitude && longitude
-                  ? `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`
-                  : 'Location unavailable'}
-            </Text>
-          </View>
         </BottomSheetScrollView>
       </BottomSheet>
     </View>

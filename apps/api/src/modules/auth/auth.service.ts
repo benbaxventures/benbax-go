@@ -7,6 +7,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
 import { badRequest, notFound, unauthorized } from '../../utils/http';
+import { normalizePhoneNumber } from '../../utils/phone';
 import { notify } from '../notifications/notify';
 
 type RegisterInput = {
@@ -89,8 +90,15 @@ function hashToken(token: string) {
 // resolves to at most one user.
 function findUserByIdentifier(identifier: string) {
   const value = identifier.trim();
+  const normalizedPhone = normalizePhoneNumber(value);
   return prisma.user.findFirst({
-    where: { OR: [{ phone: value }, { email: value }] },
+    where: {
+      OR: [
+        { phone: value },
+        ...(normalizedPhone && normalizedPhone !== value ? [{ phone: normalizedPhone }] : []),
+        { email: value },
+      ],
+    },
   });
 }
 
@@ -184,9 +192,17 @@ async function getGoogleProfile(input: GoogleLoginInput): Promise<GoogleProfile>
 }
 
 export async function register(input: RegisterInput, ctx?: SessionContext) {
+  const rawPhone = input.phone.trim();
+  const phone = normalizePhoneNumber(input.phone);
+  if (!phone) throw badRequest('Enter a valid phone number');
+
   const existing = await prisma.user.findFirst({
     where: {
-      OR: [{ phone: input.phone }, ...(input.email ? [{ email: input.email }] : [])],
+      OR: [
+        { phone },
+        ...(rawPhone !== phone ? [{ phone: rawPhone }] : []),
+        ...(input.email ? [{ email: input.email }] : []),
+      ],
     },
   });
 
@@ -195,7 +211,7 @@ export async function register(input: RegisterInput, ctx?: SessionContext) {
   const passwordHash = await bcrypt.hash(input.password, 12);
   const createData: Prisma.UserCreateInput = {
     name: input.name,
-    phone: input.phone,
+    phone,
     email: input.email ?? null,
     passwordHash,
     role: input.role ?? UserRole.CUSTOMER,

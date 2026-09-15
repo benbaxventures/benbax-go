@@ -1,11 +1,11 @@
 import type { NavigationProp } from '@react-navigation/native';
-import { useNavigation } from '@react-navigation/native';
+import { useIsFocused, useNavigation } from '@react-navigation/native';
 import {
   ArrowRight,
   Bike,
   CalendarClock,
   Car,
-  ChevronDown,
+  ChevronLeft,
   Clock,
   CreditCard,
   MapPin as MapPinIcon,
@@ -14,7 +14,7 @@ import {
   Search,
   Star,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,6 +34,7 @@ import { MapMarker, MapView } from '../components/MapView';
 import { useClientPresence } from '../hooks/useClientPresence';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
+import { useNearbyDrivers, type NearbyDriver } from '../hooks/useNearbyDrivers';
 import { useInitializePayment } from '../hooks/usePayments';
 import { useCreateTrip, useTripQuote } from '../hooks/useTrips';
 import type { RootStackParamList } from '../navigation/types';
@@ -165,44 +166,73 @@ function ServiceCard({
   );
 }
 
+const NearbyDriverMarker = memo(function NearbyDriverMarker({ driver }: { driver: NearbyDriver }) {
+  return (
+    <MapMarker
+      coordinate={{ latitude: driver.latitude, longitude: driver.longitude }}
+      title="Available driver"
+      description={`${driver.distanceKm.toFixed(1)} km away`}
+      pinColor="#2563EB"
+      zIndex={2}
+    >
+      <View
+        style={{
+          width: 30,
+          height: 30,
+          borderRadius: 15,
+          backgroundColor: '#2563EB',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderWidth: 2,
+          borderColor: '#fff',
+          shadowColor: '#000',
+          shadowOpacity: 0.2,
+          shadowRadius: 4,
+          shadowOffset: { width: 0, height: 1 },
+          elevation: 3,
+        }}
+      >
+        <Car size={15} color="#fff" />
+      </View>
+    </MapMarker>
+  );
+});
+
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+  const isFocused = useIsFocused();
 
   // --- Panel animation ---
-  const [_panelExpanded, setPanelExpanded] = useState(false); // eslint-disable-line @typescript-eslint/no-unused-vars
   const panelAnim = useRef(new Animated.Value(0)).current;
-  const mapPaddingAnim = useRef(new Animated.Value(PANEL_MIN_HEIGHT)).current;
 
   const togglePanel = useCallback(
     (expand: boolean) => {
-      setPanelExpanded(expand);
       Animated.spring(panelAnim, {
         toValue: expand ? 1 : 0,
-        useNativeDriver: false,
+        useNativeDriver: true,
         tension: 80,
         friction: 12,
       }).start();
-      Animated.timing(mapPaddingAnim, {
-        toValue: expand ? PANEL_FORM_HEIGHT : PANEL_MIN_HEIGHT,
-        duration: 250,
-        useNativeDriver: false,
-      }).start();
     },
-    [panelAnim, mapPaddingAnim]
+    [panelAnim]
   );
 
   // --- Mode and form state ---
   const [mode, setMode] = useState<Mode>('delivery');
 
-  const deliveryStore = useDeliveryStore();
-  const tripStore = useTripStore();
-  // Stable action refs for effects: subscribing to the whole store above means
-  // every store write returns a new snapshot, so putting `deliveryStore` /
-  // `tripStore` in an effect dependency array while writing to the store inside
-  // that effect loops forever ("Maximum update depth exceeded").
+  const deliveryCategory = useDeliveryStore((s) => s.draft.category);
+  const deliveryQuote = useDeliveryStore((s) => s.draft.quote);
+  const setDeliveryCategory = useDeliveryStore((s) => s.setCategory);
   const setDeliveryPickup = useDeliveryStore((s) => s.setPickup);
+  const setDeliveryDropoff = useDeliveryStore((s) => s.setDropoff);
+  const setDeliveryQuote = useDeliveryStore((s) => s.setQuote);
+  const vehicleType = useTripStore((s) => s.draft.vehicleType);
+  const tripQuote = useTripStore((s) => s.draft.quote);
+  const setVehicleType = useTripStore((s) => s.setVehicleType);
   const setTripPickup = useTripStore((s) => s.setPickup);
+  const setTripDropoff = useTripStore((s) => s.setDropoff);
+  const setTripQuote = useTripStore((s) => s.setQuote);
   const deliveryQuoteMutation = useDeliveryQuote();
   const createDeliveryMutation = useCreateDelivery();
   const tripQuoteMutation = useTripQuote();
@@ -227,6 +257,7 @@ export function HomeScreen() {
     longitude,
     ...(currentUserName ? { name: currentUserName } : {}),
   });
+  const { data: nearbyDrivers = [] } = useNearbyDrivers(latitude, longitude, isFocused);
 
   const [pickupText, setPickupText] = useState('Current location');
   const [dropoffText, setDropoffText] = useState('');
@@ -517,25 +548,25 @@ export function HomeScreen() {
     const resolvedDropoff = await ensureDropoffResolved();
     if (!resolvedDropoff) return false;
 
-    deliveryStore.setPickup(pickup);
-    deliveryStore.setDropoff(resolvedDropoff);
-    tripStore.setPickup(pickup);
-    tripStore.setDropoff(resolvedDropoff);
+    setDeliveryPickup(pickup);
+    setDeliveryDropoff(resolvedDropoff);
+    setTripPickup(pickup);
+    setTripDropoff(resolvedDropoff);
 
     if (mode === 'delivery') {
       const result = await deliveryQuoteMutation.mutateAsync({
-        category: deliveryStore.draft.category,
+        category: deliveryCategory,
         pickup,
         dropoff: resolvedDropoff,
       });
-      deliveryStore.setQuote(result);
+      setDeliveryQuote(result);
     } else {
       const result = await tripQuoteMutation.mutateAsync({
         pickup,
         dropoff: resolvedDropoff,
-        requestedVehicleType: tripStore.draft.vehicleType,
+        requestedVehicleType: vehicleType,
       });
-      tripStore.setQuote(result);
+      setTripQuote(result);
     }
     return true;
   }, [
@@ -544,8 +575,14 @@ export function HomeScreen() {
     mode,
     pickup,
     tripQuoteMutation,
-    deliveryStore,
-    tripStore,
+    deliveryCategory,
+    setDeliveryDropoff,
+    setDeliveryPickup,
+    setDeliveryQuote,
+    setTripDropoff,
+    setTripPickup,
+    setTripQuote,
+    vehicleType,
   ]);
 
   // Auto-quote: whenever the destination resolves and the booking form is open,
@@ -588,7 +625,7 @@ export function HomeScreen() {
       }
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
-          category: deliveryStore.draft.category,
+          category: deliveryCategory,
           pickup,
           dropoff: resolvedDropoff,
           paymentMethod: 'PAYSTACK_CARD',
@@ -610,7 +647,7 @@ export function HomeScreen() {
         const carTrip = await createTripMutation.mutateAsync({
           pickup,
           dropoff: resolvedDropoff,
-          requestedVehicleType: tripStore.draft.vehicleType,
+          requestedVehicleType: vehicleType,
         });
         navigation.navigate('TripTracking', { tripId: carTrip.id });
       }
@@ -633,7 +670,7 @@ export function HomeScreen() {
       }
       if (mode === 'delivery') {
         const delivery = await createDeliveryMutation.mutateAsync({
-          category: deliveryStore.draft.category,
+          category: deliveryCategory,
           pickup,
           dropoff: resolvedDropoff,
           paymentMethod: 'PAYSTACK_CARD',
@@ -648,7 +685,7 @@ export function HomeScreen() {
         const carTrip = await createTripMutation.mutateAsync({
           pickup,
           dropoff: resolvedDropoff,
-          requestedVehicleType: tripStore.draft.vehicleType,
+          requestedVehicleType: vehicleType,
           scheduledFor,
         });
         Alert.alert('Ride scheduled', 'Your ride is scheduled for about 30 minutes from now.');
@@ -680,6 +717,12 @@ export function HomeScreen() {
     togglePanel(true);
     setShowForm(true);
   }, [togglePanel]);
+
+  const handleBackToHome = useCallback(() => {
+    closeSuggestions();
+    setShowForm(false);
+    togglePanel(false);
+  }, [closeSuggestions, togglePanel]);
 
   const handleModeSelect = useCallback(
     (newMode: Mode) => {
@@ -721,6 +764,9 @@ export function HomeScreen() {
               subtitle={pickupText !== 'Current location' ? pickupText : null}
             />
           </MapMarker>
+          {nearbyDrivers.map((driver) => (
+            <NearbyDriverMarker key={driver.id} driver={driver} />
+          ))}
           {!usingDetectedPickup && detectedCoord ? (
             <MapMarker coordinate={detectedCoord} anchor={{ x: 0.5, y: 1 }} zIndex={1}>
               <MapPinLabel
@@ -742,6 +788,35 @@ export function HomeScreen() {
           ) : null}
         </MapView>
       </View>
+
+      {nearbyDrivers.length > 0 ? (
+        <View
+          pointerEvents="none"
+          accessibilityLabel={`${nearbyDrivers.length} drivers nearby`}
+          style={{
+            position: 'absolute',
+            top: insets.top + 116,
+            alignSelf: 'center',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: 'rgba(255,255,255,0.94)',
+            borderRadius: 18,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            shadowColor: '#000',
+            shadowOpacity: 0.15,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+          }}
+        >
+          <Car size={15} color="#2563EB" />
+          <Text style={{ color: theme.colors.ink, fontSize: 12, fontWeight: '800' }}>
+            {nearbyDrivers.length} {nearbyDrivers.length === 1 ? 'driver' : 'drivers'} nearby
+          </Text>
+        </View>
+      ) : null}
 
       {/* === TOP FLOATING HEADER (logo + where-to bar) === */}
       <Animated.View
@@ -1009,12 +1084,12 @@ export function HomeScreen() {
             ) : (
               <>
                 {/* === BOOKING FORM === */}
-                {/* Back arrow */}
+                {/* Return to the compact home panel. */}
                 <Pressable
-                  onPress={() => {
-                    togglePanel(false);
-                    setShowForm(false);
-                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to home"
+                  hitSlop={8}
+                  onPress={handleBackToHome}
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -1022,7 +1097,7 @@ export function HomeScreen() {
                     marginBottom: 16,
                   }}
                 >
-                  <ChevronDown size={22} color={theme.colors.ink} />
+                  <ChevronLeft size={22} color={theme.colors.ink} />
                   <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.ink }}>
                     {mode === 'delivery' ? 'Send a package' : 'Book a ride'}
                   </Text>
@@ -1282,11 +1357,11 @@ export function HomeScreen() {
                       contentContainerStyle={{ gap: 8 }}
                     >
                       {categories.map((item) => {
-                        const selected = item.key === deliveryStore.draft.category;
+                        const selected = item.key === deliveryCategory;
                         return (
                           <Pressable
                             key={item.key}
-                            onPress={() => deliveryStore.setCategory(item.key)}
+                            onPress={() => setDeliveryCategory(item.key)}
                             style={{
                               paddingHorizontal: 16,
                               paddingVertical: 10,
@@ -1329,11 +1404,11 @@ export function HomeScreen() {
                       Select vehicle
                     </Text>
                     {vehicleTypes.map((vt) => {
-                      const selected = vt.key === tripStore.draft.vehicleType;
+                      const selected = vt.key === vehicleType;
                       return (
                         <Pressable
                           key={vt.key}
-                          onPress={() => tripStore.setVehicleType(vt.key)}
+                          onPress={() => setVehicleType(vt.key)}
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
@@ -1415,8 +1490,8 @@ export function HomeScreen() {
                     </View>
                     <Text style={{ color: theme.colors.ink, fontWeight: '800', fontSize: 14 }}>
                       {mode === 'delivery'
-                        ? (deliveryStore.draft.quote?.estimatedMinutes ?? '--')
-                        : (tripStore.draft.quote?.estimatedMinutes ?? '--')}{' '}
+                        ? (deliveryQuote?.estimatedMinutes ?? '--')
+                        : (tripQuote?.estimatedMinutes ?? '--')}{' '}
                       mins
                     </Text>
                   </View>
@@ -1431,8 +1506,8 @@ export function HomeScreen() {
                     <Text style={{ color: theme.colors.ink, fontWeight: '900', fontSize: 18 }}>
                       GHS{' '}
                       {mode === 'delivery'
-                        ? (deliveryStore.draft.quote?.total ?? '--')
-                        : (tripStore.draft.quote?.total ?? '--')}
+                        ? (deliveryQuote?.total ?? '--')
+                        : (tripQuote?.total ?? '--')}
                     </Text>
                   </View>
                 </View>

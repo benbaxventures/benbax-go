@@ -24,7 +24,6 @@ const CLIENT_EVENTS = {
 type WatchArgs = {
   latitude: number;
   longitude: number;
-  radiusKm: number;
 };
 
 function normalizeClient(raw: unknown): NearbyClient | null {
@@ -59,7 +58,7 @@ function normalizeClient(raw: unknown): NearbyClient | null {
  */
 export function useNearbyClients(
   enabled: boolean,
-  driver: { latitude: number; longitude: number; radiusKm?: number }
+  driver: { latitude: number; longitude: number }
 ) {
   const nearbyClients = useDriverStore((s) => s.nearbyClients);
   const setNearbyClients = useDriverStore((s) => s.setNearbyClients);
@@ -73,11 +72,10 @@ export function useNearbyClients(
 
   // Keep the latest watch position in a ref so re-emitting on movement doesn't
   // tear down and rebuild the socket.
-  const watchRef = useRef<WatchArgs>({ latitude: 0, longitude: 0, radiusKm: 10 });
+  const watchRef = useRef<WatchArgs>({ latitude: 0, longitude: 0 });
   watchRef.current = {
     latitude: driver.latitude,
     longitude: driver.longitude,
-    radiusKm: driver.radiusKm ?? 10,
   };
 
   useEffect(() => {
@@ -90,22 +88,24 @@ export function useNearbyClients(
 
     let cancelled = false;
 
-    // Best-effort initial snapshot so the map isn't empty before the first event.
-    apiRequest<NearbyClient[]>('/drivers/me/nearby-clients')
-      .then((clients) => {
-        if (cancelled || !Array.isArray(clients)) return;
-        const normalized = clients
-          .map(normalizeClient)
-          .filter((c): c is NearbyClient => c !== null);
-        normalized.forEach((c) => knownIds.current.add(c.id));
-        setNearbyClients(normalized);
-      })
-      .catch(() => undefined);
+    const refreshSnapshot = () => {
+      apiRequest<NearbyClient[]>('/drivers/me/nearby-clients')
+        .then((clients) => {
+          if (cancelled || !Array.isArray(clients)) return;
+          const normalized = clients
+            .map(normalizeClient)
+            .filter((c): c is NearbyClient => c !== null);
+          normalized.forEach((c) => knownIds.current.add(c.id));
+          setNearbyClients(normalized);
+        })
+        .catch(() => undefined);
+    };
 
-    createRealtimeClient((socket) => {
-      // Tell the server where this driver is watching for online passengers.
-      socket.emit('client:watch', watchRef.current);
-    }).then((socket) => {
+    // Best-effort initial snapshot so the map isn't empty before the first event.
+    refreshSnapshot();
+    const snapshotTimer = setInterval(refreshSnapshot, 10000);
+
+    createRealtimeClient().then((socket) => {
       if (cancelled) {
         socket.disconnect();
         return;
@@ -146,10 +146,21 @@ export function useNearbyClients(
         knownIds.current.delete(id);
         removeNearbyClient(id);
       });
+
+      // Register all listeners before watching. The server responds with the
+      // current nearby snapshot immediately, so emitting first can lose it.
+      const emitWatch = () => {
+        if (watchRef.current.latitude !== 0 || watchRef.current.longitude !== 0) {
+          socket.emit('client:watch', watchRef.current);
+        }
+      };
+      socket.on('connect', emitWatch);
+      if (socket.connected) emitWatch();
     });
 
     return () => {
       cancelled = true;
+      clearInterval(snapshotTimer);
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
@@ -160,7 +171,7 @@ export function useNearbyClients(
   useEffect(() => {
     if (!enabled || !socketRef.current) return;
     socketRef.current.emit('client:watch', watchRef.current);
-  }, [enabled, driver.latitude, driver.longitude, driver.radiusKm]);
+  }, [enabled, driver.latitude, driver.longitude]);
 
   const acknowledgeArrival = () => setLatestArrival(null);
 

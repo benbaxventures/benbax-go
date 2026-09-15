@@ -10,7 +10,7 @@ import { MapMarker, MapPolyline, MapView } from '../components/MapView';
 import { StatusPill } from '../components/StatusPill';
 import type { RootStackParamList } from '../navigation/types';
 import { apiRequest } from '../services/api';
-import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
+import { callPhone, normalizePhoneNumber, openWhatsApp } from '../services/contact';
 import { createRealtimeClient } from '../services/realtime';
 import { realtimeEvents } from '../shared';
 import { theme } from '../theme/tokens';
@@ -21,7 +21,7 @@ type Coordinate = {
 };
 
 type DriverInfo = {
-  user?: { name?: string; fullName?: string; phone?: string };
+  user?: { name?: string; fullName?: string; phone?: string | null };
   vehicle?: {
     type?: string;
     plateNumber?: string | null;
@@ -85,9 +85,8 @@ export function TripTrackingScreen({ route, navigation }: Props) {
   useEffect(() => {
     if (trip?.status) setLiveStatus(trip.status);
     const accepted =
-      trip?.assignments?.find((assignment) => assignment.status === 'ACCEPTED') ??
-      trip?.assignments?.[0];
-    if (accepted?.driverProfile) setAssignedDriver(accepted.driverProfile);
+      trip?.assignments?.find((assignment) => assignment.status === 'ACCEPTED') ?? null;
+    setAssignedDriver(accepted?.driverProfile ?? null);
   }, [trip]);
 
   useEffect(() => {
@@ -103,7 +102,7 @@ export function TripTrackingScreen({ route, navigation }: Props) {
       socket.on(realtimeEvents.carTripAssigned, (assignment: TripAssignmentEvent) => {
         if (assignment.tripId !== route.params.tripId) return;
         setLiveStatus(assignment.status === 'ACCEPTED' ? 'ASSIGNED' : 'ASSIGNING');
-        if (assignment.driverProfile) {
+        if (assignment.status === 'ACCEPTED' && assignment.driverProfile) {
           setAssignedDriver(assignment.driverProfile);
         }
         Alert.alert(
@@ -184,6 +183,7 @@ export function TripTrackingScreen({ route, navigation }: Props) {
   }, [latestPoint, pickup, dropoff]);
 
   const driverName = assignedDriver?.user?.name ?? assignedDriver?.user?.fullName ?? 'Driver';
+  const driverPhone = normalizePhoneNumber(assignedDriver?.user?.phone);
   const vehicle = assignedDriver?.vehicle;
   const vehicleLabel = [vehicle?.color, vehicle?.make, vehicle?.model, vehicle?.plateNumber]
     .filter(Boolean)
@@ -444,17 +444,17 @@ export function TripTrackingScreen({ route, navigation }: Props) {
             <Button
               label="Call"
               icon={<Phone size={18} color="#fff" />}
-              onPress={() => callPhone(assignedDriver?.user?.phone ?? BENBAX_PHONE)}
-              disabled={!assignedDriver}
+              onPress={() => callPhone(driverPhone)}
+              disabled={!driverPhone}
             />
           </View>
           <View style={{ flex: 1 }}>
             <Button
               label="WhatsApp"
               icon={<MessageSquareText size={18} color={theme.colors.ink} />}
-              onPress={() => openWhatsApp(assignedDriver?.user?.phone ?? BENBAX_PHONE)}
+              onPress={() => openWhatsApp(driverPhone)}
               variant="secondary"
-              disabled={!assignedDriver}
+              disabled={!driverPhone}
             />
           </View>
           <Pressable

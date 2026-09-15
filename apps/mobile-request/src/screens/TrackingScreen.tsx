@@ -10,7 +10,7 @@ import { MapMarker, MapPolyline, MapView } from '../components/MapView';
 import { StatusPill } from '../components/StatusPill';
 import type { RootStackParamList } from '../navigation/types';
 import { apiRequest } from '../services/api';
-import { BENBAX_PHONE, callPhone, openWhatsApp } from '../services/contact';
+import { callPhone, normalizePhoneNumber, openWhatsApp } from '../services/contact';
 import { createRealtimeClient } from '../services/realtime';
 import { realtimeEvents } from '../shared';
 import { theme } from '../theme/tokens';
@@ -38,8 +38,9 @@ type DeliveryDetail = {
     longitude: string;
   }>;
   assignments?: Array<{
+    status?: string;
     riderProfile?: {
-      user?: { fullName?: string; phone?: string };
+      user?: { fullName?: string; phone?: string | null };
       vehicle?: { type?: string; plateNumber?: string | null };
     };
   }>;
@@ -93,7 +94,10 @@ export function TrackingScreen({ route, navigation }: Props) {
     : latestPoint
       ? [pickup, latestPoint, dropoff]
       : [pickup, dropoff];
-  const rider = delivery?.assignments?.[0]?.riderProfile;
+  const riderAssignment =
+    delivery?.assignments?.find((assignment) => assignment.status === 'ACCEPTED') ?? null;
+  const rider = riderAssignment?.riderProfile;
+  const riderPhone = normalizePhoneNumber(rider?.user?.phone);
 
   const estimatedRegion = latestPoint
     ? {
@@ -301,15 +305,17 @@ export function TrackingScreen({ route, navigation }: Props) {
             <Button
               label="Call"
               icon={<Phone size={18} color="#fff" />}
-              onPress={() => callPhone(rider?.user?.phone ?? BENBAX_PHONE)}
+              onPress={() => callPhone(riderPhone)}
+              disabled={!riderPhone}
             />
           </View>
           <View style={{ flex: 1 }}>
             <Button
               label="WhatsApp"
               icon={<MessageSquareText size={18} color={theme.colors.ink} />}
-              onPress={() => openWhatsApp(rider?.user?.phone ?? BENBAX_PHONE)}
+              onPress={() => openWhatsApp(riderPhone)}
               variant="secondary"
+              disabled={!riderPhone}
             />
           </View>
           <Pressable
