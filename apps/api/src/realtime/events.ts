@@ -24,4 +24,9 @@ export const realtimeEvents = {
   clientOnline: 'client:online',
   clientMoved: 'client:moved',
   clientOffline: 'client:offline',
+  // Live driver-presence stream consumed by online customers.
+  driversNearby: 'drivers:nearby',
+  driverOnline: 'driver:online',
+  driverMoved: 'driver:moved',
+  driverOffline: 'driver:offline',
 } as const;

@@ -35,6 +35,7 @@ import { useClientPresence } from '../hooks/useClientPresence';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
 import { useNearbyDrivers, type NearbyDriver } from '../hooks/useNearbyDrivers';
+import { useNearbyDriversRealtime } from '../hooks/useNearbyDriversRealtime';
 import { useInitializePayment } from '../hooks/usePayments';
 import { useCreateTrip, useTripQuote } from '../hooks/useTrips';
 import type { RootStackParamList } from '../navigation/types';
@@ -257,7 +258,16 @@ export function HomeScreen() {
     longitude,
     ...(currentUserName ? { name: currentUserName } : {}),
   });
-  const { data: nearbyDrivers = [] } = useNearbyDrivers(latitude, longitude, isFocused);
+  // Real-time driver stream via Socket.IO (primary), REST polling as fallback.
+  const realtimeDrivers = useNearbyDriversRealtime(true, { latitude, longitude });
+  const { data: polledDrivers = [], isLoading: driversLoading } = useNearbyDrivers(
+    latitude,
+    longitude,
+    isFocused
+  );
+
+  // Prefer real-time data when available; fall back to REST-polled data.
+  const nearbyDrivers = realtimeDrivers.length > 0 ? realtimeDrivers : polledDrivers;
 
   const [pickupText, setPickupText] = useState('Current location');
   const [dropoffText, setDropoffText] = useState('');
@@ -271,6 +281,7 @@ export function HomeScreen() {
   const [pickupSuggestions, setPickupSuggestions] = useState<PlaceSuggestion[]>([]);
   const [dropoffSuggestions, setDropoffSuggestions] = useState<PlaceSuggestion[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
 
   // Resolved coordinates for each end of the trip. `pickupCoord` is an override
   // set when the customer types/picks a named pickup; when null we fall back to
@@ -286,6 +297,20 @@ export function HomeScreen() {
   const usingDetectedPickup =
     !pickupCoord && (pickupText === 'Current location' || pickupText === detectedLocationLabel);
   const activePickupCoord = pickupCoord ?? detectedCoord ?? FALLBACK_COORD;
+
+  // Fit map to show all nearby driver markers when the indicator is tapped.
+  const fitMapToDrivers = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || nearbyDrivers.length === 0) return;
+    if (typeof map.fitToCoordinates !== 'function') return;
+    const coords = nearbyDrivers.map((d) => ({ latitude: d.latitude, longitude: d.longitude }));
+    coords.push(activePickupCoord);
+    map.fitToCoordinates(coords, {
+      edgePadding: { top: 140, right: 60, bottom: PANEL_FORM_HEIGHT + 40, left: 60 },
+      animated: true,
+    });
+  }, [nearbyDrivers, activePickupCoord]);
+
   const currentLat = activePickupCoord.latitude;
   const currentLng = activePickupCoord.longitude;
 
@@ -349,13 +374,24 @@ export function HomeScreen() {
     const timer = setTimeout(async () => {
       if (text.trim().length < 3) {
         set([]);
+        setSuggestionError(null);
         return;
       }
       setSuggestionsLoading(true);
-      const results = await suggestPlaces(text);
-      set(results);
-      clear([]);
-      setSuggestionsLoading(false);
+      setSuggestionError(null);
+      try {
+        const results = await suggestPlaces(text);
+        set(results);
+        clear([]);
+        if (results.length === 0) {
+          setSuggestionError(null);
+        }
+      } catch {
+        set([]);
+        setSuggestionError('Could not load suggestions. Try typing more or press search.');
+      } finally {
+        setSuggestionsLoading(false);
+      }
     }, 350);
 
     return () => clearTimeout(timer);
@@ -365,6 +401,7 @@ export function HomeScreen() {
     setSuggestionField(null);
     setPickupSuggestions([]);
     setDropoffSuggestions([]);
+    setSuggestionError(null);
   }, []);
 
   // Pick a suggestion: resolve its exact coordinates + real name.
@@ -789,10 +826,38 @@ export function HomeScreen() {
         </MapView>
       </View>
 
-      {nearbyDrivers.length > 0 ? (
+      {/* === DRIVERS NEARBY INDICATOR === */}
+      {driversLoading ? (
         <View
-          pointerEvents="none"
-          accessibilityLabel={`${nearbyDrivers.length} drivers nearby`}
+          accessibilityLabel="Finding nearby drivers"
+          style={{
+            position: 'absolute',
+            top: insets.top + 116,
+            alignSelf: 'center',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: 'rgba(255,255,255,0.94)',
+            borderRadius: 18,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+            shadowColor: '#000',
+            shadowOpacity: 0.15,
+            shadowRadius: 6,
+            shadowOffset: { width: 0, height: 2 },
+            elevation: 4,
+          }}
+        >
+          <ActivityIndicator size="small" color="#2563EB" />
+          <Text style={{ color: theme.colors.muted, fontSize: 12, fontWeight: '600' }}>
+            Finding nearby drivers…
+          </Text>
+        </View>
+      ) : nearbyDrivers.length > 0 ? (
+        <Pressable
+          onPress={fitMapToDrivers}
+          accessibilityRole="button"
+          accessibilityLabel={`${nearbyDrivers.length} ${nearbyDrivers.length === 1 ? 'driver' : 'drivers'} nearby. Tap to view on map.`}
           style={{
             position: 'absolute',
             top: insets.top + 116,
@@ -815,8 +880,29 @@ export function HomeScreen() {
           <Text style={{ color: theme.colors.ink, fontSize: 12, fontWeight: '800' }}>
             {nearbyDrivers.length} {nearbyDrivers.length === 1 ? 'driver' : 'drivers'} nearby
           </Text>
+        </Pressable>
+      ) : (
+        <View
+          accessibilityLabel="No drivers nearby"
+          style={{
+            position: 'absolute',
+            top: insets.top + 116,
+            alignSelf: 'center',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: 'rgba(255,255,255,0.85)',
+            borderRadius: 18,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+          }}
+        >
+          <Car size={15} color={theme.colors.muted} />
+          <Text style={{ color: theme.colors.muted, fontSize: 12, fontWeight: '600' }}>
+            No drivers nearby
+          </Text>
         </View>
-      ) : null}
+      )}
 
       {/* === TOP FLOATING HEADER (logo + where-to bar) === */}
       <Animated.View
@@ -1275,51 +1361,90 @@ export function HomeScreen() {
                       </View>
                     </Pressable>
                     {suggestionsLoading ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={theme.colors.primary}
-                        style={{ marginVertical: 14 }}
-                      />
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 10,
+                          paddingVertical: 14,
+                          paddingHorizontal: 16,
+                        }}
+                      >
+                        <ActivityIndicator size="small" color={theme.colors.primary} />
+                        <Text style={{ fontSize: 13, color: theme.colors.muted }}>
+                          Searching places…
+                        </Text>
+                      </View>
                     ) : null}
-                    {(suggestionField === 'pickup' ? pickupSuggestions : dropoffSuggestions).map(
-                      (suggestion) => (
-                        <Pressable
-                          key={suggestion.placeId}
-                          onPress={() => selectSuggestion(suggestionField, suggestion)}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'center',
-                            gap: 12,
-                            paddingVertical: 13,
-                            paddingHorizontal: 16,
-                          }}
-                        >
-                          <View
-                            style={{
-                              width: 34,
-                              height: 34,
-                              borderRadius: 10,
-                              backgroundColor: theme.colors.surfaceMuted,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <MapPinIcon size={17} color={theme.colors.primary} />
-                          </View>
-                          <Text
-                            style={{
-                              flex: 1,
-                              fontSize: 14,
-                              fontWeight: '600',
-                              color: theme.colors.ink,
-                            }}
-                          >
-                            {suggestion.description}
-                          </Text>
-                        </Pressable>
-                      )
-                    )}
+                    {suggestionError ? (
+                      <View
+                        style={{
+                          paddingVertical: 12,
+                          paddingHorizontal: 16,
+                          backgroundColor: '#FEF2F2',
+                        }}
+                      >
+                        <Text style={{ fontSize: 12, color: '#DC2626' }}>{suggestionError}</Text>
+                      </View>
+                    ) : null}
+                    {!suggestionsLoading && !suggestionError
+                      ? (suggestionField === 'pickup' ? pickupSuggestions : dropoffSuggestions).map(
+                          (suggestion) => (
+                            <Pressable
+                              key={suggestion.placeId}
+                              onPress={() => selectSuggestion(suggestionField, suggestion)}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                gap: 12,
+                                paddingVertical: 13,
+                                paddingHorizontal: 16,
+                                borderBottomWidth: 1,
+                                borderBottomColor: 'rgba(0,0,0,0.04)',
+                              }}
+                            >
+                              <View
+                                style={{
+                                  width: 34,
+                                  height: 34,
+                                  borderRadius: 10,
+                                  backgroundColor: theme.colors.surfaceMuted,
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <MapPinIcon size={17} color={theme.colors.primary} />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  style={{
+                                    fontSize: 14,
+                                    fontWeight: '600',
+                                    color: theme.colors.ink,
+                                    lineHeight: 20,
+                                  }}
+                                >
+                                  {suggestion.mainText}
+                                </Text>
+                                {suggestion.secondaryText ? (
+                                  <Text
+                                    style={{
+                                      fontSize: 12,
+                                      color: theme.colors.muted,
+                                      lineHeight: 16,
+                                    }}
+                                    numberOfLines={1}
+                                  >
+                                    {suggestion.secondaryText}
+                                  </Text>
+                                ) : null}
+                              </View>
+                            </Pressable>
+                          )
+                        )
+                      : null}
                     {!suggestionsLoading &&
+                    !suggestionError &&
                     (suggestionField === 'pickup' ? pickupSuggestions : dropoffSuggestions)
                       .length === 0 ? (
                       <Text
@@ -1330,7 +1455,9 @@ export function HomeScreen() {
                           paddingHorizontal: 16,
                         }}
                       >
-                        Keep typing to see nearby places…
+                        {(suggestionField === 'pickup' ? pickupText : dropoffText).trim().length < 3
+                          ? 'Type at least 3 characters to search…'
+                          : 'No places found. Try a different search.'}
                       </Text>
                     ) : null}
                   </View>

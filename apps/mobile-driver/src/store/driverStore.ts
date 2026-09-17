@@ -105,7 +105,7 @@ export const useDriverStore = create<DriverState>((set) => ({
   isOnline: false,
   currentOffer: null,
   earningMode: 'efficient',
-  maxPickupDistance: 10,
+  maxPickupDistance: 200,
   priority: null,
   hotZones: [],
   bonusGoals: [],
@@ -162,7 +162,7 @@ export const useDriverStore = create<DriverState>((set) => ({
       'benbax.driver.serviceClass',
     ]);
     const earningMode = (entries[0]?.[1] as 'efficient' | 'flexible') || 'efficient';
-    const maxPickupDistance = Number(entries[1]?.[1]) || 10;
+    const maxPickupDistance = Number(entries[1]?.[1]) || 200;
     const serviceClass = (entries[2]?.[1] as 'economy' | 'comfort' | 'premium') || 'economy';
     set({ earningMode, maxPickupDistance, serviceClass });
   },

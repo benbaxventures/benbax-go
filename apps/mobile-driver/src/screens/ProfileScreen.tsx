@@ -180,7 +180,7 @@ export function ProfileScreen() {
           value={maxPickupDistance}
           onValueChange={setMaxPickupDistance}
           minimumValue={1}
-          maximumValue={25}
+          maximumValue={100}
           step={1}
         />
       </View>

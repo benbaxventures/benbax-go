@@ -5,7 +5,7 @@ import { prisma } from '../../config/prisma';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { realtimeEvents } from '../../realtime/events';
-import { clientsNear } from '../../realtime/presence';
+import { clientsNear, removeOnlineDriver, upsertOnlineDriver } from '../../realtime/presence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
@@ -54,7 +54,7 @@ const nearbyDriversSchema = z.object({
   query: z.object({
     latitude: z.coerce.number().min(-90).max(90),
     longitude: z.coerce.number().min(-180).max(180),
-    radiusKm: z.coerce.number().min(1).max(100).default(10),
+    radiusKm: z.coerce.number().min(1).max(200).default(200),
   }),
 });
 
@@ -73,6 +73,11 @@ driversRouter.get(
   asyncHandler(async (req, res) => {
     const latitude = Number(req.query.latitude);
     const longitude = Number(req.query.longitude);
+    const radiusKm = Number(req.query.radiusKm) || 200;
+
+    // Exclude drivers whose last location update is older than 5 minutes —
+    // their reported position is too stale to be useful for ride matching.
+    const staleCutoff = new Date(Date.now() - 5 * 60 * 1000);
 
     const drivers = await prisma.driverProfile.findMany({
       where: {
@@ -80,6 +85,7 @@ driversRouter.get(
         status: 'ACTIVE',
         currentLatitude: { not: null },
         currentLongitude: { not: null },
+        OR: [{ lastLocationAt: null }, { lastLocationAt: { gte: staleCutoff } }],
       },
       select: {
         id: true,
@@ -102,6 +108,7 @@ driversRouter.get(
           vehicleType: driver.vehicle?.type ?? null,
         };
       })
+      .filter((driver) => driver.distanceKm <= radiusKm)
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .map((driver) => ({ ...driver, distanceKm: Number(driver.distanceKm.toFixed(1)) }));
 
@@ -148,6 +155,32 @@ driversRouter.patch(
     const io = req.app.get('io');
     io?.to(`driver:${driver.userId}`).emit(realtimeEvents.driverAvailability, driver);
     io?.to('admins').emit(realtimeEvents.driverAvailability, driver);
+
+    // Update the in-memory driver presence so customers see this driver in
+    // real-time via the Socket.IO stream.
+    if (
+      req.body.isOnline &&
+      typeof req.body.latitude === 'number' &&
+      typeof req.body.longitude === 'number'
+    ) {
+      const vehicleType = driver.vehicle?.type ?? undefined;
+      const { driver: onlineDriver, isNew } = upsertOnlineDriver({
+        id: driver.userId,
+        latitude: req.body.latitude,
+        longitude: req.body.longitude,
+        ...(vehicleType ? { vehicleType } : {}),
+      });
+      // Broadcast to all watching customers via the shared room.
+      io?.to('customer-watchers').emit(
+        isNew ? realtimeEvents.driverOnline : realtimeEvents.driverMoved,
+        onlineDriver
+      );
+    } else if (!req.body.isOnline) {
+      if (removeOnlineDriver(driver.userId)) {
+        io?.to('customer-watchers').emit(realtimeEvents.driverOffline, { id: driver.userId });
+      }
+    }
+
     return ok(res, driver);
   })
 );

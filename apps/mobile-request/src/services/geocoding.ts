@@ -194,11 +194,23 @@ export async function reverseGeocodePoint(
 // coordinates are the real, selectable place — not a guess from a free-text
 // geocode. Requires the Google "Places API" enabled for the Maps key.
 
-export type PlaceSuggestion = { placeId: string; description: string };
+export type PlaceSuggestion = {
+  placeId: string;
+  description: string;
+  mainText: string;
+  secondaryText: string;
+};
 
 type GooglePlacesAutocompleteResponse = {
   status: string;
-  predictions?: Array<{ place_id?: string; description?: string }>;
+  predictions?: Array<{
+    place_id?: string;
+    description?: string;
+    structured_formatting?: {
+      main_text?: string;
+      secondary_text?: string;
+    };
+  }>;
 };
 
 type GooglePlaceDetailsResponse = {
@@ -235,6 +247,8 @@ export async function suggestPlaces(query: string): Promise<PlaceSuggestion[]> {
       .map((prediction) => ({
         placeId: prediction.place_id ?? '',
         description: prediction.description ?? '',
+        mainText: prediction.structured_formatting?.main_text ?? prediction.description ?? '',
+        secondaryText: prediction.structured_formatting?.secondary_text ?? '',
       }))
       .filter((suggestion) => suggestion.placeId && suggestion.description)
       .slice(0, 5);

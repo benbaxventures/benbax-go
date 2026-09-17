@@ -6,8 +6,10 @@ import { notify } from '../modules/notifications/notify';
 import { realtimeEvents } from './events';
 import {
   clientsNear,
+  driversNear,
   haversineKm,
   removeOnlineClient,
+  removeOnlineDriver,
   upsertOnlineClient,
   type OnlineClient,
 } from './presence';
@@ -24,10 +26,13 @@ type DriverWatch = {
   radiusKm: number;
 };
 
-const DEFAULT_WATCH_RADIUS_KM = 25;
+const DEFAULT_WATCH_RADIUS_KM = 200;
 
 /** Live driver sockets watching for nearby passengers, keyed by socket id. */
 const watchingDrivers = new Map<string, { socket: Socket; watch: DriverWatch }>();
+
+/** Live customer sockets watching for nearby drivers, keyed by socket id. */
+const watchingCustomers = new Map<string, { socket: Socket; watch: DriverWatch }>();
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -45,6 +50,13 @@ function broadcastClientToDrivers(client: OnlineClient, event: string) {
 function broadcastClientOffline(clientId: string) {
   for (const { socket } of watchingDrivers.values()) {
     socket.emit(realtimeEvents.clientOffline, { id: clientId });
+  }
+}
+
+/** Tells every watching customer that a driver is no longer available. */
+function broadcastDriverOffline(driverId: string) {
+  for (const { socket } of watchingCustomers.values()) {
+    socket.emit(realtimeEvents.driverOffline, { id: driverId });
   }
 }
 
@@ -155,6 +167,35 @@ export function registerRealtimeHandlers(io: Server) {
       watchingDrivers.delete(socket.id);
     });
 
+    // ---- Customer watch (request app subscribes to nearby drivers) ----
+    socket.on('driver:watch', (payload: unknown) => {
+      if (user.role !== 'CUSTOMER') return;
+      const data = (payload ?? {}) as Record<string, unknown>;
+      const latitude = Number(data.latitude);
+      const longitude = Number(data.longitude);
+      if (!isFiniteNumber(latitude) || !isFiniteNumber(longitude)) return;
+
+      const radiusKm = isFiniteNumber(Number(data.radiusKm))
+        ? Number(data.radiusKm)
+        : DEFAULT_WATCH_RADIUS_KM;
+
+      watchingCustomers.set(socket.id, {
+        socket,
+        watch: { latitude, longitude, radiusKm },
+      });
+
+      // Join a shared room so the REST layer can broadcast driver updates.
+      socket.join('customer-watchers');
+
+      // Send an immediate snapshot so the customer's map isn't empty.
+      socket.emit(realtimeEvents.driversNearby, driversNear({ latitude, longitude }, radiusKm));
+    });
+
+    socket.on('driver:unwatch', () => {
+      watchingCustomers.delete(socket.id);
+      socket.leave('customer-watchers');
+    });
+
     socket.on('navigation:start', (payload: unknown) => {
       if (user.role !== 'DRIVER' || !payload || typeof payload !== 'object') return;
       const data = payload as Record<string, unknown>;
@@ -192,13 +233,20 @@ export function registerRealtimeHandlers(io: Server) {
 
     socket.on('disconnect', async () => {
       watchingDrivers.delete(socket.id);
+      watchingCustomers.delete(socket.id);
+      socket.leave('customer-watchers');
 
       // Only drop the passenger from the online registry once their last socket
       // is gone (a user may have more than one device/tab connected). By the time
       // this fires the current socket has already left its rooms.
       const stillConnected = await io.in(`user:${user.id}`).fetchSockets();
-      if (stillConnected.length === 0 && removeOnlineClient(user.id)) {
-        broadcastClientOffline(user.id);
+      if (stillConnected.length === 0) {
+        if (removeOnlineClient(user.id)) {
+          broadcastClientOffline(user.id);
+        }
+        if (removeOnlineDriver(user.id)) {
+          broadcastDriverOffline(user.id);
+        }
       }
 
       try {

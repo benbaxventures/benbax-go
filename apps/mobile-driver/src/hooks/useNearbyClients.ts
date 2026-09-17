@@ -24,6 +24,7 @@ const CLIENT_EVENTS = {
 type WatchArgs = {
   latitude: number;
   longitude: number;
+  radiusKm: number;
 };
 
 function normalizeClient(raw: unknown): NearbyClient | null {
@@ -58,7 +59,7 @@ function normalizeClient(raw: unknown): NearbyClient | null {
  */
 export function useNearbyClients(
   enabled: boolean,
-  driver: { latitude: number; longitude: number }
+  driver: { latitude: number; longitude: number; radiusKm?: number }
 ) {
   const nearbyClients = useDriverStore((s) => s.nearbyClients);
   const setNearbyClients = useDriverStore((s) => s.setNearbyClients);
@@ -72,10 +73,11 @@ export function useNearbyClients(
 
   // Keep the latest watch position in a ref so re-emitting on movement doesn't
   // tear down and rebuild the socket.
-  const watchRef = useRef<WatchArgs>({ latitude: 0, longitude: 0 });
+  const watchRef = useRef<WatchArgs>({ latitude: 0, longitude: 0, radiusKm: 200 });
   watchRef.current = {
     latitude: driver.latitude,
     longitude: driver.longitude,
+    radiusKm: driver.radiusKm ?? 200,
   };
 
   useEffect(() => {
