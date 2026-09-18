@@ -7,6 +7,7 @@ import {
   Headphones,
   Map,
   PackageSearch,
+  Radar,
   Shield,
   Users,
 } from 'lucide-react';
@@ -16,8 +17,9 @@ import { useAdminSession } from '../state/adminSession';
 
 const navItems = [
   { to: '/', label: 'Overview', icon: ChartSpline },
+  { to: '/live', label: 'Live ops', icon: Radar },
   { to: '/deliveries', label: 'Deliveries', icon: PackageSearch },
-  { to: '/riders', label: 'Riders', icon: Bike },
+  { to: '/riders', label: 'Riders & drivers', icon: Bike },
   { to: '/users', label: 'Users', icon: Users },
   { to: '/documents', label: 'Documents', icon: FileCheck },
   { to: '/pricing', label: 'Pricing', icon: CircleDollarSign },

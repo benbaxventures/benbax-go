@@ -17,6 +17,8 @@ type SupplyRow = {
   status: string;
   kycStatus: string;
   isOnline: boolean;
+  /** Drivers only: app connected and heart-beating right now. */
+  isLive?: boolean;
   rating: string;
   totalJobs: number;
   lastLocationAt: string | null;
@@ -34,8 +36,30 @@ type SupplyRow = {
 
 type SupplyResponse = {
   items: SupplyRow[];
-  summary: { total: number; online: number; pendingKyc: number };
+  summary: { total: number; online: number; pendingKyc: number; staleOnline?: number };
 };
+
+function OnlineChip({ row }: { row: SupplyRow }) {
+  if (row.kind === 'DRIVER' && row.isLive !== undefined) {
+    if (row.isLive) return <span className="status-chip">Live now</span>;
+    if (row.isOnline) {
+      return (
+        <span
+          className="status-chip chip-danger"
+          title="Toggled online, but the app isn't connected — hidden from passengers and offers"
+        >
+          App not connected
+        </span>
+      );
+    }
+    return <span className="status-chip chip-muted">Offline</span>;
+  }
+  return row.isOnline ? (
+    <span className="status-chip">Online</span>
+  ) : (
+    <span className="status-chip chip-muted">Offline</span>
+  );
+}
 
 export function RidersPage() {
   const [kind, setKind] = useState<SupplyKind>('ALL');
@@ -72,7 +96,11 @@ export function RidersPage() {
         <div className="metric-card">
           <span>Online now</span>
           <strong>{summary?.online ?? 0}</strong>
-          <small>Accepting jobs</small>
+          <small>
+            {summary?.staleOnline
+              ? `${summary.staleOnline} more toggled online but app not connected`
+              : 'Drivers counted only while their app is connected'}
+          </small>
         </div>
         <div className="metric-card">
           <span>KYC pending</span>
@@ -138,11 +166,7 @@ export function RidersPage() {
                     <span className="status-chip">{row.kind}</span>
                   </td>
                   <td>
-                    {row.isOnline ? (
-                      <span className="status-chip">Online</span>
-                    ) : (
-                      <span className="status-chip chip-muted">Offline</span>
-                    )}
+                    <OnlineChip row={row} />
                   </td>
                   <td>{row.status}</td>
                   <td>

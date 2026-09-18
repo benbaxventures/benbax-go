@@ -85,12 +85,18 @@ For local development with new migrations, you can also use:
 npm.cmd run db:migrate --workspace apps/api
 ```
 
-Admin seed login:
+Admin login:
 
-```text
-Phone: +233200000001
-Password: BenbaxDemo123!
+No admin credentials are committed. Create an admin (or reset an admin's password)
+against whatever database `DATABASE_URL` points at — you'll be prompted for the email,
+phone and a password of at least 12 characters (not echoed), then asked to confirm:
+
+```bash
+npm run admin:set --workspace apps/api
 ```
+
+Then sign in to the admin dashboard with that email (or phone) and password. The seed
+script also creates `admin@benbax.com` using `SEED_ADMIN_PASSWORD` from the API env.
 
 ## Documentation
 

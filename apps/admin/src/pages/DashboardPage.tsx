@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { Activity, AlertTriangle, Bike, CircleDollarSign, PackageCheck, Users } from 'lucide-react';
+import {
+  Activity,
+  AlertTriangle,
+  Car,
+  CircleDollarSign,
+  Clock,
+  PackageCheck,
+  Users,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
 import {
   Area,
   AreaChart,
@@ -11,14 +20,8 @@ import {
 } from 'recharts';
 import { MetricCard } from '../components/MetricCard';
 import { formatDateTime } from '../lib/format';
+import type { OpsOverview } from '../lib/opsTypes';
 import { apiRequest } from '../services/api';
-
-type Dashboard = {
-  users: number;
-  riders: number;
-  activeDeliveries: number;
-  revenueGhs: number;
-};
 
 type ActivityEvent = {
   id: string;
@@ -48,8 +51,9 @@ type StuckOrder = {
 
 export function DashboardPage() {
   const { data } = useQuery({
-    queryKey: ['admin-dashboard'],
-    queryFn: () => apiRequest<Dashboard>('/admin/dashboard'),
+    queryKey: ['ops-overview'],
+    queryFn: () => apiRequest<OpsOverview>('/admin/ops/overview'),
+    refetchInterval: 10_000,
   });
 
   const { data: activity } = useQuery({
@@ -80,32 +84,52 @@ export function DashboardPage() {
         <span className="live-dot">Live</span>
       </div>
 
-      <div className="metrics-grid">
+      <div className="metrics-grid metrics-grid-5">
+        <Link to="/live" className="metric-link">
+          <MetricCard
+            label="Drivers online now"
+            value={`${data?.drivers.live ?? 0}`}
+            delta={`${data?.drivers.idle ?? 0} available · ${data?.drivers.busy ?? 0} on trip · ${data?.drivers.total ?? 0} registered`}
+            icon={<Car size={20} />}
+          />
+        </Link>
+        <Link to="/live" className="metric-link">
+          <MetricCard
+            label="Waiting for a driver"
+            value={`${data?.rides.open ?? 0}`}
+            delta={`${data?.rides.active ?? 0} ${data?.rides.active === 1 ? 'trip' : 'trips'} in progress · ${data?.passengersOnline ?? 0} ${data?.passengersOnline === 1 ? 'passenger' : 'passengers'} online`}
+            icon={<Clock size={20} />}
+          />
+        </Link>
+        <MetricCard
+          label="Rides today"
+          value={`${data?.rides.completedToday ?? 0}`}
+          delta={`completed of ${data?.rides.requestedToday ?? 0} requested · ${data?.rides.cancelledToday ?? 0} cancelled`}
+          icon={<Activity size={20} />}
+        />
         <MetricCard
           label="Active deliveries"
-          value={`${data?.activeDeliveries ?? 0}`}
-          delta="+12% today"
+          value={`${data?.deliveries.active ?? 0}`}
+          delta={`${data?.riders.total ?? 0} delivery riders · ${data?.users ?? 0} users`}
           icon={<PackageCheck size={20} />}
         />
         <MetricCard
-          label="Riders"
-          value={`${data?.riders ?? 0}`}
-          delta="82% verified"
-          icon={<Bike size={20} />}
-        />
-        <MetricCard
-          label="Users"
-          value={`${data?.users ?? 0}`}
-          delta="Ghana launch"
-          icon={<Users size={20} />}
-        />
-        <MetricCard
           label="Revenue"
-          value={`GHS ${data?.revenueGhs ?? 0}`}
-          delta="Paid orders"
+          value={`GHS ${(data?.revenueGhs ?? 0).toFixed(2)}`}
+          delta={`All paid orders · GHS ${(data?.rides.revenueTodayGhs ?? 0).toFixed(2)} rides today`}
           icon={<CircleDollarSign size={20} />}
         />
       </div>
+
+      {data?.drivers.staleOnline ? (
+        <p className="form-notice">
+          <Users size={14} /> {data.drivers.staleOnline}{' '}
+          {data.drivers.staleOnline === 1
+            ? 'driver is marked online without a connected app and is'
+            : 'drivers are marked online without a connected app and are'}{' '}
+          not counted above.
+        </p>
+      ) : null}
 
       <div className="panel-grid">
         <div className="panel span-2">

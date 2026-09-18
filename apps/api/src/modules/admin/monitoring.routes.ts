@@ -1,7 +1,7 @@
-import type { Prisma } from '@prisma/client';
-import { KycStatus, UserRole, UserStatus } from '@prisma/client';
+import { KycStatus, Prisma, UserRole, UserStatus } from '@prisma/client';
 import { Router } from 'express';
 import { prisma } from '../../config/prisma';
+import { getOnlineDriver, listOnlineDrivers } from '../../realtime/presence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { badRequest, notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
@@ -396,6 +396,9 @@ monitoringRouter.get(
         status: driver.status,
         kycStatus: driver.kycStatus,
         isOnline: driver.isOnline,
+        // Driver app is connected and heart-beating right now. `isOnline` alone
+        // is only the last toggle and stays true if the app was killed.
+        isLive: Boolean(getOnlineDriver(driver.user.id)),
         rating: driver.rating,
         totalJobs: driver.totalTrips,
         lastLocationAt: driver.lastLocationAt,
@@ -406,7 +409,8 @@ monitoringRouter.get(
 
     const summary = {
       total: rows.length,
-      online: rows.filter((row) => row.isOnline).length,
+      online: rows.filter((row) => ('isLive' in row ? row.isLive : row.isOnline)).length,
+      staleOnline: rows.filter((row) => 'isLive' in row && row.isOnline && !row.isLive).length,
       pendingKyc: rows.filter(
         (row) => row.kycStatus === KycStatus.SUBMITTED || row.kycStatus === KycStatus.NOT_STARTED
       ).length,
@@ -431,18 +435,32 @@ monitoringRouter.get(
       user: { select: { id: true, name: true, phone: true } },
     } as const;
 
+    // Drivers come from the live presence registry so killed apps don't show
+    // as available supply; riders have no live presence yet and use the DB.
+    const liveDrivers = listOnlineDrivers();
     const [riders, drivers] = await Promise.all([
       prisma.riderProfile.findMany({
         where: { isOnline: true, currentLatitude: { not: null } },
         select,
         take: 500,
       }),
-      prisma.driverProfile.findMany({
-        where: { isOnline: true, currentLatitude: { not: null } },
-        select,
-        take: 500,
-      }),
+      liveDrivers.length
+        ? prisma.driverProfile.findMany({
+            where: { userId: { in: liveDrivers.map((d) => d.id) } },
+            select,
+            take: 500,
+          })
+        : Promise.resolve([]),
     ]);
+    const livePosition = new Map(liveDrivers.map((d) => [d.id, d]));
+    for (const driver of drivers) {
+      const live = livePosition.get(driver.user.id);
+      if (live) {
+        driver.currentLatitude = new Prisma.Decimal(live.latitude);
+        driver.currentLongitude = new Prisma.Decimal(live.longitude);
+        driver.lastLocationAt = new Date(live.lastSeenAt);
+      }
+    }
 
     type SupplyProfile = Omit<(typeof riders)[number], 'status'> & { status: string };
 

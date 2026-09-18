@@ -8,12 +8,14 @@ import { ok } from '../../utils/response';
 import { WalletTxType } from '../payments/settlement';
 import { documentsRouter } from './documents.routes';
 import { monitoringRouter } from './monitoring.routes';
+import { operationsRouter } from './operations.routes';
 
 export const adminRouter = Router();
 
 adminRouter.use(requireAuth, requireRoles(UserRole.ADMIN, UserRole.OPERATIONS, UserRole.SUPPORT));
 adminRouter.use(monitoringRouter);
 adminRouter.use(documentsRouter);
+adminRouter.use(operationsRouter);
 
 adminRouter.get(
   '/dashboard',

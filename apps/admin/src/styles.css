@@ -688,6 +688,204 @@ th {
   margin-top: 8px;
 }
 
+/* ---- Live operations ---- */
+
+.metrics-grid-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.live-layout {
+  grid-template-columns: minmax(0, 1fr) 420px;
+}
+
+.live-map-wrap {
+  position: relative;
+}
+
+.live-map {
+  height: 560px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #eef2f6;
+}
+
+.live-map-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #5b6472;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.map-fit-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fff;
+  font-weight: 800;
+  color: #111827;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.12);
+}
+
+.map-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+  color: #5b6472;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.map-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-key i {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px #d8dee8;
+}
+
+.ride-list {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.ride-card {
+  border: 1px solid #d8dee8;
+  border-left: 4px solid #d92d20;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ride-card-selected {
+  border-color: #0e7c66;
+  border-left-color: #0e7c66;
+  background: #f3faf8;
+}
+
+.ride-card-main {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 12px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+}
+
+.ride-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ride-fare {
+  color: #0e7c66;
+  font-weight: 900;
+}
+
+.ride-route {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.ride-card-main .status-chip {
+  justify-self: start;
+}
+
+.ride-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 12px 12px;
+}
+
+.ride-card-actions select {
+  flex: 1;
+  min-width: 120px;
+  min-height: 34px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  padding: 0 8px;
+  background: #fff;
+  font-weight: 700;
+}
+
+.small-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.danger-button {
+  border: 1px solid #f5c2bd;
+  border-radius: 8px;
+  background: #fdecea;
+  color: #d92d20;
+  font-weight: 800;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.panel-subheader {
+  margin-top: 22px;
+}
+
+.compact-list {
+  gap: 8px;
+}
+
+.compact-list li {
+  padding-bottom: 8px;
+}
+
+.table-heading {
+  padding: 16px 16px 0;
+}
+
+.metric-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (max-width: 1280px) {
+  .metrics-grid-5 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .live-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 960px) {
   .shell {
     grid-template-columns: 1fr;
@@ -695,8 +893,13 @@ th {
 
   .split-layout,
   .timeline-columns,
-  .metrics-grid-3 {
+  .metrics-grid-3,
+  .metrics-grid-5 {
     grid-template-columns: 1fr;
+  }
+
+  .live-map {
+    height: 420px;
   }
 
   .activity-panel {

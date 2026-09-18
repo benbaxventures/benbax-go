@@ -4,6 +4,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { DeliveriesPage } from './pages/DeliveriesPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { GeofencesPage } from './pages/GeofencesPage';
+import { LiveOpsPage } from './pages/LiveOpsPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingPage } from './pages/PricingPage';
 import { RidersPage } from './pages/RidersPage';
@@ -21,6 +22,7 @@ export function App() {
     <Shell>
       <Routes>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/live" element={<LiveOpsPage />} />
         <Route path="/deliveries" element={<DeliveriesPage />} />
         <Route path="/riders" element={<RidersPage />} />
         <Route path="/users" element={<UsersPage />} />

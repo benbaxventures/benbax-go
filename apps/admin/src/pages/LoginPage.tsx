@@ -110,11 +110,11 @@ export function LoginPage() {
             <p>Operations, dispatch, revenue, support, and safety management.</p>
           </div>
           <label>
-            Phone
+            Phone or email
             <input
               value={phone}
-              autoComplete="tel"
-              placeholder="Phone number"
+              autoComplete="username"
+              placeholder="e.g. admin@benbax.com or +233…"
               required
               onChange={(event) => setPhone(event.target.value)}
             />
