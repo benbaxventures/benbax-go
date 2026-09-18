@@ -4,14 +4,19 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle2,
   Clock,
+  ExternalLink,
   MapPin,
+  MessageSquareText,
   Navigation,
+  Phone,
+  PlayCircle,
   UserCheck,
   Users,
   Volume2,
   VolumeX,
+  XCircle,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
@@ -19,12 +24,26 @@ import { ErrorState } from '../components/ErrorState';
 import { OfflineBanner } from '../components/OfflineBanner';
 import { SkeletonBlock } from '../components/SkeletonBlock';
 import { useDriverLocation } from '../hooks/useDriverLocation';
+import { useLiveLocation } from '../hooks/useLiveLocation';
 import { useVoiceNavigation } from '../hooks/useVoiceNavigation';
 import type { RootStackParamList } from '../navigation/types';
 import { apiRequest, ApiResponseError } from '../services/api';
-import { createRealtimeClient } from '../services/realtime';
+import { callPhone, openWhatsApp } from '../services/contact';
+import {
+  fetchDrivingRoute,
+  haversineMeters,
+  openExternalNavigation,
+  type RouteResult,
+} from '../services/directions';
+import { acquireSharedSocket, onEveryConnect, releaseSharedSocket } from '../services/realtime';
 import { useAuthStore } from '../store/authStore';
+import { useDriverStore } from '../store/driverStore';
 import { theme } from '../theme/tokens';
+
+/** Re-fetch the live navigation route at most this often while driving. */
+const ROUTE_REFRESH_MS = 30_000;
+/** Within this distance of the pickup the "I've arrived" action is highlighted. */
+const NEAR_PICKUP_METERS = 150;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveTrip'>;
 
@@ -49,12 +68,16 @@ type TripDetail = {
   dropoffLongitude: string;
   pickupLabel?: string;
   dropoffLabel?: string;
+  pickupLandmark?: string | null;
   status: string;
-  estimatedFare?: number;
-  estimatedDistance?: number;
-  estimatedDuration?: number;
+  /** Decimal fields arrive as strings from the API. */
+  totalFare?: string | number;
+  distanceKm?: string | number;
+  etaMinutes?: number;
+  notes?: string | null;
+  cancellationReason?: string | null;
   passengerName?: string;
-  passenger?: { name?: string };
+  passenger?: { name?: string; phone?: string | null };
   passengerRating?: number;
   passengerCount?: number;
   stops?: Stop[];
@@ -94,8 +117,11 @@ export function ActiveTripScreen({ route, navigation }: Props) {
   const Polyline = mapsModule?.Polyline;
   const [driverPoint, setDriverPoint] = useState<Coordinate | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [navRoute, setNavRoute] = useState<RouteResult | null>(null);
+  const lastRouteFetchRef = useRef({ at: 0, latitude: 0, longitude: 0, targetKey: '' });
   const queryClient = useQueryClient();
   const logout = useAuthStore((s) => s.logout);
+  const setActiveTripId = useDriverStore((s) => s.setActiveTripId);
   const {
     steps,
     currentStep,
@@ -103,11 +129,15 @@ export function ActiveTripScreen({ route, navigation }: Props) {
     isNavigating,
     voiceEnabled,
     startNavigation,
+    updatePosition,
     stopNavigation,
     toggleVoice,
   } = useVoiceNavigation();
 
   useDriverLocation(route.params.tripId, true);
+  // The driver's own GPS drives the map marker and the navigation route;
+  // server echoes of tracking points are only a fallback.
+  const live = useLiveLocation(true);
 
   const {
     data: trip,
@@ -121,93 +151,57 @@ export function ActiveTripScreen({ route, navigation }: Props) {
   });
 
   const passengerName = trip?.passenger?.name ?? trip?.passengerName;
+  const passengerPhone = trip?.passenger?.phone ?? null;
 
   useEffect(() => {
     loadMaps().then(setMapsModule);
   }, []);
 
+  // A trip that ended (or was cancelled) is no longer "active" for Dispatch.
+  const finishTrip = useCallback(() => {
+    stopNavigation();
+    setActiveTripId(null);
+    queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
+  }, [queryClient, route.params.tripId, setActiveTripId, stopNavigation]);
+
   useEffect(() => {
-    let cleanup: () => void = () => undefined;
+    const tripId = route.params.tripId;
+    const socket = acquireSharedSocket();
+    // Re-join the ride room after every reconnect, or updates stop arriving.
+    const stopJoining = onEveryConnect(socket, () => socket.emit('ride:join', tripId));
 
-    createRealtimeClient().then((socket) => {
-      socket.emit('ride:join', route.params.tripId);
-      socket.on(realtimeEvents.rideTrackingPoint, (point) => {
-        setDriverPoint({ latitude: Number(point.latitude), longitude: Number(point.longitude) });
-      });
-      socket.on(realtimeEvents.driverWarning, (warning) => {
-        Alert.alert('Safety warning', warning.message ?? 'Your trip route needs attention.', [
-          { text: 'OK' },
-        ]);
-      });
-      cleanup = () => socket.disconnect();
-    });
-
-    return () => cleanup();
-  }, [route.params.tripId]);
-
-  const handleNavigate = useCallback(async () => {
-    if (!trip) return;
-    const lat = trip.dropoffLatitude;
-    const lng = trip.dropoffLongitude;
-
-    if (isNavigating) {
-      stopNavigation();
-      return;
-    }
-
-    await startNavigation(lat, lng);
-  }, [trip, isNavigating, startNavigation, stopNavigation]);
-
-  const handleArrived = useCallback(async () => {
-    setActionLoading('arrived');
-    try {
-      await apiRequest(`/rides/${route.params.tripId}/arrived`, { method: 'POST' });
-      Alert.alert('Marked as arrived', 'Let the passenger know you have arrived.');
-      queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
-    } catch (err) {
-      if (err instanceof ApiResponseError && err.status === 401) {
-        await logout();
-        return;
-      }
-      Alert.alert('Error', err instanceof Error ? err.message : 'Could not mark as arrived.');
-    } finally {
-      setActionLoading(null);
-    }
-  }, [route.params.tripId, queryClient, logout]);
-
-  const handleEndTrip = useCallback(async () => {
-    setActionLoading('end');
-    try {
-      await apiRequest(`/rides/${route.params.tripId}/complete`, { method: 'POST' });
-      stopNavigation();
-      Alert.alert('Trip completed', 'Thank you for completing this trip.', [
-        { text: 'OK', onPress: () => navigation.goBack() },
+    const onTrackingPoint = (point: { latitude: string | number; longitude: string | number }) => {
+      setDriverPoint({ latitude: Number(point.latitude), longitude: Number(point.longitude) });
+    };
+    const onWarning = (warning: { message?: string }) => {
+      Alert.alert('Safety warning', warning.message ?? 'Your trip route needs attention.', [
+        { text: 'OK' },
       ]);
-      queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
-    } catch (err) {
-      if (err instanceof ApiResponseError && err.status === 401) {
-        await logout();
-        return;
+    };
+    const onRideUpdated = (updated: { id?: string; status?: string }) => {
+      if (updated?.id !== tripId) return;
+      queryClient.invalidateQueries({ queryKey: ['ride-trip', tripId] });
+      if (updated.status === 'CANCELLED') {
+        finishTrip();
+        Alert.alert('Ride cancelled', 'The passenger cancelled this ride.', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
       }
-      Alert.alert('Error', err instanceof Error ? err.message : 'Could not complete trip.');
-    } finally {
-      setActionLoading(null);
-    }
-  }, [route.params.tripId, navigation, queryClient, logout, stopNavigation]);
+    };
 
-  const handleCompleteStop = useCallback(
-    async (stopId: string) => {
-      try {
-        await apiRequest(`/rides/${route.params.tripId}/stops/${stopId}/complete`, {
-          method: 'POST',
-        });
-        queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
-      } catch {
-        Alert.alert('Error', 'Could not mark stop as complete.');
-      }
-    },
-    [route.params.tripId, queryClient]
-  );
+    socket.on(realtimeEvents.rideTrackingPoint, onTrackingPoint);
+    socket.on(realtimeEvents.driverWarning, onWarning);
+    socket.on(realtimeEvents.rideUpdated, onRideUpdated);
+
+    return () => {
+      stopJoining();
+      socket.emit('ride:leave', tripId);
+      socket.off(realtimeEvents.rideTrackingPoint, onTrackingPoint);
+      socket.off(realtimeEvents.driverWarning, onWarning);
+      socket.off(realtimeEvents.rideUpdated, onRideUpdated);
+      releaseSharedSocket();
+    };
+  }, [finishTrip, navigation, queryClient, route.params.tripId]);
 
   const pickup = useMemo(
     () => ({
@@ -223,7 +217,19 @@ export function ActiveTripScreen({ route, navigation }: Props) {
     }),
     [trip?.dropoffLatitude, trip?.dropoffLongitude]
   );
+
+  // Set when the API predates the /start endpoint: the trip is treated as
+  // started locally so the driver can still reach "End trip".
+  const [startedLocally, setStartedLocally] = useState(false);
+  const status = trip?.status ?? 'ASSIGNED';
+  const inProgress = status === 'IN_PROGRESS' || (startedLocally && status === 'ARRIVED');
+  const arrived = status === 'ARRIVED' && !inProgress;
+  // Before the passenger is on board we head to the pickup; after, the drop-off.
+  const headingTo: 'pickup' | 'dropoff' = inProgress ? 'dropoff' : 'pickup';
+  const destination = headingTo === 'pickup' ? pickup : dropoff;
+
   const latestPoint = useMemo(() => {
+    if (live.hasFix) return { latitude: live.latitude, longitude: live.longitude };
     const pt = driverPoint ?? trip?.trackingPoints?.[0];
     return pt
       ? {
@@ -231,20 +237,202 @@ export function ActiveTripScreen({ route, navigation }: Props) {
           longitude: Number(pt.longitude),
         }
       : null;
-  }, [driverPoint, trip?.trackingPoints]);
+  }, [live.hasFix, live.latitude, live.longitude, driverPoint, trip?.trackingPoints]);
 
+  const metersToPickup = latestPoint ? haversineMeters(latestPoint, pickup) : null;
+  const nearPickup = metersToPickup != null && metersToPickup <= NEAR_PICKUP_METERS;
+
+  // Live route from where the driver is to the current destination. Refreshed
+  // when the destination changes or the driver has moved on — not every tick.
+  useEffect(() => {
+    if (!trip || !latestPoint) return;
+    const last = lastRouteFetchRef.current;
+    const targetKey = `${headingTo}:${destination.latitude.toFixed(5)},${destination.longitude.toFixed(5)}`;
+    const moved = haversineMeters(last, latestPoint);
+    const due = Date.now() - last.at >= ROUTE_REFRESH_MS;
+    if (targetKey === last.targetKey && !(due && moved > 100)) return;
+    lastRouteFetchRef.current = { at: Date.now(), ...latestPoint, targetKey };
+    fetchDrivingRoute(latestPoint, destination).then(setNavRoute);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip?.id, headingTo, destination.latitude, destination.longitude, latestPoint]);
+
+  // Spoken turn-by-turn advances as the driver completes each step.
+  useEffect(() => {
+    if (isNavigating && latestPoint) updatePosition(latestPoint);
+  }, [isNavigating, latestPoint, updatePosition]);
+
+  // Switching leg (picked up the passenger) restarts guidance for the new leg.
+  const navLegRef = useRef(headingTo);
+  useEffect(() => {
+    if (navLegRef.current === headingTo) return;
+    navLegRef.current = headingTo;
+    if (isNavigating) stopNavigation();
+  }, [headingTo, isNavigating, stopNavigation]);
+
+  const handleNavigate = useCallback(async () => {
+    if (!trip) return;
+    if (isNavigating) {
+      stopNavigation();
+      return;
+    }
+    // Make sure guidance uses a route that starts where the driver is now.
+    const routeNow = latestPoint ? await fetchDrivingRoute(latestPoint, destination) : navRoute;
+    if (routeNow) {
+      setNavRoute(routeNow);
+      if (latestPoint) {
+        lastRouteFetchRef.current = {
+          at: Date.now(),
+          ...latestPoint,
+          targetKey: `${headingTo}:${destination.latitude.toFixed(5)},${destination.longitude.toFixed(5)}`,
+        };
+      }
+    }
+    await startNavigation(
+      String(destination.latitude),
+      String(destination.longitude),
+      routeNow?.steps
+    );
+  }, [
+    trip,
+    isNavigating,
+    stopNavigation,
+    latestPoint,
+    destination,
+    navRoute,
+    headingTo,
+    startNavigation,
+  ]);
+
+  const runAction = useCallback(
+    async (key: string, path: string, onDone: () => void, fallbackError: string) => {
+      setActionLoading(key);
+      try {
+        await apiRequest(path, { method: 'POST' });
+        onDone();
+        queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
+      } catch (err) {
+        if (err instanceof ApiResponseError && err.status === 401) {
+          await logout();
+          return;
+        }
+        Alert.alert('Error', err instanceof Error ? err.message : fallbackError);
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [logout, queryClient, route.params.tripId]
+  );
+
+  const handleArrived = useCallback(
+    () =>
+      runAction(
+        'arrived',
+        `/rides/${route.params.tripId}/arrived`,
+        () => {
+          stopNavigation();
+          Alert.alert('Marked as arrived', 'The passenger has been told you are here.');
+        },
+        'Could not mark as arrived.'
+      ),
+    [route.params.tripId, runAction, stopNavigation]
+  );
+
+  const handleStartTrip = useCallback(async () => {
+    setActionLoading('start');
+    try {
+      await apiRequest(`/rides/${route.params.tripId}/start`, { method: 'POST' });
+      stopNavigation();
+      queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
+    } catch (err) {
+      if (err instanceof ApiResponseError && err.status === 404) {
+        // Older API without a start step: completion is still allowed from
+        // ARRIVED, so move on to the drop-off leg locally.
+        stopNavigation();
+        setStartedLocally(true);
+      } else if (err instanceof ApiResponseError && err.status === 401) {
+        await logout();
+      } else {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Could not start the trip.');
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  }, [logout, queryClient, route.params.tripId, stopNavigation]);
+
+  const handleEndTrip = useCallback(() => {
+    Alert.alert('End trip?', 'Confirm the passenger has reached their destination.', [
+      { text: 'Not yet', style: 'cancel' },
+      {
+        text: 'End trip',
+        onPress: () =>
+          void runAction(
+            'end',
+            `/rides/${route.params.tripId}/complete`,
+            () => {
+              finishTrip();
+              Alert.alert('Trip completed', 'Thank you for completing this trip.', [
+                { text: 'OK', onPress: () => navigation.goBack() },
+              ]);
+            },
+            'Could not complete trip.'
+          ),
+      },
+    ]);
+  }, [finishTrip, navigation, route.params.tripId, runAction]);
+
+  // The driver can't make it: hand the passenger to another driver instead of
+  // cancelling their ride.
+  const handleRelease = useCallback(() => {
+    Alert.alert(
+      "Can't make it?",
+      'The ride goes back to other drivers and the passenger is matched again.',
+      [
+        { text: 'Keep ride', style: 'cancel' },
+        {
+          text: 'Release ride',
+          style: 'destructive',
+          onPress: () =>
+            void runAction(
+              'release',
+              `/ride-dispatch/trips/${route.params.tripId}/release`,
+              () => {
+                finishTrip();
+                navigation.goBack();
+              },
+              'Could not release this ride.'
+            ),
+        },
+      ]
+    );
+  }, [finishTrip, navigation, route.params.tripId, runAction]);
+
+  const handleCompleteStop = useCallback(
+    async (stopId: string) => {
+      try {
+        await apiRequest(`/rides/${route.params.tripId}/stops/${stopId}/complete`, {
+          method: 'POST',
+        });
+        queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
+      } catch {
+        Alert.alert('Error', 'Could not mark stop as complete.');
+      }
+    },
+    [route.params.tripId, queryClient]
+  );
+
+  // The passenger's trip (pickup → drop-off), drawn faintly under the live route.
   const routePoints = useMemo(() => {
     if (trip?.metadata?.expectedRoute?.polyline?.length) {
       return trip.metadata.expectedRoute.polyline;
     }
-    if (latestPoint) return [pickup, latestPoint, dropoff];
     return [pickup, dropoff];
-  }, [trip?.metadata?.expectedRoute?.polyline, pickup, dropoff, latestPoint]);
+  }, [trip?.metadata?.expectedRoute?.polyline, pickup, dropoff]);
 
-  const fare = trip?.estimatedFare;
-  const distance = trip?.estimatedDistance;
-  const duration = trip?.estimatedDuration;
-  const arrived = trip?.status === 'ARRIVED';
+  const fareValue = Number(trip?.totalFare);
+  const fare = Number.isFinite(fareValue) && fareValue > 0 ? fareValue : undefined;
+  const distanceValue = Number(trip?.distanceKm);
+  const distance = Number.isFinite(distanceValue) && distanceValue > 0 ? distanceValue : undefined;
+  const duration = trip?.etaMinutes;
   const stops = trip?.stops ?? [];
   const pendingStops = stops.filter((s) => !s.completed);
 
@@ -391,7 +579,18 @@ export function ActiveTripScreen({ route, navigation }: Props) {
               />
             </Marker>
           ) : null}
-          <Polyline coordinates={routePoints} strokeColor={theme.colors.primary} strokeWidth={4} />
+          <Polyline
+            coordinates={routePoints}
+            strokeColor={theme.colors.primary + '55'}
+            strokeWidth={4}
+          />
+          {navRoute && navRoute.coordinates.length > 1 ? (
+            <Polyline
+              coordinates={navRoute.coordinates}
+              strokeColor={headingTo === 'pickup' ? '#F59E0B' : theme.colors.primary}
+              strokeWidth={6}
+            />
+          ) : null}
         </MapView>
       ) : (
         <View
@@ -596,11 +795,18 @@ export function ActiveTripScreen({ route, navigation }: Props) {
           }}
         />
 
-        {/* Status badge */}
-        <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
+        {/* Phase: where to go next, live distance/ETA, and Google Maps hand-off */}
+        <View
+          style={{
+            paddingHorizontal: 16,
+            marginBottom: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
           <View
             style={{
-              alignSelf: 'flex-start',
               backgroundColor: arrived ? theme.colors.accent + '20' : theme.colors.primary + '15',
               borderRadius: 20,
               paddingVertical: 4,
@@ -614,9 +820,39 @@ export function ActiveTripScreen({ route, navigation }: Props) {
                 fontSize: 12,
               }}
             >
-              {arrived ? 'ARRIVED' : 'ACTIVE RIDE'}
+              {arrived ? 'AT PICKUP' : inProgress ? 'TO DROP-OFF' : 'TO PICKUP'}
             </Text>
           </View>
+          <Text style={{ flex: 1, color: theme.colors.muted, fontSize: 12 }} numberOfLines={1}>
+            {!arrived && navRoute
+              ? `${formatDistance(navRoute.distanceMeters / 1000)} · ${formatDuration(
+                  navRoute.durationSeconds / 60
+                )} away`
+              : arrived
+                ? 'Waiting for passenger'
+                : ''}
+          </Text>
+          {!arrived ? (
+            <TouchableOpacity
+              onPress={() => void openExternalNavigation(destination)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${headingTo} in Google Maps`}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 14,
+                backgroundColor: theme.colors.primary + '14',
+              }}
+            >
+              <ExternalLink size={14} color={theme.colors.primary} />
+              <Text style={{ color: theme.colors.primary, fontWeight: '800', fontSize: 12 }}>
+                Maps
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* Fare card */}
@@ -810,36 +1046,120 @@ export function ActiveTripScreen({ route, navigation }: Props) {
                 </Text>
               </View>
             ) : null}
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity
+              onPress={() => callPhone(passengerPhone)}
+              disabled={!passengerPhone}
+              accessibilityRole="button"
+              accessibilityLabel="Call passenger"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: theme.colors.primary + '14',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: passengerPhone ? 1 : 0.4,
+              }}
+            >
+              <Phone size={16} color={theme.colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() =>
+                openWhatsApp(passengerPhone, 'Hello, this is your Benbax driver. I am on my way.')
+              }
+              disabled={!passengerPhone}
+              accessibilityRole="button"
+              accessibilityLabel="Message passenger on WhatsApp"
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: '#22C55E1A',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: passengerPhone ? 1 : 0.4,
+              }}
+            >
+              <MessageSquareText size={16} color="#16A34A" />
+            </TouchableOpacity>
           </View>
         ) : null}
 
-        {/* Action buttons */}
+        {trip?.notes ? (
+          <Text
+            style={{ marginHorizontal: 16, marginTop: 8, color: theme.colors.muted, fontSize: 12 }}
+          >
+            Note from passenger: “{trip.notes}”
+          </Text>
+        ) : null}
+
+        {/* Action buttons — follow the trip: pickup → arrived → on trip → done */}
         <View style={{ paddingHorizontal: 16, marginTop: 14, gap: 10 }}>
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1 }}>
-              <Button
-                label={isNavigating ? 'Stop nav' : 'Navigate'}
-                icon={<Navigation size={18} color="#fff" />}
-                onPress={handleNavigate}
-                variant={isNavigating ? 'danger' : 'primary'}
-              />
+          {!arrived ? (
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  label={
+                    isNavigating
+                      ? 'Stop nav'
+                      : headingTo === 'pickup'
+                        ? 'Navigate to pickup'
+                        : 'Navigate to drop-off'
+                  }
+                  icon={<Navigation size={18} color="#fff" />}
+                  onPress={handleNavigate}
+                  variant={isNavigating ? 'danger' : 'primary'}
+                />
+              </View>
+              {!inProgress ? (
+                <View style={{ flex: 1 }}>
+                  <Button
+                    label="I've arrived"
+                    icon={<UserCheck size={18} color={nearPickup ? '#fff' : theme.colors.ink} />}
+                    onPress={handleArrived}
+                    variant={nearPickup ? 'primary' : 'secondary'}
+                    loading={actionLoading === 'arrived'}
+                  />
+                </View>
+              ) : null}
             </View>
-            <View style={{ flex: 1 }}>
-              <Button
-                label={arrived ? 'Arrived ✓' : 'Arrived'}
-                icon={<UserCheck size={18} color={arrived ? '#fff' : theme.colors.ink} />}
-                onPress={handleArrived}
-                variant={arrived ? 'primary' : 'secondary'}
-                loading={actionLoading === 'arrived'}
-              />
-            </View>
-          </View>
-          <Button
-            label="End trip"
-            icon={<CheckCircle2 size={18} color="#fff" />}
-            onPress={handleEndTrip}
-            loading={actionLoading === 'end'}
-          />
+          ) : null}
+          {arrived ? (
+            <Button
+              label="Passenger on board — start trip"
+              icon={<PlayCircle size={18} color="#fff" />}
+              onPress={() => void handleStartTrip()}
+              loading={actionLoading === 'start'}
+            />
+          ) : null}
+          {inProgress ? (
+            <Button
+              label="End trip"
+              icon={<CheckCircle2 size={18} color="#fff" />}
+              onPress={handleEndTrip}
+              loading={actionLoading === 'end'}
+            />
+          ) : (
+            <TouchableOpacity
+              onPress={handleRelease}
+              disabled={actionLoading != null}
+              accessibilityRole="button"
+              accessibilityLabel="Release this ride to another driver"
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                paddingVertical: 6,
+              }}
+            >
+              <XCircle size={14} color={theme.colors.danger} />
+              <Text style={{ color: theme.colors.danger, fontWeight: '700', fontSize: 13 }}>
+                {actionLoading === 'release' ? 'Releasing…' : "Can't make it? Release ride"}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>

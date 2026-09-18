@@ -32,7 +32,12 @@ export const realtimeEvents = {
   rideTrackingPoint: 'ride:tracking:point',
   driverAvailability: 'driver:availability',
   driverOffer: 'driver:offer',
+  // A targeted offer timed out or was withdrawn before the driver answered.
+  driverOfferExpired: 'driver:offer:expired',
   driverWarning: 'driver:warning',
+  // Open ride marketplace: every online driver sees every waiting request.
+  rideOpen: 'ride:open',
+  rideClosed: 'ride:closed',
   emergencyRaised: 'emergency:raised',
   adminAlert: 'admin:alert',
   chatMessage: 'chat:message',

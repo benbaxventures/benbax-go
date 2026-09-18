@@ -3,6 +3,7 @@ import { Server } from 'socket.io';
 import { createApp } from './app';
 import { corsOriginHandler, env } from './config/env';
 import { redis } from './config/redis';
+import { startRideDispatchSweeper } from './modules/dispatch/dispatch.service';
 import { registerRealtimeHandlers } from './realtime/socket';
 
 const app = createApp();
@@ -17,6 +18,9 @@ const io = new Server(server, {
 
 app.set('io', io);
 registerRealtimeHandlers(io);
+// Expires unanswered ride offers, moves them to the next driver, and retries
+// waiting rides as drivers come online. Survives restarts (state is in the DB).
+startRideDispatchSweeper(io);
 
 server.listen(env.API_PORT, env.API_HOST, () => {
   // eslint-disable-next-line no-console

@@ -8,7 +8,7 @@ export type OfferPoint = {
   longitude: number;
 };
 
-type DriverOffer = {
+export type DriverOffer = {
   id: string;
   tripId: string;
   score: number;
@@ -17,6 +17,45 @@ type DriverOffer = {
   passengerName?: string;
   pickup?: OfferPoint;
   dropoff?: OfferPoint;
+  /** Quoted fare in GHS. */
+  fare?: number;
+  /** Straight-line trip length (pickup → dropoff) in km. */
+  tripDistanceKm?: number;
+};
+
+/**
+ * A ride request still waiting for a driver. Every online driver sees every
+ * open request nationwide and can accept any of them; first to accept wins.
+ */
+export type OpenRideRequest = {
+  tripId: string;
+  tripCode: string;
+  status: string;
+  passengerId: string;
+  passengerName: string | null;
+  pickup: {
+    label: string;
+    address: string | null;
+    landmark: string | null;
+    latitude: number;
+    longitude: number;
+  };
+  dropoff: {
+    label: string;
+    address: string | null;
+    landmark: string | null;
+    latitude: number;
+    longitude: number;
+  };
+  fare: number;
+  currency: string;
+  tripDistanceKm: number;
+  etaMinutes: number;
+  vehicleType: string;
+  notes: string | null;
+  createdAt: string;
+  scheduledFor: string | null;
+  distanceToPickupKm: number | null;
 };
 
 type HotZone = {
@@ -54,6 +93,8 @@ export type NearbyClient = {
   distanceKm?: number;
   /** ISO timestamp of when the client came online. */
   since?: string;
+  /** The ride this passenger is currently requesting, if any. */
+  openRequest?: OpenRideRequest;
 };
 
 type Shift = {
@@ -67,6 +108,9 @@ type Shift = {
 type DriverState = {
   isOnline: boolean;
   currentOffer: DriverOffer | null;
+  /** Trip the driver accepted and hasn't finished — shown as "Resume trip". */
+  activeTripId: string | null;
+  setActiveTripId: (tripId: string | null) => void;
   earningMode: 'efficient' | 'flexible';
   maxPickupDistance: number;
   priority: PriorityBreakdown | null;
@@ -104,6 +148,8 @@ type DriverState = {
 export const useDriverStore = create<DriverState>((set) => ({
   isOnline: false,
   currentOffer: null,
+  activeTripId: null,
+  setActiveTripId: (activeTripId) => set({ activeTripId }),
   earningMode: 'efficient',
   maxPickupDistance: 200,
   priority: null,

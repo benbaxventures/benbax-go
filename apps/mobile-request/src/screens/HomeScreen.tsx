@@ -34,7 +34,7 @@ import { MapMarker, MapView } from '../components/MapView';
 import { useClientPresence } from '../hooks/useClientPresence';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
-import { useNearbyDrivers, type NearbyDriver } from '../hooks/useNearbyDrivers';
+import { distanceKmBetween, useNearbyDrivers, type NearbyDriver } from '../hooks/useNearbyDrivers';
 import { useNearbyDriversRealtime } from '../hooks/useNearbyDriversRealtime';
 import { useInitializePayment } from '../hooks/usePayments';
 import { useCreateTrip, useTripQuote } from '../hooks/useTrips';
@@ -167,12 +167,18 @@ function ServiceCard({
   );
 }
 
+function formatDriverKm(km: number) {
+  if (!Number.isFinite(km)) return '';
+  if (km < 1) return `${Math.max(10, Math.round(km * 1000))} m`;
+  return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`;
+}
+
 const NearbyDriverMarker = memo(function NearbyDriverMarker({ driver }: { driver: NearbyDriver }) {
   return (
     <MapMarker
       coordinate={{ latitude: driver.latitude, longitude: driver.longitude }}
-      title="Available driver"
-      description={`${driver.distanceKm.toFixed(1)} km away`}
+      title={driver.name ? `${driver.name} · online` : 'Available driver'}
+      description={`${formatDriverKm(driver.distanceKm)} away`}
       pinColor="#2563EB"
       zIndex={2}
     >
@@ -252,22 +258,29 @@ export function HomeScreen() {
   // Announce this passenger's live location to the server so nearby online
   // drivers see them on the dispatch map while they're browsing for a ride.
   const currentUserName = useAuthStore((s) => s.user?.name);
-  useClientPresence({
+  const { approachingDriver, dismissApproachingDriver } = useClientPresence({
     enabled: true,
     latitude,
     longitude,
     ...(currentUserName ? { name: currentUserName } : {}),
   });
   // Real-time driver stream via Socket.IO (primary), REST polling as fallback.
-  const realtimeDrivers = useNearbyDriversRealtime(true, { latitude, longitude });
-  const { data: polledDrivers = [], isLoading: driversLoading } = useNearbyDrivers(
+  // Both come from the server's live presence registry, so only drivers whose
+  // app is actually connected are counted — never stale "online" DB rows.
+  const { drivers: realtimeDrivers, live: realtimeLive } = useNearbyDriversRealtime(true, {
+    latitude,
+    longitude,
+  });
+  const { data: polledDrivers = [], isLoading: polledLoading } = useNearbyDrivers(
     latitude,
     longitude,
     isFocused
   );
 
-  // Prefer real-time data when available; fall back to REST-polled data.
-  const nearbyDrivers = realtimeDrivers.length > 0 ? realtimeDrivers : polledDrivers;
+  // Once the live snapshot has arrived it is the truth, even when empty; the
+  // poll only fills in while the socket is (re)connecting.
+  const onlineDrivers = realtimeLive ? realtimeDrivers : polledDrivers;
+  const driversLoading = !realtimeLive && polledLoading;
 
   const [pickupText, setPickupText] = useState('Current location');
   const [dropoffText, setDropoffText] = useState('');
@@ -297,6 +310,21 @@ export function HomeScreen() {
   const usingDetectedPickup =
     !pickupCoord && (pickupText === 'Current location' || pickupText === detectedLocationLabel);
   const activePickupCoord = pickupCoord ?? detectedCoord ?? FALLBACK_COORD;
+
+  // Distances from the pickup, nearest first. Deduplicated by id so one
+  // driver can never be counted twice.
+  const nearbyDrivers = useMemo(() => {
+    const byId = new Map<string, NearbyDriver>();
+    for (const driver of onlineDrivers) {
+      byId.set(driver.id, {
+        ...driver,
+        distanceKm: distanceKmBetween(activePickupCoord, driver),
+      });
+    }
+    return [...byId.values()].sort((a, b) => a.distanceKm - b.distanceKm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlineDrivers, activePickupCoord.latitude, activePickupCoord.longitude]);
+  const nearestDriverKm = nearbyDrivers[0]?.distanceKm;
 
   // Fit map to show all nearby driver markers when the indicator is tapped.
   const fitMapToDrivers = useCallback(() => {
@@ -804,6 +832,18 @@ export function HomeScreen() {
           {nearbyDrivers.map((driver) => (
             <NearbyDriverMarker key={driver.id} driver={driver} />
           ))}
+          {approachingDriver?.latitude != null && approachingDriver.longitude != null ? (
+            <MapMarker
+              coordinate={{
+                latitude: approachingDriver.latitude,
+                longitude: approachingDriver.longitude,
+              }}
+              anchor={{ x: 0.5, y: 1 }}
+              zIndex={5}
+            >
+              <MapPinLabel color="#F59E0B" title="Driver" subtitle="Heading to you" />
+            </MapMarker>
+          ) : null}
           {!usingDetectedPickup && detectedCoord ? (
             <MapMarker coordinate={detectedCoord} anchor={{ x: 0.5, y: 1 }} zIndex={1}>
               <MapPinLabel
@@ -825,6 +865,43 @@ export function HomeScreen() {
           ) : null}
         </MapView>
       </View>
+
+      {/* === DRIVER HEADING TO THIS PASSENGER === */}
+      {approachingDriver ? (
+        <Pressable
+          onPress={dismissApproachingDriver}
+          accessibilityRole="button"
+          accessibilityLabel="A driver is heading to you. Tap to dismiss."
+          style={{
+            position: 'absolute',
+            top: insets.top + 156,
+            left: 16,
+            right: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: theme.colors.ink,
+            borderRadius: 14,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            zIndex: 20,
+            elevation: 6,
+          }}
+        >
+          <Car size={18} color="#F59E0B" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>
+              A Benbax driver is heading to you
+            </Text>
+            <Text style={{ color: '#D1D5DB', fontSize: 12 }}>
+              {approachingDriver.etaSeconds != null
+                ? `About ${Math.max(1, Math.ceil(approachingDriver.etaSeconds / 60))} min away · `
+                : ''}
+              Book a ride to lock them in
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
 
       {/* === DRIVERS NEARBY INDICATOR === */}
       {driversLoading ? (
@@ -857,7 +934,7 @@ export function HomeScreen() {
         <Pressable
           onPress={fitMapToDrivers}
           accessibilityRole="button"
-          accessibilityLabel={`${nearbyDrivers.length} ${nearbyDrivers.length === 1 ? 'driver' : 'drivers'} nearby. Tap to view on map.`}
+          accessibilityLabel={`${nearbyDrivers.length} ${nearbyDrivers.length === 1 ? 'driver' : 'drivers'} online. Tap to view on map.`}
           style={{
             position: 'absolute',
             top: insets.top + 116,
@@ -878,12 +955,13 @@ export function HomeScreen() {
         >
           <Car size={15} color="#2563EB" />
           <Text style={{ color: theme.colors.ink, fontSize: 12, fontWeight: '800' }}>
-            {nearbyDrivers.length} {nearbyDrivers.length === 1 ? 'driver' : 'drivers'} nearby
+            {nearbyDrivers.length} {nearbyDrivers.length === 1 ? 'driver' : 'drivers'} online
+            {nearestDriverKm != null ? ` · nearest ${formatDriverKm(nearestDriverKm)}` : ''}
           </Text>
         </Pressable>
       ) : (
         <View
-          accessibilityLabel="No drivers nearby"
+          accessibilityLabel="No drivers online right now"
           style={{
             position: 'absolute',
             top: insets.top + 116,
@@ -899,7 +977,7 @@ export function HomeScreen() {
         >
           <Car size={15} color={theme.colors.muted} />
           <Text style={{ color: theme.colors.muted, fontSize: 12, fontWeight: '600' }}>
-            No drivers nearby
+            No drivers online right now — you can still book
           </Text>
         </View>
       )}

@@ -1,17 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Socket } from 'socket.io-client';
 import { apiRequest } from '../services/api';
-import { createRealtimeClient } from '../services/realtime';
+import { acquireSharedSocket, onEveryConnect, releaseSharedSocket } from '../services/realtime';
 import type { NearbyClient } from '../store/driverStore';
 import { useDriverStore } from '../store/driverStore';
 
-/**
- * Realtime socket events for passengers coming online near the driver. These are
- * additive to the shared `realtimeEvents` map and can be promoted there once the
- * backend emits them under the same names.
- */
+/** Realtime socket events for passengers who are online anywhere in the country. */
 const CLIENT_EVENTS = {
-  /** Bulk snapshot of everyone currently online in range. */
+  /** Bulk snapshot of everyone currently online. */
   snapshot: 'clients:nearby',
   /** A single passenger just came online. */
   online: 'client:online',
@@ -21,10 +16,15 @@ const CLIENT_EVENTS = {
   offline: 'client:offline',
 } as const;
 
-type WatchArgs = {
+/** How often the driver re-announces itself so the server knows it's alive. */
+const HEARTBEAT_MS = 20_000;
+/** REST safety net in case a socket event was missed. */
+const SNAPSHOT_REFRESH_MS = 15_000;
+
+type DriverPosition = {
   latitude: number;
   longitude: number;
-  radiusKm: number;
+  heading?: number;
 };
 
 function normalizeClient(raw: unknown): NearbyClient | null {
@@ -49,18 +49,25 @@ function normalizeClient(raw: unknown): NearbyClient | null {
   };
 }
 
+function parseOfflineId(payload: unknown) {
+  if (typeof payload === 'string') return payload;
+  if (payload && typeof payload === 'object') {
+    return String((payload as Record<string, unknown>).id ?? '');
+  }
+  return '';
+}
+
 /**
- * Streams the passengers who are currently online near the driver.
+ * While the driver is online:
+ * - keeps `driverStore.nearbyClients` in sync with every passenger online
+ *   nationwide (no distance cut-off), streamed over the socket with a REST
+ *   snapshot as a safety net;
+ * - heart-beats the driver's live position (`driver:report`) so customers see
+ *   this driver on their map and dispatch can offer them rides.
  *
- * While `enabled` (driver online) it opens a realtime socket, tells the server
- * where the driver is watching, and keeps `driverStore.nearbyClients` in sync as
- * clients come online, move, and go offline. It also returns `latestArrival` —
- * the most recent client to appear — so the screen can surface a toast.
+ * Returns `latestArrival` — the most recent passenger to appear — for a toast.
  */
-export function useNearbyClients(
-  enabled: boolean,
-  driver: { latitude: number; longitude: number; radiusKm?: number }
-) {
+export function useNearbyClients(enabled: boolean, driver: DriverPosition) {
   const nearbyClients = useDriverStore((s) => s.nearbyClients);
   const setNearbyClients = useDriverStore((s) => s.setNearbyClients);
   const upsertNearbyClient = useDriverStore((s) => s.upsertNearbyClient);
@@ -68,17 +75,14 @@ export function useNearbyClients(
   const clearNearbyClients = useDriverStore((s) => s.clearNearbyClients);
 
   const [latestArrival, setLatestArrival] = useState<NearbyClient | null>(null);
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef = useRef<ReturnType<typeof acquireSharedSocket> | null>(null);
   const knownIds = useRef<Set<string>>(new Set());
+  const lastEmitRef = useRef({ latitude: 0, longitude: 0 });
 
-  // Keep the latest watch position in a ref so re-emitting on movement doesn't
-  // tear down and rebuild the socket.
-  const watchRef = useRef<WatchArgs>({ latitude: 0, longitude: 0, radiusKm: 200 });
-  watchRef.current = {
-    latitude: driver.latitude,
-    longitude: driver.longitude,
-    radiusKm: driver.radiusKm ?? 200,
-  };
+  // Latest position in a ref so heartbeats and reconnects always send the
+  // current fix without rebuilding the subscription.
+  const positionRef = useRef<DriverPosition>(driver);
+  positionRef.current = driver;
 
   useEffect(() => {
     if (!enabled) {
@@ -89,9 +93,19 @@ export function useNearbyClients(
     }
 
     let cancelled = false;
+    const socket = acquireSharedSocket();
+    socketRef.current = socket;
+
+    const announce = () => {
+      const { latitude, longitude, heading } = positionRef.current;
+      if (!latitude && !longitude) return;
+      lastEmitRef.current = { latitude, longitude };
+      socket.emit('driver:report', { latitude, longitude, heading });
+      socket.emit('client:watch', { latitude, longitude });
+    };
 
     const refreshSnapshot = () => {
-      apiRequest<NearbyClient[]>('/drivers/me/nearby-clients')
+      apiRequest<unknown[]>('/drivers/me/nearby-clients')
         .then((clients) => {
           if (cancelled || !Array.isArray(clients)) return;
           const normalized = clients
@@ -103,77 +117,83 @@ export function useNearbyClients(
         .catch(() => undefined);
     };
 
-    // Best-effort initial snapshot so the map isn't empty before the first event.
-    refreshSnapshot();
-    const snapshotTimer = setInterval(refreshSnapshot, 10000);
+    const handleSnapshot = (payload: unknown) => {
+      const list = Array.isArray(payload) ? payload : [];
+      const normalized = list.map(normalizeClient).filter((c): c is NearbyClient => c !== null);
+      knownIds.current = new Set(normalized.map((c) => c.id));
+      setNearbyClients(normalized);
+    };
 
-    createRealtimeClient().then((socket) => {
-      if (cancelled) {
-        socket.disconnect();
-        return;
+    const handleOnline = (payload: unknown) => {
+      const client = normalizeClient(payload);
+      if (!client) return;
+      upsertNearbyClient(client);
+      // Only toast for genuinely new arrivals, not reconnect replays.
+      if (!knownIds.current.has(client.id)) {
+        knownIds.current.add(client.id);
+        setLatestArrival(client);
       }
-      socketRef.current = socket;
+    };
 
-      socket.on(CLIENT_EVENTS.snapshot, (payload: unknown) => {
-        const list = Array.isArray(payload) ? payload : [];
-        const normalized = list.map(normalizeClient).filter((c): c is NearbyClient => c !== null);
-        knownIds.current = new Set(normalized.map((c) => c.id));
-        setNearbyClients(normalized);
-      });
+    const handleMoved = (payload: unknown) => {
+      const client = normalizeClient(payload);
+      if (client) upsertNearbyClient(client);
+    };
 
-      socket.on(CLIENT_EVENTS.online, (payload: unknown) => {
-        const client = normalizeClient(payload);
-        if (!client) return;
-        upsertNearbyClient(client);
-        // Only toast for genuinely new arrivals, not reconnect replays.
-        if (!knownIds.current.has(client.id)) {
-          knownIds.current.add(client.id);
-          setLatestArrival(client);
-        }
-      });
+    const handleOffline = (payload: unknown) => {
+      const id = parseOfflineId(payload);
+      if (!id) return;
+      knownIds.current.delete(id);
+      removeNearbyClient(id);
+    };
 
-      socket.on(CLIENT_EVENTS.moved, (payload: unknown) => {
-        const client = normalizeClient(payload);
-        if (client) upsertNearbyClient(client);
-      });
+    // Register listeners before watching: the server answers `client:watch`
+    // with a snapshot immediately, so emitting first could lose it.
+    socket.on(CLIENT_EVENTS.snapshot, handleSnapshot);
+    socket.on(CLIENT_EVENTS.online, handleOnline);
+    socket.on(CLIENT_EVENTS.moved, handleMoved);
+    socket.on(CLIENT_EVENTS.offline, handleOffline);
+    const stopAnnouncing = onEveryConnect(socket, announce);
 
-      socket.on(CLIENT_EVENTS.offline, (payload: unknown) => {
-        const id =
-          typeof payload === 'string'
-            ? payload
-            : payload && typeof payload === 'object'
-              ? String((payload as Record<string, unknown>).id ?? '')
-              : '';
-        if (!id) return;
-        knownIds.current.delete(id);
-        removeNearbyClient(id);
-      });
-
-      // Register all listeners before watching. The server responds with the
-      // current nearby snapshot immediately, so emitting first can lose it.
-      const emitWatch = () => {
-        if (watchRef.current.latitude !== 0 || watchRef.current.longitude !== 0) {
-          socket.emit('client:watch', watchRef.current);
-        }
-      };
-      socket.on('connect', emitWatch);
-      if (socket.connected) emitWatch();
-    });
+    refreshSnapshot();
+    const snapshotTimer = setInterval(refreshSnapshot, SNAPSHOT_REFRESH_MS);
+    const heartbeatTimer = setInterval(() => {
+      if (socket.connected) announce();
+    }, HEARTBEAT_MS);
 
     return () => {
       cancelled = true;
       clearInterval(snapshotTimer);
-      socketRef.current?.disconnect();
+      clearInterval(heartbeatTimer);
+      stopAnnouncing();
+      socket.emit('client:unwatch');
+      socket.off(CLIENT_EVENTS.snapshot, handleSnapshot);
+      socket.off(CLIENT_EVENTS.online, handleOnline);
+      socket.off(CLIENT_EVENTS.moved, handleMoved);
+      socket.off(CLIENT_EVENTS.offline, handleOffline);
       socketRef.current = null;
+      releaseSharedSocket();
     };
   }, [enabled, clearNearbyClients, removeNearbyClient, setNearbyClients, upsertNearbyClient]);
 
-  // Re-emit the watch position as the driver moves so server-side scoping stays
-  // accurate, without recreating the socket.
+  // Report meaningful movement (~15 m) right away rather than waiting for the
+  // next heartbeat, so the customer map tracks the car smoothly.
   useEffect(() => {
-    if (!enabled || !socketRef.current) return;
-    socketRef.current.emit('client:watch', watchRef.current);
-  }, [enabled, driver.latitude, driver.longitude]);
+    const socket = socketRef.current;
+    if (!enabled || !socket?.connected || (!driver.latitude && !driver.longitude)) return;
+    const last = lastEmitRef.current;
+    const moved =
+      Math.abs(driver.latitude - last.latitude) >= 0.00015 ||
+      Math.abs(driver.longitude - last.longitude) >= 0.00015;
+    if (!moved) return;
+    lastEmitRef.current = { latitude: driver.latitude, longitude: driver.longitude };
+    socket.emit('driver:report', {
+      latitude: driver.latitude,
+      longitude: driver.longitude,
+      heading: driver.heading,
+    });
+    socket.emit('client:watch', { latitude: driver.latitude, longitude: driver.longitude });
+  }, [enabled, driver.latitude, driver.longitude, driver.heading]);
 
   const acknowledgeArrival = () => setLatestArrival(null);
 

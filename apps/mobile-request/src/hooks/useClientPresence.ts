@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import type { Socket } from 'socket.io-client';
 import { createRealtimeClient } from '../services/realtime';
 
@@ -11,14 +12,32 @@ type PresenceArgs = {
   name?: string;
 };
 
+/** A driver who tapped "navigate to passenger" on this user. */
+export type ApproachingDriver = {
+  driverId: string;
+  latitude: number | null;
+  longitude: number | null;
+  /** Seconds until arrival, as estimated by the driver app. */
+  etaSeconds: number | null;
+  updatedAt: number;
+};
+
+/** Re-report this often so the server knows the passenger is still here. */
+const HEARTBEAT_MS = 25_000;
+/** Forget an approaching driver who stopped sending positions. */
+const APPROACH_STALE_MS = 2 * 60 * 1000;
+
 /**
  * Keeps a lightweight realtime connection open while the passenger is on the
- * app with a known location, reporting their position to the server so nearby
- * online drivers see them appear on the dispatch map. The socket is opened once
- * and the position is re-emitted as it changes, without tearing the socket down.
+ * app with a known location, reporting their position so online drivers
+ * nationwide see them on the dispatch map. Position is re-sent on movement and
+ * as a heartbeat; backgrounding the app takes the passenger off the map.
+ *
+ * Also surfaces a driver who is heading to this passenger in real time.
  */
 export function useClientPresence({ enabled, latitude, longitude, name }: PresenceArgs) {
   const socketRef = useRef<Socket | null>(null);
+  const [approachingDriver, setApproachingDriver] = useState<ApproachingDriver | null>(null);
 
   // Keep the latest position in a ref so movement re-emits without rebuilding
   // the socket connection.
@@ -37,20 +56,64 @@ export function useClientPresence({ enabled, latitude, longitude, name }: Presen
     if (!enabled || !hasLocation) return;
 
     let cancelled = false;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let inForeground = AppState.currentState === 'active';
+
+    const report = (socket: Socket) => {
+      if (inForeground && socket.connected) socket.emit('client:report', positionRef.current);
+    };
+
+    const appState = AppState.addEventListener('change', (state) => {
+      const socket = socketRef.current;
+      inForeground = state === 'active';
+      if (!socket) return;
+      if (inForeground) report(socket);
+      else socket.emit('client:leave');
+    });
 
     createRealtimeClient((socket) => {
-      socket.emit('client:report', positionRef.current);
+      report(socket);
     }).then((socket) => {
       if (cancelled) {
         socket.disconnect();
         return;
       }
       socketRef.current = socket;
+
+      socket.on('navigation:started', (payload: { driverId?: string }) => {
+        if (!payload?.driverId) return;
+        setApproachingDriver({
+          driverId: payload.driverId,
+          latitude: null,
+          longitude: null,
+          etaSeconds: null,
+          updatedAt: Date.now(),
+        });
+      });
+      socket.on(
+        'driver:location',
+        (payload: { driverId?: string; latitude?: number; longitude?: number; eta?: number }) => {
+          if (!payload?.driverId) return;
+          const lat = Number(payload.latitude);
+          const lng = Number(payload.longitude);
+          setApproachingDriver({
+            driverId: payload.driverId,
+            latitude: Number.isFinite(lat) ? lat : null,
+            longitude: Number.isFinite(lng) ? lng : null,
+            etaSeconds: Number.isFinite(Number(payload.eta)) ? Number(payload.eta) : null,
+            updatedAt: Date.now(),
+          });
+        }
+      );
+
+      heartbeat = setInterval(() => report(socket), HEARTBEAT_MS);
     });
 
     return () => {
       cancelled = true;
-      socketRef.current?.emit('client:unwatch');
+      appState.remove();
+      if (heartbeat) clearInterval(heartbeat);
+      socketRef.current?.emit('client:leave');
       socketRef.current?.disconnect();
       socketRef.current = null;
     };
@@ -61,4 +124,16 @@ export function useClientPresence({ enabled, latitude, longitude, name }: Presen
     if (!enabled || !hasLocation || !socketRef.current?.connected) return;
     socketRef.current.emit('client:report', positionRef.current);
   }, [enabled, hasLocation, latitude, longitude]);
+
+  // Drop the "driver on the way" banner once updates stop.
+  useEffect(() => {
+    if (!approachingDriver) return;
+    const timer = setTimeout(
+      () => setApproachingDriver(null),
+      APPROACH_STALE_MS - (Date.now() - approachingDriver.updatedAt)
+    );
+    return () => clearTimeout(timer);
+  }, [approachingDriver]);
+
+  return { approachingDriver, dismissApproachingDriver: () => setApproachingDriver(null) };
 }

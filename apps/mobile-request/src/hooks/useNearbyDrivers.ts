@@ -7,7 +7,22 @@ export type NearbyDriver = {
   longitude: number;
   distanceKm: number;
   vehicleType?: string | null;
+  name?: string;
 };
+
+/** Great-circle distance in km between two coordinates. */
+export function distanceKmBetween(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number }
+) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
 
 export function useNearbyDrivers(
   latitude: number | null,

@@ -7,6 +7,8 @@ type Props = {
   client: NearbyClient;
   /** react-native-maps Marker component, injected like HotZoneOverlay. */
   Marker: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  /** Tap to open this passenger's live details. */
+  onPress?: (client: NearbyClient) => void;
 };
 
 const SERVICE_COLORS: Record<NonNullable<NearbyClient['serviceClass']>, string> = {
@@ -23,7 +25,7 @@ const DEFAULT_COLOR = '#22C55E';
  * the JS-driven Animated API; `tracksViewChanges` stays on so the pulse renders
  * inside the native map layer.
  */
-export function NearbyClientMarker({ client, Marker }: Props) {
+export function NearbyClientMarker({ client, Marker, onPress }: Props) {
   const pulse = useRef(new Animated.Value(0)).current;
   const color = client.serviceClass ? SERVICE_COLORS[client.serviceClass] : DEFAULT_COLOR;
 
@@ -48,6 +50,7 @@ export function NearbyClientMarker({ client, Marker }: Props) {
       coordinate={{ latitude: client.latitude, longitude: client.longitude }}
       anchor={{ x: 0.5, y: 0.5 }}
       tracksViewChanges
+      onPress={onPress ? () => onPress(client) : undefined}
     >
       <View style={{ width: 64, height: 64, alignItems: 'center', justifyContent: 'center' }}>
         {/* Pulsing demand ring */}

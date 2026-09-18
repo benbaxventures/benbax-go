@@ -5,12 +5,22 @@ import { prisma } from '../../config/prisma';
 import { requireAuth, requireRoles } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { realtimeEvents } from '../../realtime/events';
-import { clientsNear, removeOnlineDriver, upsertOnlineDriver } from '../../realtime/presence';
+import {
+  clientsNear,
+  driversNear,
+  getOnlineDriver,
+  listOnlineClients,
+  removeOnlineDriver,
+  setDriverOnlineFlag,
+  upsertOnlineDriver,
+  type OnlineClient,
+} from '../../realtime/presence';
 import { asyncHandler } from '../../utils/asyncHandler';
 import { notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
-import { haversineKm } from '../dispatch/dispatch.engine';
+import { dispatchRide } from '../dispatch/dispatch.service';
 import { commissionRate } from '../payments/settlement';
+import { listOpenRideRequests } from '../ride-dispatch/ride-marketplace';
 
 export const driversRouter = Router();
 
@@ -73,44 +83,19 @@ driversRouter.get(
   asyncHandler(async (req, res) => {
     const latitude = Number(req.query.latitude);
     const longitude = Number(req.query.longitude);
-    const radiusKm = Number(req.query.radiusKm) || 200;
 
-    // Exclude drivers whose last location update is older than 5 minutes —
-    // their reported position is too stale to be useful for ride matching.
-    const staleCutoff = new Date(Date.now() - 5 * 60 * 1000);
-
-    const drivers = await prisma.driverProfile.findMany({
-      where: {
-        isOnline: true,
-        status: 'ACTIVE',
-        currentLatitude: { not: null },
-        currentLongitude: { not: null },
-        OR: [{ lastLocationAt: null }, { lastLocationAt: { gte: staleCutoff } }],
-      },
-      select: {
-        id: true,
-        currentLatitude: true,
-        currentLongitude: true,
-        vehicle: { select: { type: true } },
-      },
-    });
-
-    const nearby = drivers
-      .map((driver) => {
-        const point = {
-          latitude: Number(driver.currentLatitude),
-          longitude: Number(driver.currentLongitude),
-        };
-        return {
-          id: driver.id,
-          ...point,
-          distanceKm: haversineKm({ latitude, longitude }, point),
-          vehicleType: driver.vehicle?.type ?? null,
-        };
-      })
-      .filter((driver) => driver.distanceKm <= radiusKm)
-      .sort((a, b) => a.distanceKm - b.distanceKm)
-      .map((driver) => ({ ...driver, distanceKm: Number(driver.distanceKm.toFixed(1)) }));
+    // Served from the same live presence registry as the Socket.IO stream, so
+    // the REST fallback and the realtime feed always agree: only drivers with
+    // a connected, heart-beating app are counted (never stale DB `isOnline`
+    // rows), ids are user ids on both paths, and there is no distance cut-off.
+    const nearby = driversNear({ latitude, longitude }).map((driver) => ({
+      id: driver.id,
+      latitude: driver.latitude,
+      longitude: driver.longitude,
+      distanceKm: driver.distanceKm,
+      vehicleType: driver.vehicleType ?? null,
+      ...(driver.name ? { name: driver.name } : {}),
+    }));
 
     return ok(res, nearby);
   })
@@ -143,18 +128,35 @@ driversRouter.patch(
           }
         : {};
 
+    const current = await prisma.driverProfile.findUnique({
+      where: { userId: req.user!.id },
+      select: { status: true },
+    });
+    if (!current) throw notFound('Driver profile not found');
+
+    // A driver mid-trip stays ON_TRIP; going online must not make them look
+    // free for another dispatch.
+    const nextStatus = req.body.isOnline
+      ? current.status === 'ON_TRIP'
+        ? 'ON_TRIP'
+        : 'ACTIVE'
+      : 'OFFLINE';
+
     const driver = await prisma.driverProfile.update({
       where: { userId: req.user!.id },
       data: {
         isOnline: req.body.isOnline,
-        status: req.body.isOnline ? 'ACTIVE' : 'OFFLINE',
+        status: nextStatus,
         ...locationUpdate,
       },
+      include: { vehicle: true, user: { select: { name: true } } },
     });
+    setDriverOnlineFlag(driver.userId, req.body.isOnline);
 
+    const { user: driverUser, ...driverPayload } = driver;
     const io = req.app.get('io');
-    io?.to(`driver:${driver.userId}`).emit(realtimeEvents.driverAvailability, driver);
-    io?.to('admins').emit(realtimeEvents.driverAvailability, driver);
+    io?.to(`driver:${driver.userId}`).emit(realtimeEvents.driverAvailability, driverPayload);
+    io?.to('admins').emit(realtimeEvents.driverAvailability, driverPayload);
 
     // Update the in-memory driver presence so customers see this driver in
     // real-time via the Socket.IO stream.
@@ -169,6 +171,7 @@ driversRouter.patch(
         latitude: req.body.latitude,
         longitude: req.body.longitude,
         ...(vehicleType ? { vehicleType } : {}),
+        ...(driverUser.name ? { name: driverUser.name } : {}),
       });
       // Broadcast to all watching customers via the shared room.
       io?.to('customer-watchers').emit(
@@ -179,9 +182,23 @@ driversRouter.patch(
       if (removeOnlineDriver(driver.userId)) {
         io?.to('customer-watchers').emit(realtimeEvents.driverOffline, { id: driver.userId });
       }
+
+      // Hand any offer this driver was holding to the next driver right away
+      // instead of making the passenger wait for it to time out.
+      const pending = await prisma.rideAssignment.findMany({
+        where: { driverProfileId: driver.id, status: 'OFFERED' },
+        select: { id: true, tripId: true },
+      });
+      if (pending.length) {
+        await prisma.rideAssignment.updateMany({
+          where: { id: { in: pending.map((p) => p.id) }, status: 'OFFERED' },
+          data: { status: 'EXPIRED', respondedAt: new Date() },
+        });
+        for (const offer of pending) void dispatchRide(offer.tripId, io);
+      }
     }
 
-    return ok(res, driver);
+    return ok(res, driverPayload);
   })
 );
 
@@ -311,17 +328,29 @@ driversRouter.get(
     });
     if (!driver) throw notFound('Driver profile not found');
 
-    // Without a known location we can't compute distances; return an empty
-    // snapshot and let the live socket stream fill in as the driver moves.
-    if (driver.currentLatitude == null || driver.currentLongitude == null) {
-      return ok(res, []);
-    }
+    // Prefer the live socket position; fall back to the last stored one. With
+    // neither, still list everyone online (nationwide) — just without distances.
+    const presence = getOnlineDriver(req.user!.id);
+    const from = presence
+      ? { latitude: presence.latitude, longitude: presence.longitude }
+      : driver.currentLatitude != null && driver.currentLongitude != null
+        ? { latitude: Number(driver.currentLatitude), longitude: Number(driver.currentLongitude) }
+        : null;
 
-    const nearby = clientsNear({
-      latitude: Number(driver.currentLatitude),
-      longitude: Number(driver.currentLongitude),
-    });
-    return ok(res, nearby);
+    const clients: OnlineClient[] = from ? clientsNear(from) : listOnlineClients();
+
+    // Attach each passenger's waiting ride request, if they have one, so the
+    // driver can see pickup/dropoff/fare and accept straight from the client.
+    const openRequests = await listOpenRideRequests(from);
+    const requestByPassenger = new Map(openRequests.map((r) => [r.passengerId, r]));
+
+    return ok(
+      res,
+      clients.map((client) => {
+        const openRequest = requestByPassenger.get(client.id);
+        return openRequest ? { ...client, openRequest } : client;
+      })
+    );
   })
 );
 

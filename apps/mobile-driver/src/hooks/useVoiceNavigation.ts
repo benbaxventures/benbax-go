@@ -1,17 +1,35 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { haversineMeters, type RouteCoordinate, type RouteStep } from '../services/directions';
 
 type NavigationStep = {
   instruction: string;
   distance: string;
   maneuver?: string;
+  /** Where this manoeuvre ends; present for real Directions API steps. */
+  end?: RouteCoordinate;
 };
+
+/** Advance to the next instruction once the driver is this close to a step's end. */
+const STEP_REACHED_METERS = 30;
 
 export function useVoiceNavigation() {
   const [steps, setSteps] = useState<NavigationStep[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [isNavigating, setIsNavigating] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const stepsRef = useRef<NavigationStep[]>([]);
+  const indexRef = useRef(0);
+  stepsRef.current = steps;
+  indexRef.current = currentStepIndex;
+
+  useEffect(() => {
+    AsyncStorage.getItem('benbax.driver.voiceEnabled')
+      .then((stored) => {
+        if (stored !== null) setVoiceEnabled(stored === 'true');
+      })
+      .catch(() => undefined);
+  }, []);
 
   const speak = useCallback(
     async (text: string) => {
@@ -33,10 +51,27 @@ export function useVoiceNavigation() {
     [voiceEnabled]
   );
 
+  /**
+   * Starts spoken guidance. Pass the Directions API `routeSteps` for real
+   * turn-by-turn prompts (advanced by `updatePosition`); without them a generic
+   * head-to-destination prompt is used.
+   */
   const startNavigation = useCallback(
-    async (_destinationLat: string, _destinationLng: string) => {
+    async (_destinationLat: string, _destinationLng: string, routeSteps?: RouteStep[]) => {
       setIsNavigating(true);
       setCurrentStepIndex(0);
+
+      if (routeSteps && routeSteps.length > 0) {
+        const real: NavigationStep[] = routeSteps.map((s) => ({
+          instruction: s.instruction,
+          distance: s.distanceText,
+          end: s.end,
+          ...(s.maneuver ? { maneuver: s.maneuver } : {}),
+        }));
+        setSteps(real);
+        speak(`Navigation started. ${real[0]!.instruction}`);
+        return;
+      }
 
       const fallbackSteps: NavigationStep[] = [
         { instruction: 'Head towards your destination', distance: 'Calculating route...' },
@@ -46,6 +81,27 @@ export function useVoiceNavigation() {
 
       setSteps(fallbackSteps);
       speak('Navigation started. Head towards your destination.');
+    },
+    [speak]
+  );
+
+  /** Feed live GPS fixes: announces the next turn as each step is completed. */
+  const updatePosition = useCallback(
+    (position: RouteCoordinate) => {
+      const list = stepsRef.current;
+      let index = indexRef.current;
+      const current = list[index];
+      if (!current?.end) return;
+      if (haversineMeters(position, current.end) > STEP_REACHED_METERS) return;
+      index += 1;
+      const next = list[index];
+      if (!next) {
+        speak('You have arrived at your destination.');
+        return;
+      }
+      indexRef.current = index;
+      setCurrentStepIndex(index);
+      speak(next.distance ? `In ${next.distance}, ${next.instruction}` : next.instruction);
     },
     [speak]
   );
@@ -88,6 +144,7 @@ export function useVoiceNavigation() {
     isNavigating,
     voiceEnabled,
     startNavigation,
+    updatePosition,
     nextStep,
     stopNavigation,
     toggleVoice,

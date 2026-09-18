@@ -37,6 +37,11 @@ type TripDetail = {
   id: string;
   tripCode: string;
   status: string;
+  /** Set by dispatch on live updates, e.g. NO_AVAILABLE_DRIVERS. */
+  dispatchStatus?: string;
+  cancellationReason?: string | null;
+  cancelledBy?: string | null;
+  totalFare?: string | number;
   scheduledFor?: string | null;
   pickupLabel: string;
   pickupLatitude: string;
@@ -67,11 +72,39 @@ type TripAssignmentEvent = {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'TripTracking'>;
 
+/** Statuses from which the passenger can still cancel. */
+const CANCELLABLE = ['REQUESTED', 'ASSIGNING', 'ASSIGNED', 'DRIVER_ARRIVING', 'ARRIVED'];
+const SEARCHING = ['REQUESTED', 'ASSIGNING', 'NO_AVAILABLE_DRIVERS'];
+
+const STATUS_LABELS: Record<string, string> = {
+  REQUESTED: 'Finding a driver',
+  ASSIGNING: 'Contacting drivers',
+  NO_AVAILABLE_DRIVERS: 'No drivers online',
+  ASSIGNED: 'Driver on the way',
+  DRIVER_ARRIVING: 'Driver arriving',
+  ARRIVED: 'Driver has arrived',
+  IN_PROGRESS: 'On your trip',
+  COMPLETED: 'Trip complete',
+  CANCELLED: 'Cancelled',
+  FAILED: 'Trip failed',
+};
+
+function distanceKm(a: Coordinate, b: Coordinate) {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
 export function TripTrackingScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [driverPoint, setDriverPoint] = useState<Coordinate | null>(null);
   const [liveStatus, setLiveStatus] = useState('REQUESTED');
   const [assignedDriver, setAssignedDriver] = useState<DriverInfo | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const {
     data: trip,
@@ -83,7 +116,12 @@ export function TripTrackingScreen({ route, navigation }: Props) {
   });
 
   useEffect(() => {
-    if (trip?.status) setLiveStatus(trip.status);
+    if (trip?.status) {
+      // Keep "no drivers online" until the trip actually moves on.
+      setLiveStatus((prev) =>
+        prev === 'NO_AVAILABLE_DRIVERS' && SEARCHING.includes(trip.status) ? prev : trip.status
+      );
+    }
     const accepted =
       trip?.assignments?.find((assignment) => assignment.status === 'ACCEPTED') ?? null;
     setAssignedDriver(accepted?.driverProfile ?? null);
@@ -91,25 +129,32 @@ export function TripTrackingScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     let cleanup: () => void = () => undefined;
+    const tripId = route.params.tripId;
 
-    createRealtimeClient().then((socket) => {
-      socket.emit('ride:join', route.params.tripId);
+    // Join the ride room on every (re)connect, or updates stop after a blip.
+    createRealtimeClient((socket) => {
+      socket.emit('ride:join', tripId);
+      refetch();
+    }).then((socket) => {
       socket.on(realtimeEvents.carTripUpdated, (updatedTrip: TripDetail) => {
-        if (updatedTrip.id !== route.params.tripId) return;
-        setLiveStatus(updatedTrip.status ?? 'REQUESTED');
+        if (updatedTrip.id !== tripId) return;
+        setLiveStatus(updatedTrip.dispatchStatus ?? updatedTrip.status ?? 'REQUESTED');
         refetch();
       });
       socket.on(realtimeEvents.carTripAssigned, (assignment: TripAssignmentEvent) => {
-        if (assignment.tripId !== route.params.tripId) return;
-        setLiveStatus(assignment.status === 'ACCEPTED' ? 'ASSIGNED' : 'ASSIGNING');
-        if (assignment.status === 'ACCEPTED' && assignment.driverProfile) {
-          setAssignedDriver(assignment.driverProfile);
+        if (assignment.tripId !== tripId) return;
+        // Offers to individual drivers are routine; only a driver actually
+        // accepting is news to the passenger.
+        if (assignment.status !== 'ACCEPTED') {
+          setLiveStatus((prev) => (prev === 'REQUESTED' ? 'ASSIGNING' : prev));
+          return;
         }
+        setLiveStatus('ASSIGNED');
+        if (assignment.driverProfile) setAssignedDriver(assignment.driverProfile);
+        const name = assignment.driverProfile?.user?.name;
         Alert.alert(
-          assignment.status === 'ACCEPTED' ? 'Driver assigned' : 'Driver found',
-          assignment.status === 'ACCEPTED'
-            ? 'Your driver accepted the ride and is on the way.'
-            : 'A nearby driver has received your request.'
+          'Driver on the way',
+          `${name ?? 'Your driver'} accepted your ride and is heading to your pickup.`
         );
         refetch();
       });
@@ -120,13 +165,41 @@ export function TripTrackingScreen({ route, navigation }: Props) {
         }
       );
       cleanup = () => {
-        socket.emit('ride:leave', route.params.tripId);
+        socket.emit('ride:leave', tripId);
         socket.disconnect();
       };
     });
 
     return () => cleanup();
   }, [refetch, route.params.tripId]);
+
+  function confirmCancel() {
+    Alert.alert('Cancel this ride?', 'Your driver search or assigned driver will be released.', [
+      { text: 'Keep ride', style: 'cancel' },
+      {
+        text: 'Cancel ride',
+        style: 'destructive',
+        onPress: async () => {
+          setCancelling(true);
+          try {
+            await apiRequest(`/rides/${route.params.tripId}/cancel`, {
+              method: 'POST',
+              body: JSON.stringify({ reason: 'Cancelled by passenger' }),
+            });
+            setLiveStatus('CANCELLED');
+            navigation.goBack();
+          } catch (error) {
+            Alert.alert(
+              'Could not cancel',
+              error instanceof Error ? error.message : 'Please try again.'
+            );
+          } finally {
+            setCancelling(false);
+          }
+        },
+      },
+    ]);
+  }
 
   const pickup = useMemo(
     () => ({
@@ -195,15 +268,20 @@ export function TripTrackingScreen({ route, navigation }: Props) {
   const statusLabel =
     isScheduledFuture && !assignedDriver
       ? 'Scheduled'
-      : liveStatus === 'NO_AVAILABLE_DRIVERS'
-        ? 'No drivers online'
-        : liveStatus === 'REQUESTED'
-          ? 'Matching driver'
-          : liveStatus === 'ASSIGNING'
-            ? 'Driver found'
-            : liveStatus.replaceAll('_', ' ').toLowerCase();
+      : (STATUS_LABELS[liveStatus] ?? liveStatus.replaceAll('_', ' ').toLowerCase());
 
-  const statusTone = liveStatus === 'NO_AVAILABLE_DRIVERS' ? 'warning' : 'success';
+  const statusTone =
+    liveStatus === 'NO_AVAILABLE_DRIVERS' || liveStatus === 'CANCELLED' || liveStatus === 'FAILED'
+      ? 'warning'
+      : 'success';
+
+  const searching = SEARCHING.includes(liveStatus) && !assignedDriver;
+  const ended = ['COMPLETED', 'CANCELLED', 'FAILED'].includes(liveStatus);
+  const canCancel = CANCELLABLE.includes(liveStatus) || liveStatus === 'NO_AVAILABLE_DRIVERS';
+  const driverKmToPickup =
+    assignedDriver && latestPoint && ['ASSIGNED', 'DRIVER_ARRIVING'].includes(liveStatus)
+      ? distanceKm(latestPoint, pickup)
+      : null;
 
   function openDriverMap() {
     if (!latestPoint) {
@@ -353,7 +431,10 @@ export function TripTrackingScreen({ route, navigation }: Props) {
               }}
             />
             <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.success }}>
-              {assignedDriver ? 'On the way' : statusLabel}
+              {statusLabel}
+              {driverKmToPickup != null
+                ? ` · ${driverKmToPickup < 1 ? `${Math.round(driverKmToPickup * 1000)} m` : `${driverKmToPickup.toFixed(1)} km`} away`
+                : ''}
             </Text>
           </View>
           {trip?.tripCode ? (
@@ -403,12 +484,22 @@ export function TripTrackingScreen({ route, navigation }: Props) {
             <Text style={{ fontSize: 15, fontWeight: '700', color: theme.colors.ink }}>
               {isScheduledFuture
                 ? 'Driver matching starts near pickup time'
-                : 'Finding a nearby driver...'}
+                : liveStatus === 'CANCELLED'
+                  ? 'This ride was cancelled'
+                  : liveStatus === 'NO_AVAILABLE_DRIVERS'
+                    ? 'No drivers are online right now'
+                    : searching
+                      ? 'Finding you a driver…'
+                      : statusLabel}
             </Text>
             <Text style={{ fontSize: 13, color: theme.colors.muted, marginTop: 4 }}>
               {isScheduledFuture
                 ? `Scheduled for ${new Date(trip?.scheduledFor ?? Date.now()).toLocaleString()}.`
-                : 'Please wait while we connect you with the nearest available driver.'}
+                : liveStatus === 'CANCELLED'
+                  ? (trip?.cancellationReason ?? 'You can request a new ride from the home screen.')
+                  : liveStatus === 'NO_AVAILABLE_DRIVERS'
+                    ? 'Your request stays open. Every driver who comes online will see it.'
+                    : 'Your request is visible to every online driver. The first to accept is on the way.'}
             </Text>
           </View>
         )}
@@ -473,6 +564,30 @@ export function TripTrackingScreen({ route, navigation }: Props) {
             <Navigation size={20} color={theme.colors.primary} />
           </Pressable>
         </View>
+
+        {canCancel ? (
+          <Pressable
+            onPress={confirmCancel}
+            disabled={cancelling}
+            accessibilityRole="button"
+            accessibilityLabel="Cancel this ride"
+            style={{ alignItems: 'center', paddingTop: 12 }}
+          >
+            <Text style={{ color: theme.colors.danger, fontWeight: '700', fontSize: 14 }}>
+              {cancelling ? 'Cancelling…' : 'Cancel ride'}
+            </Text>
+          </Pressable>
+        ) : ended ? (
+          <Pressable
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            style={{ alignItems: 'center', paddingTop: 12 }}
+          >
+            <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 14 }}>
+              {liveStatus === 'COMPLETED' ? 'Done' : 'Book another ride'}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );

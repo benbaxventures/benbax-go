@@ -17,6 +17,8 @@ export type OnlineClient = {
   serviceClass?: 'economy' | 'comfort' | 'premium';
   /** ISO timestamp of when the passenger came online. */
   since: string;
+  /** Epoch ms of the last report/heartbeat; used to sweep dead connections. */
+  lastSeenAt: number;
 };
 
 /** A passenger enriched with straight-line distance from a given driver. */
@@ -28,8 +30,13 @@ export type OnlineDriver = {
   latitude: number;
   longitude: number;
   vehicleType?: string;
+  /** Driver's display name, shown on the customer map. */
+  name?: string;
+  heading?: number;
   /** ISO timestamp of when the driver came online. */
   since: string;
+  /** Epoch ms of the last report/heartbeat; used to sweep dead connections. */
+  lastSeenAt: number;
 };
 
 /** A driver enriched with straight-line distance from a given customer. */
@@ -75,16 +82,26 @@ export function upsertOnlineClient(input: {
   serviceClass?: OnlineClient['serviceClass'];
 }): { client: OnlineClient; isNew: boolean } {
   const existing = onlineClients.get(input.id);
+  const name = input.name ?? existing?.name;
   const client: OnlineClient = {
     id: input.id,
     latitude: input.latitude,
     longitude: input.longitude,
-    ...(input.name ? { name: input.name } : {}),
+    ...(name ? { name } : {}),
     ...(input.serviceClass ? { serviceClass: input.serviceClass } : {}),
     since: existing?.since ?? new Date().toISOString(),
+    lastSeenAt: Date.now(),
   };
   onlineClients.set(input.id, client);
   return { client, isNew: !existing };
+}
+
+/** Marks a passenger as still alive without changing their position. */
+export function touchOnlineClient(id: string): boolean {
+  const client = onlineClients.get(id);
+  if (!client) return false;
+  client.lastSeenAt = Date.now();
+  return true;
 }
 
 /** Removes a passenger from the online registry. Returns true if one existed. */
@@ -94,6 +111,11 @@ export function removeOnlineClient(id: string): boolean {
 
 export function getOnlineClient(id: string): OnlineClient | undefined {
   return onlineClients.get(id);
+}
+
+/** Every online passenger, most recently online first (no distance info). */
+export function listOnlineClients(): OnlineClient[] {
+  return [...onlineClients.values()].sort((a, b) => b.since.localeCompare(a.since));
 }
 
 /**
@@ -126,14 +148,21 @@ export function upsertOnlineDriver(input: {
   latitude: number;
   longitude: number;
   vehicleType?: string;
+  name?: string;
+  heading?: number;
 }): { driver: OnlineDriver; isNew: boolean } {
   const existing = onlineDrivers.get(input.id);
+  const vehicleType = input.vehicleType ?? existing?.vehicleType;
+  const name = input.name ?? existing?.name;
   const driver: OnlineDriver = {
     id: input.id,
     latitude: input.latitude,
     longitude: input.longitude,
-    ...(input.vehicleType ? { vehicleType: input.vehicleType } : {}),
+    ...(vehicleType ? { vehicleType } : {}),
+    ...(name ? { name } : {}),
+    ...(typeof input.heading === 'number' ? { heading: input.heading } : {}),
     since: existing?.since ?? new Date().toISOString(),
+    lastSeenAt: Date.now(),
   };
   onlineDrivers.set(input.id, driver);
   return { driver, isNew: !existing };
@@ -142,6 +171,62 @@ export function upsertOnlineDriver(input: {
 /** Removes a driver from the online registry. Returns true if one existed. */
 export function removeOnlineDriver(id: string): boolean {
   return onlineDrivers.delete(id);
+}
+
+export function getOnlineDriver(id: string): OnlineDriver | undefined {
+  return onlineDrivers.get(id);
+}
+
+/** Every driver with a live, heart-beating app (admin god-view). */
+export function listOnlineDrivers(): OnlineDriver[] {
+  return [...onlineDrivers.values()];
+}
+
+/**
+ * Cache of each driver's availability toggle (the DB `isOnline` flag), so a
+ * socket heartbeat arriving after the driver tapped "Go offline" can't put
+ * them back on the map. `undefined` means "not known yet — ask the DB".
+ */
+const driverOnlineFlags = new Map<string, boolean>();
+
+export function setDriverOnlineFlag(id: string, online: boolean) {
+  driverOnlineFlags.set(id, online);
+}
+
+export function getDriverOnlineFlag(id: string): boolean | undefined {
+  return driverOnlineFlags.get(id);
+}
+
+/** True when the driver has a live, recently-heard-from connection. */
+export function isDriverLive(id: string): boolean {
+  return onlineDrivers.has(id);
+}
+
+/**
+ * Drops presence entries that stopped reporting (app killed, network lost, a
+ * half-open socket the server never saw close). Returns the removed ids so the
+ * socket layer can broadcast them as offline.
+ */
+export function sweepStalePresence(maxAgeMs: number): {
+  clientIds: string[];
+  driverIds: string[];
+} {
+  const cutoff = Date.now() - maxAgeMs;
+  const clientIds: string[] = [];
+  const driverIds: string[] = [];
+  for (const [id, client] of onlineClients) {
+    if (client.lastSeenAt < cutoff) {
+      onlineClients.delete(id);
+      clientIds.push(id);
+    }
+  }
+  for (const [id, driver] of onlineDrivers) {
+    if (driver.lastSeenAt < cutoff) {
+      onlineDrivers.delete(id);
+      driverIds.push(id);
+    }
+  }
+  return { clientIds, driverIds };
 }
 
 /**

@@ -4,7 +4,7 @@ import { createNavigationContainerRef, NavigationContainer } from '@react-naviga
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { BadgeCheck, Bike, Car, User, Wallet } from 'lucide-react-native';
 import { useCallback, useEffect, useRef } from 'react';
-import { ActivityIndicator, Alert, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { ActiveDeliveryScreen } from '../screens/ActiveDeliveryScreen';
@@ -26,11 +26,12 @@ import { SignInScreen } from '../screens/SignInScreen';
 import { WalletCheckoutScreen } from '../screens/WalletCheckoutScreen';
 import { WalletScreen } from '../screens/WalletScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
+import { apiRequest } from '../services/api';
 import { presentLocalOffer } from '../services/notifications';
-import { createRealtimeClient } from '../services/realtime';
+import { acquireSharedSocket, releaseSharedSocket } from '../services/realtime';
 import { setSentryUser } from '../services/sentry';
 import { useAuthStore } from '../store/authStore';
-import type { OfferPoint } from '../store/driverStore';
+import type { DriverOffer, OfferPoint } from '../store/driverStore';
 import { useDriverStore } from '../store/driverStore';
 import { useRiderStore } from '../store/riderStore';
 import { theme } from '../theme/tokens';
@@ -60,112 +61,199 @@ function goToDispatch() {
   if (navigationRef.isReady()) navigationRef.navigate('MainTabs');
 }
 
+type RawRideOffer = {
+  id: string;
+  tripId: string;
+  score?: string | number;
+  expiresAt: string;
+  trip?: {
+    pickupLabel?: string;
+    pickupLatitude?: string | number;
+    pickupLongitude?: string | number;
+    dropoffLabel?: string;
+    dropoffLatitude?: string | number;
+    dropoffLongitude?: string | number;
+    totalFare?: string | number;
+    distanceKm?: string | number;
+    passenger?: { name?: string };
+  };
+};
+
+function toDriverOffer(offer: RawRideOffer): DriverOffer {
+  const pickup = toOfferPoint({
+    ...(offer.trip?.pickupLabel ? { label: offer.trip.pickupLabel } : {}),
+    latitude: offer.trip?.pickupLatitude ?? null,
+    longitude: offer.trip?.pickupLongitude ?? null,
+  });
+  const dropoff = toOfferPoint({
+    ...(offer.trip?.dropoffLabel ? { label: offer.trip.dropoffLabel } : {}),
+    latitude: offer.trip?.dropoffLatitude ?? null,
+    longitude: offer.trip?.dropoffLongitude ?? null,
+  });
+  const fare = Number(offer.trip?.totalFare);
+  const tripDistanceKm = Number(offer.trip?.distanceKm);
+  return {
+    id: offer.id,
+    tripId: offer.tripId,
+    score: Number(offer.score ?? 0),
+    expiresAt: offer.expiresAt,
+    ...(offer.trip?.passenger?.name ? { passengerName: offer.trip.passenger.name } : {}),
+    ...(pickup ? { pickup } : {}),
+    ...(dropoff ? { dropoff } : {}),
+    ...(Number.isFinite(fare) && fare > 0 ? { fare } : {}),
+    ...(Number.isFinite(tripDistanceKm) && tripDistanceKm > 0 ? { tripDistanceKm } : {}),
+  };
+}
+
+/**
+ * Asks the API what the driver should be doing right now — an unfinished trip
+ * to resume and/or a pending offer — so nothing is lost when the app was
+ * backgrounded, restarted, or missed a socket event.
+ */
+async function syncDriverRideState() {
+  try {
+    const current = await apiRequest<{
+      activeTrip: { tripId: string } | null;
+      pendingOffer: RawRideOffer | null;
+    }>('/ride-dispatch/me/current');
+    const store = useDriverStore.getState();
+    store.setActiveTripId(current.activeTrip?.tripId ?? null);
+    if (current.pendingOffer) {
+      if (store.currentOffer?.id !== current.pendingOffer.id) {
+        store.setCurrentOffer(toDriverOffer(current.pendingOffer));
+      }
+    } else if (store.currentOffer && new Date(store.currentOffer.expiresAt) < new Date()) {
+      store.setCurrentOffer(null);
+    }
+  } catch {
+    // Older API or offline: the socket stream still delivers new offers.
+  }
+}
+
 function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
   const setCurrentRideOffer = useDriverStore((state) => state.setCurrentOffer);
+  const setActiveTripId = useDriverStore((state) => state.setActiveTripId);
   const setCurrentDeliveryOffer = useRiderStore((state) => state.setCurrentOffer);
 
   // Register the Expo push token once authenticated and route taps to Dispatch.
-  usePushNotifications({ enabled, onNotificationResponse: goToDispatch });
+  usePushNotifications({
+    enabled,
+    onNotificationResponse: () => {
+      goToDispatch();
+      void syncDriverRideState();
+    },
+  });
 
   useEffect(() => {
     if (!enabled) return;
-    let cleanup: () => void = () => undefined;
-
-    createRealtimeClient().then((socket) => {
-      socket.on(realtimeEvents.driverOffer, (offer) => {
-        const pickup = toOfferPoint({
-          label: offer.trip?.pickupLabel,
-          latitude: offer.trip?.pickupLatitude,
-          longitude: offer.trip?.pickupLongitude,
-        });
-        const dropoff = toOfferPoint({
-          label: offer.trip?.dropoffLabel,
-          latitude: offer.trip?.dropoffLatitude,
-          longitude: offer.trip?.dropoffLongitude,
-        });
-        setCurrentRideOffer({
-          id: offer.id,
-          tripId: offer.tripId,
-          score: Number(offer.score),
-          expiresAt: offer.expiresAt,
-          ...(offer.trip?.passenger?.name ? { passengerName: offer.trip.passenger.name } : {}),
-          ...(pickup ? { pickup } : {}),
-          ...(dropoff ? { dropoff } : {}),
-        });
-        void presentLocalOffer({
-          title: 'New ride request',
-          body: 'A nearby passenger is waiting. Tap to accept or reject.',
-          data: { type: 'ride-offer', tripId: offer.tripId },
-        });
-        Alert.alert(
-          'New ride request',
-          'A nearby passenger is waiting. Open Dispatch to accept or reject.',
-          [
-            {
-              text: 'View',
-              onPress: goToDispatch,
-            },
-            { text: 'Later', style: 'cancel' },
-          ]
-        );
-      });
-      socket.on(realtimeEvents.riderOffer, (offer) => {
-        const pickup = toOfferPoint({
-          label: offer.delivery?.pickupLabel,
-          latitude: offer.delivery?.pickupLatitude,
-          longitude: offer.delivery?.pickupLongitude,
-        });
-        const dropoff = toOfferPoint({
-          label: offer.delivery?.dropoffLabel,
-          latitude: offer.delivery?.dropoffLatitude,
-          longitude: offer.delivery?.dropoffLongitude,
-        });
-        setCurrentDeliveryOffer({
-          id: offer.id,
-          deliveryId: offer.deliveryId,
-          score: Number(offer.score),
-          expiresAt: offer.expiresAt,
-          ...(offer.delivery?.customer?.name ? { customerName: offer.delivery.customer.name } : {}),
-          ...(pickup ? { pickup } : {}),
-          ...(dropoff ? { dropoff } : {}),
-        });
-        void presentLocalOffer({
-          title: 'New delivery offer',
-          body: 'A nearby customer delivery is waiting. Tap to accept or reject.',
-          data: { type: 'delivery-offer', deliveryId: offer.deliveryId },
-        });
-        Alert.alert(
-          'New delivery offer',
-          'A nearby customer delivery is waiting. Open Delivery Dispatch to accept or reject.',
-          [
-            {
-              text: 'View',
-              onPress: goToDispatch,
-            },
-            { text: 'Later', style: 'cancel' },
-          ]
-        );
-      });
-      socket.on(realtimeEvents.clientRegistered, (client: { name?: string }) => {
-        void presentLocalOffer({
-          title: 'New passenger on Benbax',
-          body: client?.name
-            ? `${client.name} just joined. More riders means more trips.`
-            : 'A new passenger just joined. More riders means more trips.',
-          data: { type: 'client-registered' },
-        });
-      });
-      socket.on(realtimeEvents.rideAssigned, (assignment) => {
-        if (assignment.tripId) setCurrentRideOffer(null);
-      });
-      socket.on(realtimeEvents.deliveryAssigned, (assignment) => {
-        if (assignment.deliveryId) setCurrentDeliveryOffer(null);
-      });
-      cleanup = () => socket.disconnect();
+    void syncDriverRideState();
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void syncDriverRideState();
     });
+    return () => appState.remove();
+  }, [enabled]);
 
-    return () => cleanup();
-  }, [enabled, setCurrentDeliveryOffer, setCurrentRideOffer]);
+  useEffect(() => {
+    if (!enabled) return;
+    const socket = acquireSharedSocket();
+    type Handler = (...args: any[]) => void; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const handlers: Array<[string, Handler]> = [];
+    const on = (event: string, handler: Handler) => {
+      socket.on(event, handler);
+      handlers.push([event, handler]);
+    };
+
+    on(realtimeEvents.driverOffer, (offer: RawRideOffer) => {
+      const next = toDriverOffer(offer);
+      setCurrentRideOffer(next);
+      const where = next.pickup?.label ? ` at ${next.pickup.label}` : '';
+      const fare = next.fare != null ? ` · GHS ${next.fare.toFixed(2)}` : '';
+      void presentLocalOffer({
+        title: 'New ride request',
+        body: `A passenger${where} is waiting${fare}. Tap to accept.`,
+        data: { type: 'ride-offer', tripId: offer.tripId },
+      });
+      Alert.alert('New ride request', `A passenger${where} is waiting${fare}.`, [
+        {
+          text: 'View',
+          onPress: goToDispatch,
+        },
+        { text: 'Later', style: 'cancel' },
+      ]);
+    });
+    // The offer timed out (or the passenger cancelled / another driver took
+    // the ride): drop the Accept card so it can't be tapped in vain.
+    on(realtimeEvents.driverOfferExpired, (payload: { assignmentId?: string }) => {
+      const offer = useDriverStore.getState().currentOffer;
+      if (offer && offer.id === payload?.assignmentId) setCurrentRideOffer(null);
+    });
+    on(realtimeEvents.rideClosed, (payload: { tripId?: string; driverId?: string }) => {
+      const offer = useDriverStore.getState().currentOffer;
+      if (offer && offer.tripId === payload?.tripId) setCurrentRideOffer(null);
+    });
+    on(realtimeEvents.riderOffer, (offer) => {
+      const pickup = toOfferPoint({
+        label: offer.delivery?.pickupLabel,
+        latitude: offer.delivery?.pickupLatitude,
+        longitude: offer.delivery?.pickupLongitude,
+      });
+      const dropoff = toOfferPoint({
+        label: offer.delivery?.dropoffLabel,
+        latitude: offer.delivery?.dropoffLatitude,
+        longitude: offer.delivery?.dropoffLongitude,
+      });
+      setCurrentDeliveryOffer({
+        id: offer.id,
+        deliveryId: offer.deliveryId,
+        score: Number(offer.score),
+        expiresAt: offer.expiresAt,
+        ...(offer.delivery?.customer?.name ? { customerName: offer.delivery.customer.name } : {}),
+        ...(pickup ? { pickup } : {}),
+        ...(dropoff ? { dropoff } : {}),
+      });
+      void presentLocalOffer({
+        title: 'New delivery offer',
+        body: 'A nearby customer delivery is waiting. Tap to accept or reject.',
+        data: { type: 'delivery-offer', deliveryId: offer.deliveryId },
+      });
+      Alert.alert(
+        'New delivery offer',
+        'A nearby customer delivery is waiting. Open Delivery Dispatch to accept or reject.',
+        [
+          {
+            text: 'View',
+            onPress: goToDispatch,
+          },
+          { text: 'Later', style: 'cancel' },
+        ]
+      );
+    });
+    on(realtimeEvents.clientRegistered, (client: { name?: string }) => {
+      void presentLocalOffer({
+        title: 'New passenger on Benbax',
+        body: client?.name
+          ? `${client.name} just joined. More riders means more trips.`
+          : 'A new passenger just joined. More riders means more trips.',
+        data: { type: 'client-registered' },
+      });
+    });
+    // Sent only to the driver who won the ride.
+    on(realtimeEvents.rideAssigned, (assignment: { tripId?: string; status?: string }) => {
+      if (!assignment.tripId) return;
+      setCurrentRideOffer(null);
+      if (assignment.status === 'ACCEPTED') setActiveTripId(assignment.tripId);
+    });
+    on(realtimeEvents.deliveryAssigned, (assignment) => {
+      if (assignment.deliveryId) setCurrentDeliveryOffer(null);
+    });
+    // Missed events while disconnected: resync on every reconnect.
+    on('connect', () => void syncDriverRideState());
+
+    return () => {
+      handlers.forEach(([event, handler]) => socket.off(event, handler));
+      releaseSharedSocket();
+    };
+  }, [enabled, setActiveTripId, setCurrentDeliveryOffer, setCurrentRideOffer]);
 
   return null;
 }

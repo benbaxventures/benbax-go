@@ -8,6 +8,7 @@ import { estimateRide } from '../dispatch/dispatch.engine';
 import { notifyRideRequested } from '../notifications/triggers';
 import { recordTripStatusEvent } from '../orders/status-events';
 import { settleRideTrip } from '../payments/settlement';
+import { PUBLIC_DRIVER_PROFILE_SELECT } from '../ride-dispatch/ride-marketplace';
 import { buildExpectedRoute } from '../tracking/routeSafety';
 
 const CANCELLABLE_STATUSES: RideTripStatus[] = [
@@ -135,12 +136,7 @@ export async function getRide(id: string, requesterId: string) {
       trackingPoints: { orderBy: { capturedAt: 'desc' }, take: 25 },
       assignments: {
         include: {
-          driverProfile: {
-            include: {
-              user: { select: { id: true, name: true, phone: true } },
-              vehicle: true,
-            },
-          },
+          driverProfile: { select: PUBLIC_DRIVER_PROFILE_SELECT },
         },
         orderBy: { offeredAt: 'desc' },
       },
@@ -154,6 +150,10 @@ export async function getRide(id: string, requesterId: string) {
   // still produce a valid dial/WhatsApp target.
   return {
     ...ride,
+    passenger: {
+      ...ride.passenger,
+      phone: normalizePhoneNumber(ride.passenger.phone),
+    },
     assignments: ride.assignments.map((assignment) => ({
       ...assignment,
       driverProfile: {
@@ -203,7 +203,7 @@ export async function updateRideStatus(id: string, status: RideTripStatus, actor
  */
 export async function updateDriverRideStatus(
   id: string,
-  status: Extract<RideTripStatus, 'ARRIVED' | 'COMPLETED'>,
+  status: Extract<RideTripStatus, 'ARRIVED' | 'IN_PROGRESS' | 'COMPLETED'>,
   driverUserId: string
 ) {
   const assignment = await prisma.rideAssignment.findFirst({
@@ -222,13 +222,20 @@ export async function updateDriverRideStatus(
   const allowedStatuses: RideTripStatus[] =
     status === RideTripStatus.ARRIVED
       ? [RideTripStatus.ASSIGNED, RideTripStatus.DRIVER_ARRIVING, RideTripStatus.ARRIVED]
-      : [
-          RideTripStatus.ASSIGNED,
-          RideTripStatus.DRIVER_ARRIVING,
-          RideTripStatus.ARRIVED,
-          RideTripStatus.IN_PROGRESS,
-          RideTripStatus.COMPLETED,
-        ];
+      : status === RideTripStatus.IN_PROGRESS
+        ? [
+            RideTripStatus.ASSIGNED,
+            RideTripStatus.DRIVER_ARRIVING,
+            RideTripStatus.ARRIVED,
+            RideTripStatus.IN_PROGRESS,
+          ]
+        : [
+            RideTripStatus.ASSIGNED,
+            RideTripStatus.DRIVER_ARRIVING,
+            RideTripStatus.ARRIVED,
+            RideTripStatus.IN_PROGRESS,
+            RideTripStatus.COMPLETED,
+          ];
   if (!allowedStatuses.includes(trip.status)) {
     throw badRequest(`Ride cannot be updated from status: ${trip.status}`);
   }

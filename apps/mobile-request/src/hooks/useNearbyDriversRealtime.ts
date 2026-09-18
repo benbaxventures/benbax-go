@@ -29,8 +29,9 @@ function normalizeDriver(raw: unknown): NearbyDriver | null {
     id: String(id),
     latitude,
     longitude,
-    distanceKm: d.distanceKm != null ? Number(d.distanceKm) : 0,
+    distanceKm: d.distanceKm != null ? Number(d.distanceKm) : Number.NaN,
     vehicleType: typeof d.vehicleType === 'string' ? d.vehicleType : null,
+    ...(typeof d.name === 'string' ? { name: d.name } : {}),
   };
 }
 
@@ -45,13 +46,17 @@ type WatchArgs = {
  *
  * While `enabled` it opens a realtime socket, tells the server where the
  * customer is, and keeps the returned `drivers` array in sync as drivers
- * come online, move, and go offline.
+ * come online, move, and go offline. `live` is true once the server's
+ * snapshot has arrived on the current connection — from then on an empty
+ * list genuinely means "no drivers online" and must not be second-guessed
+ * by the REST fallback.
  */
 export function useNearbyDriversRealtime(
   enabled: boolean,
   location: { latitude: number | null; longitude: number | null }
 ) {
   const [drivers, setDrivers] = useState<NearbyDriver[]>([]);
+  const [live, setLive] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const watchRef = useRef<WatchArgs>({ latitude: 0, longitude: 0 });
 
@@ -69,6 +74,7 @@ export function useNearbyDriversRealtime(
   useEffect(() => {
     if (!enabled || !hasLocation) {
       setDrivers([]);
+      setLive(false);
       return;
     }
 
@@ -86,7 +92,11 @@ export function useNearbyDriversRealtime(
         const list = Array.isArray(payload) ? payload : [];
         const normalized = list.map(normalizeDriver).filter((d): d is NearbyDriver => d !== null);
         setDrivers(normalized);
+        setLive(true);
       });
+
+      // While disconnected the list can go stale; let the REST poll take over.
+      socket.on('disconnect', () => setLive(false));
 
       // A new driver appeared.
       socket.on(DRIVER_EVENTS.online, (payload: unknown) => {
@@ -138,6 +148,7 @@ export function useNearbyDriversRealtime(
       socketRef.current?.emit('driver:unwatch');
       socketRef.current?.disconnect();
       socketRef.current = null;
+      setLive(false);
     };
   }, [enabled, hasLocation]);
 
@@ -147,5 +158,5 @@ export function useNearbyDriversRealtime(
     socketRef.current.emit('driver:watch', watchRef.current);
   }, [enabled, hasLocation, location.latitude, location.longitude]);
 
-  return drivers;
+  return { drivers, live };
 }
