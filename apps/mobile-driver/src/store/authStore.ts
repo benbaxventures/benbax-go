@@ -1,13 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { apiRequest, setUnauthorizedHandler } from '../services/api';
+import { normalizePhoneNumber } from '../services/contact';
 
 type DriverUser = {
   id: string;
   name: string;
-  phone: string;
+  /** Null for accounts created by Google sign-in, which carries no number. */
+  phone: string | null;
   role: string;
   email?: string;
+  /** No reachable number: a passenger could never be called back. */
+  needsPhone?: boolean;
 };
 
 type AuthState = {
@@ -32,7 +36,21 @@ type AuthState = {
   hydrate: () => Promise<void>;
   updateUser: (updated: Partial<DriverUser>) => Promise<void>;
   completeOnboarding: () => Promise<void>;
+  /** Claim a phone number for an account that signed up without one. */
+  setPhone: (phone: string) => Promise<void>;
 };
+
+/**
+ * Whether this account still owes us a phone number.
+ *
+ * The API sends `needsPhone`, but a session stored before that field existed
+ * has no such flag — and a Google account's stored phone is the raw
+ * `google:<sub>` placeholder. Deriving it from the number itself catches those
+ * sessions on the next launch instead of waiting for a fresh sign-in.
+ */
+function resolveNeedsPhone(user: DriverUser): DriverUser {
+  return { ...user, needsPhone: user.needsPhone ?? normalizePhoneNumber(user.phone) === null };
+}
 
 const ONBOARDING_KEY = 'benbax.driver.onboardingComplete';
 const WELCOME_KEY = 'benbax.driver.hasSeenWelcome';
@@ -122,7 +140,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const shouldRestore = rememberMe !== 'false';
     const onboardingComplete = storedOnboarding === 'true';
     set({
-      user: shouldRestore && rawUser ? JSON.parse(rawUser) : null,
+      user: shouldRestore && rawUser ? resolveNeedsPhone(JSON.parse(rawUser)) : null,
       isHydrating: false,
       onboardingComplete: shouldRestore ? onboardingComplete : false,
       hasSeenWelcome: storedWelcome === 'true',
@@ -148,6 +166,14 @@ export const useAuthStore = create<AuthState>((set) => ({
     const nextUser = { ...currentUser, ...updated };
     await AsyncStorage.setItem('benbax.driver.user', JSON.stringify(nextUser));
     set({ user: nextUser });
+  },
+
+  async setPhone(phone) {
+    const data = await apiRequest<{ phone: string }>('/users/me/phone', {
+      method: 'PATCH',
+      body: JSON.stringify({ phone }),
+    });
+    await useAuthStore.getState().updateUser({ phone: data.phone, needsPhone: false });
   },
 
   async completeOnboarding() {

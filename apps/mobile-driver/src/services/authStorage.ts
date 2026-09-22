@@ -7,9 +7,12 @@ const USER_KEY = 'benbax.driver.user';
 type StoredUser = {
   id: string;
   name: string;
-  phone: string;
+  /** Null for accounts created by Google sign-in, which carries no number. */
+  phone: string | null;
   email?: string | null;
   role: string;
+  /** The account has no reachable number and must supply one. */
+  needsPhone?: boolean;
 };
 
 export async function getAccessToken() {

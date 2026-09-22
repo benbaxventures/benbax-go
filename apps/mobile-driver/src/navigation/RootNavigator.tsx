@@ -18,6 +18,7 @@ import { KycScreen } from '../screens/KycScreen';
 import { NewsScreen } from '../screens/NewsScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { OnboardingFlow } from '../screens/OnboardingFlow';
+import { PhoneRequiredScreen } from '../screens/PhoneRequiredScreen';
 import { PriorityDetailsScreen } from '../screens/PriorityDetailsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
@@ -350,7 +351,7 @@ export function RootNavigator() {
   }, [hydrate]);
 
   useEffect(() => {
-    setSentryUser(user ? { id: user.id, phone: user.phone } : null);
+    setSentryUser(user ? { id: user.id, ...(user.phone ? { phone: user.phone } : {}) } : null);
     if (user) {
       hydratePreferences();
     }
@@ -369,6 +370,13 @@ export function RootNavigator() {
         <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
+  }
+
+  // A Google sign-up arrives with no phone number, and a driver nobody can
+  // call is not one we can send to a passenger. Collected before anything
+  // else, including going online.
+  if (user?.needsPhone) {
+    return <PhoneRequiredScreen />;
   }
 
   return (

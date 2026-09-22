@@ -66,17 +66,41 @@ function authPayload(user: {
   role: UserRole;
 }) {
   return {
-    user: {
-      id: user.id,
-      name: user.name,
-      phone: user.phone,
-      email: user.email,
-      role: user.role,
-    },
+    user: publicUser(user),
     tokens: {
       accessToken: signAccessToken(user),
       refreshToken: signRefreshToken(user),
     },
+  };
+}
+
+/**
+ * The account as a client may see it.
+ *
+ * `phone` is normalized rather than passed through: accounts created by Google
+ * sign-in hold a `google:<sub>` placeholder in the unique phone column, and
+ * that sentinel used to reach the apps, which rendered it on the profile
+ * screen as if it were a number. It leaves as `null` instead, with
+ * `needsPhone` telling the app to ask for a real one.
+ */
+function publicUser(user: {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  role: UserRole;
+}) {
+  // Fields are picked, never spread: callers pass whole database rows, which
+  // carry the password hash.
+  const phone = normalizePhoneNumber(user.phone);
+  return {
+    id: user.id,
+    name: user.name,
+    phone,
+    email: user.email,
+    role: user.role,
+    /** No reachable number: the app must collect one before the user can ride. */
+    needsPhone: phone === null,
   };
 }
 
@@ -430,7 +454,7 @@ export async function resetPassword(identifier: string, token: string, newPasswo
 }
 
 export async function me(userId: string) {
-  return prisma.user.findUniqueOrThrow({
+  const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: {
       id: true,
@@ -444,4 +468,9 @@ export async function me(userId: string) {
       driverProfile: true,
     },
   });
+
+  // Same treatment as the sign-in payload: the placeholder never leaves here,
+  // and the app is told outright that it has to collect a number.
+  const phone = normalizePhoneNumber(user.phone);
+  return { ...user, phone, needsPhone: phone === null };
 }

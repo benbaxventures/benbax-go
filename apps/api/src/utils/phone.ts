@@ -3,6 +3,32 @@ const MIN_E164_DIGITS = 8;
 const MAX_E164_DIGITS = 15;
 
 /**
+ * Prefixes written into `User.phone` when there is no real number.
+ *
+ * The column is unique and non-null, so accounts created without a phone —
+ * Google sign-ups, and deleted accounts whose number is freed for re-use —
+ * hold a placeholder instead. `normalizePhoneNumber` rejects them, so they can
+ * never be dialled, messaged, or matched at sign-in.
+ */
+const PLACEHOLDER_PHONE_PREFIXES = ['google:', 'deleted:'];
+
+/** True when the account has no phone number anyone could actually reach. */
+export function isPlaceholderPhone(value: string | null | undefined): boolean {
+  if (typeof value !== 'string') return true;
+  const raw = value.trim();
+  if (!raw) return true;
+  return PLACEHOLDER_PHONE_PREFIXES.some((prefix) => raw.startsWith(prefix));
+}
+
+/**
+ * True when the account still needs a usable phone number from its owner —
+ * either a placeholder, or something stored long ago that no longer parses.
+ */
+export function needsPhoneNumber(value: string | null | undefined): boolean {
+  return normalizePhoneNumber(value) === null;
+}
+
+/**
  * Return a dialable E.164 number. Ghana local numbers are converted to +233
  * and the trunk zero is removed, so values such as +2330501234567 do not leak
  * into call or WhatsApp links.
@@ -11,7 +37,7 @@ export function normalizePhoneNumber(value: string | null | undefined): string |
   if (typeof value !== 'string') return null;
 
   const raw = value.trim();
-  if (!raw || raw.startsWith('google:') || raw.startsWith('deleted:')) return null;
+  if (!raw || PLACEHOLDER_PHONE_PREFIXES.some((prefix) => raw.startsWith(prefix))) return null;
 
   let digits = raw.replace(/\D/g, '');
   const hasInternationalPrefix = raw.startsWith('+') || digits.startsWith('00');

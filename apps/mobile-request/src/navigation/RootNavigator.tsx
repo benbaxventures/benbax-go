@@ -13,6 +13,7 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { PaymentCheckoutScreen } from '../screens/PaymentCheckoutScreen';
+import { PhoneRequiredScreen } from '../screens/PhoneRequiredScreen';
 import { PrivacyProtectionScreen } from '../screens/PrivacyProtectionScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { ResetPasswordScreen } from '../screens/ResetPasswordScreen';
@@ -156,6 +157,13 @@ export function RootNavigator() {
 
   if (user && biometricEnabled && !biometricGatePassed) {
     return <BiometricGateScreen onSuccess={() => setBiometricGatePassed(true)} />;
+  }
+
+  // A Google sign-up arrives with no phone number. Nobody can reach the
+  // passenger — not their driver, not a reset code — so the number is
+  // collected before the app is usable, the same way the biometric gate works.
+  if (user?.needsPhone) {
+    return <PhoneRequiredScreen />;
   }
 
   return (

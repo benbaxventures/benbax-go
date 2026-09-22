@@ -7,14 +7,19 @@ import {
   saveAuthSession,
   setBiometricEnabled,
   setHasRegisteredBefore,
+  updateStoredUser,
 } from '../services/authStorage';
+import { normalizePhoneNumber } from '../services/contact';
 
 type User = {
   id: string;
   name: string;
-  phone: string;
+  /** Null for accounts created by Google sign-in, which carries no number. */
+  phone: string | null;
   email?: string | null;
   role: string;
+  /** The account has no reachable number and must supply one before riding. */
+  needsPhone?: boolean;
 };
 
 type AuthState = {
@@ -35,7 +40,21 @@ type AuthState = {
   }) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
+  /** Claim a phone number for an account that signed up without one. */
+  setPhone: (phone: string) => Promise<void>;
 };
+
+/**
+ * Whether this account still owes us a phone number.
+ *
+ * The API sends `needsPhone`, but a session stored before that field existed
+ * has no such flag — and a Google account's stored phone is the raw
+ * `google:<sub>` placeholder. Deriving it from the number itself catches those
+ * sessions on the next launch instead of waiting for a fresh sign-in.
+ */
+function resolveNeedsPhone(user: User): User {
+  return { ...user, needsPhone: user.needsPhone ?? normalizePhoneNumber(user.phone) === null };
+}
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
@@ -91,7 +110,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   async hydrate() {
     const [user, biometricEnabled] = await Promise.all([getStoredUser(), getBiometricEnabled()]);
-    set({ user, biometricEnabled, isHydrating: false });
+    set({ user: user ? resolveNeedsPhone(user) : null, biometricEnabled, isHydrating: false });
+  },
+  async setPhone(phone) {
+    const data = await apiRequest<{ phone: string }>('/users/me/phone', {
+      method: 'PATCH',
+      body: JSON.stringify({ phone }),
+    });
+    set((state) =>
+      state.user ? { user: { ...state.user, phone: data.phone, needsPhone: false } } : state
+    );
+    const updated = useAuthStore.getState().user;
+    if (updated) await updateStoredUser(updated);
   },
 }));
 
