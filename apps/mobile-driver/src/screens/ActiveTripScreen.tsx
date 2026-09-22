@@ -27,7 +27,7 @@ import { useDriverLocation } from '../hooks/useDriverLocation';
 import { useLiveLocation } from '../hooks/useLiveLocation';
 import { useVoiceNavigation } from '../hooks/useVoiceNavigation';
 import type { RootStackParamList } from '../navigation/types';
-import { apiRequest, ApiResponseError } from '../services/api';
+import { apiRequest, ApiResponseError, describeApiError } from '../services/api';
 import { callPhone, openWhatsApp } from '../services/contact';
 import {
   fetchDrivingRoute,
@@ -35,6 +35,7 @@ import {
   openExternalNavigation,
   type RouteResult,
 } from '../services/directions';
+import { displayPlaceLabel } from '../services/placeName';
 import { acquireSharedSocket, onEveryConnect, releaseSharedSocket } from '../services/realtime';
 import { useAuthStore } from '../store/authStore';
 import { useDriverStore } from '../store/driverStore';
@@ -315,7 +316,7 @@ export function ActiveTripScreen({ route, navigation }: Props) {
           await logout();
           return;
         }
-        Alert.alert('Error', err instanceof Error ? err.message : fallbackError);
+        Alert.alert('Error', describeApiError(err, fallbackError));
       } finally {
         setActionLoading(null);
       }
@@ -352,7 +353,7 @@ export function ActiveTripScreen({ route, navigation }: Props) {
       } else if (err instanceof ApiResponseError && err.status === 401) {
         await logout();
       } else {
-        Alert.alert('Error', err instanceof Error ? err.message : 'Could not start the trip.');
+        Alert.alert('Error', describeApiError(err, 'Could not start the trip.'));
       }
     } finally {
       setActionLoading(null);
@@ -382,29 +383,54 @@ export function ActiveTripScreen({ route, navigation }: Props) {
 
   // The driver can't make it: hand the passenger to another driver instead of
   // cancelling their ride.
+  //
+  // The endpoint is idempotent, so a retry after a dropped connection reports
+  // the ride as already released rather than failing. Either way the driver is
+  // free and must leave this screen — a release that "failed" but actually
+  // landed is exactly how the app used to get stuck on "Trip in progress".
+  const releaseTrip = useCallback(async () => {
+    setActionLoading('release');
+    try {
+      const result = await apiRequest<{ released?: boolean; alreadyReleased?: boolean }>(
+        `/ride-dispatch/trips/${route.params.tripId}/release`,
+        { method: 'POST' }
+      );
+      finishTrip();
+      navigation.goBack();
+      if (result?.alreadyReleased) {
+        Alert.alert('Ride released', 'This ride had already gone back to other drivers.');
+      }
+    } catch (err) {
+      if (err instanceof ApiResponseError && err.status === 401) {
+        await logout();
+        return;
+      }
+      // The server says this ride is no longer ours (someone else took it, or
+      // the passenger cancelled). Nothing to release, and staying here would
+      // leave the driver stranded on a trip they do not have.
+      if (err instanceof ApiResponseError && (err.status === 403 || err.status === 404)) {
+        finishTrip();
+        navigation.goBack();
+        Alert.alert('Ride no longer assigned to you', describeApiError(err));
+        return;
+      }
+      Alert.alert('Could not release this ride', describeApiError(err));
+      queryClient.invalidateQueries({ queryKey: ['ride-trip', route.params.tripId] });
+    } finally {
+      setActionLoading(null);
+    }
+  }, [finishTrip, logout, navigation, queryClient, route.params.tripId]);
+
   const handleRelease = useCallback(() => {
     Alert.alert(
       "Can't make it?",
       'The ride goes back to other drivers and the passenger is matched again.',
       [
         { text: 'Keep ride', style: 'cancel' },
-        {
-          text: 'Release ride',
-          style: 'destructive',
-          onPress: () =>
-            void runAction(
-              'release',
-              `/ride-dispatch/trips/${route.params.tripId}/release`,
-              () => {
-                finishTrip();
-                navigation.goBack();
-              },
-              'Could not release this ride.'
-            ),
-        },
+        { text: 'Release ride', style: 'destructive', onPress: () => void releaseTrip() },
       ]
     );
-  }, [finishTrip, navigation, route.params.tripId, runAction]);
+  }, [releaseTrip]);
 
   const handleCompleteStop = useCallback(
     async (stopId: string) => {
@@ -507,7 +533,11 @@ export function ActiveTripScreen({ route, navigation }: Props) {
           rotateEnabled
           pitchEnabled
         >
-          <Marker coordinate={pickup} title="Pickup" description={trip?.pickupLabel}>
+          <Marker
+            coordinate={pickup}
+            title="Pickup"
+            description={displayPlaceLabel(trip?.pickupLabel, 'Pickup')}
+          >
             <View
               style={{
                 width: 30,
@@ -523,7 +553,11 @@ export function ActiveTripScreen({ route, navigation }: Props) {
               <MapPin size={14} color="#fff" />
             </View>
           </Marker>
-          <Marker coordinate={dropoff} title="Drop-off" description={trip?.dropoffLabel}>
+          <Marker
+            coordinate={dropoff}
+            title="Drop-off"
+            description={displayPlaceLabel(trip?.dropoffLabel, 'Drop-off')}
+          >
             <View
               style={{
                 width: 30,
@@ -547,7 +581,7 @@ export function ActiveTripScreen({ route, navigation }: Props) {
                 longitude: Number(stop.longitude),
               }}
               title={`Stop ${i + 1}`}
-              description={stop.label}
+              description={displayPlaceLabel(stop.label, `Stop ${i + 1}`)}
             >
               <View
                 style={{
@@ -657,7 +691,8 @@ export function ActiveTripScreen({ route, navigation }: Props) {
           }}
         >
           <Text style={{ color: theme.colors.ink, fontWeight: '700', fontSize: 13 }}>
-            {trip?.pickupLabel ?? 'Pickup'} → {trip?.dropoffLabel ?? 'Destination'}
+            {displayPlaceLabel(trip?.pickupLabel, 'Pickup')} →{' '}
+            {displayPlaceLabel(trip?.dropoffLabel, 'Destination')}
           </Text>
         </View>
         {/* Voice toggle */}
@@ -936,7 +971,7 @@ export function ActiveTripScreen({ route, navigation }: Props) {
                   }}
                   numberOfLines={1}
                 >
-                  {stop.label}
+                  {displayPlaceLabel(stop.label, 'Stop')}
                 </Text>
                 {!stop.completed && (
                   <TouchableOpacity onPress={() => handleCompleteStop(stop.id)}>
@@ -969,7 +1004,7 @@ export function ActiveTripScreen({ route, navigation }: Props) {
                 style={{ color: theme.colors.ink, fontWeight: '700', fontSize: 14 }}
                 numberOfLines={1}
               >
-                {trip?.pickupLabel ?? 'Passenger pickup location'}
+                {displayPlaceLabel(trip?.pickupLabel, 'Passenger pickup location')}
               </Text>
             </View>
           </View>
@@ -999,7 +1034,7 @@ export function ActiveTripScreen({ route, navigation }: Props) {
                 style={{ color: theme.colors.ink, fontWeight: '700', fontSize: 14 }}
                 numberOfLines={1}
               >
-                {trip?.dropoffLabel ?? 'Destination'}
+                {displayPlaceLabel(trip?.dropoffLabel, 'Destination')}
               </Text>
             </View>
           </View>

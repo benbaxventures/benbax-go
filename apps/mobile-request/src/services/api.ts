@@ -1,4 +1,9 @@
-import type { ApiResponse } from '../shared';
+import {
+  apiErrorCodes,
+  userFacingApiMessage,
+  userFacingMessages,
+  type ApiResponse,
+} from '../shared';
 import { clearAuthSession, getAccessToken, getRefreshToken, saveTokens } from './authStorage';
 import { resolveApiBaseUrl } from './network';
 
@@ -16,6 +21,10 @@ function getApiOriginCached() {
 }
 
 export class ApiConnectionError extends Error {
+  /** Uniform with ApiResponseError so callers can treat failures alike. */
+  readonly status = 0;
+  readonly code = apiErrorCodes.network;
+
   constructor() {
     super(
       'Could not reach the Benbax server. It may be waking up from sleep — ' +
@@ -29,14 +38,45 @@ export class ApiResponseError extends Error {
   status: number;
   code?: string | null;
   details?: unknown;
+  /** Seconds the server asked us to wait, from its Retry-After header. */
+  retryAfterSeconds?: number | null;
 
-  constructor(message: string, status: number, code?: string | null, details?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string | null,
+    details?: unknown,
+    retryAfterSeconds?: number | null
+  ) {
     super(message);
     this.name = 'ApiResponseError';
     this.status = status;
     this.code = code ?? null;
     this.details = details;
+    this.retryAfterSeconds = retryAfterSeconds ?? null;
   }
+}
+
+/**
+ * The sentence to show a passenger for any failure from this module.
+ *
+ * Screens call this instead of reading the raw error message, which is a
+ * developer string. A safe, specific reason from the backend wins; a transport
+ * failure or a 5xx becomes something the passenger can act on.
+ */
+export function describeApiError(error: unknown, fallback?: string): string {
+  if (error instanceof ApiResponseError) {
+    return userFacingApiMessage({
+      status: error.status,
+      code: error.code ?? null,
+      message: error.message,
+      retryAfterSeconds: error.retryAfterSeconds ?? null,
+    });
+  }
+  if (error instanceof ApiConnectionError) {
+    return userFacingApiMessage({ status: 0, code: apiErrorCodes.network });
+  }
+  return fallback ?? userFacingMessages.unknown;
 }
 
 export function getApiBaseUrl() {
@@ -161,23 +201,85 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     }
   }
 
-  let body: ApiResponse<T>;
+  return readBody<T>(response, path);
+}
+
+/** The API's envelope, or null when the body was something else entirely. */
+function parseEnvelope<T>(text: string): ApiResponse<T> | null {
+  if (text.trim().length === 0) return null;
   try {
-    body = (await response.json()) as ApiResponse<T>;
+    const parsed = JSON.parse(text) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof (parsed as { ok?: unknown }).ok === 'boolean'
+    ) {
+      return parsed as ApiResponse<T>;
+    }
   } catch {
-    throw new Error('The server returned an invalid response. Check the API logs and try again.');
+    // An HTML error page from a proxy, or a truncated body.
+  }
+  return null;
+}
+
+function parseRetryAfter(response: Response): number | null {
+  const header = response.headers.get('retry-after');
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds)) return seconds;
+    const date = Date.parse(header);
+    if (!Number.isNaN(date)) return Math.max(0, Math.round((date - Date.now()) / 1_000));
+  }
+  const reset = Number(response.headers.get('ratelimit-reset'));
+  return Number.isFinite(reset) ? reset : null;
+}
+
+/**
+ * Reads the response body once and turns it into either the payload or a
+ * classified error.
+ *
+ * The body is read as text first because it is not always ours: a proxy in
+ * front of the API answers a restart or a gateway timeout with an HTML page,
+ * and an aborted response can be empty. Calling `.json()` on those throws, and
+ * the old client reported every one of them as "the server returned an invalid
+ * response" — losing the status code, which was the only part that said what
+ * had actually gone wrong.
+ */
+async function readBody<T>(response: Response, path: string): Promise<T> {
+  const retryAfterSeconds = parseRetryAfter(response);
+  const text = await response.text().catch(() => '');
+  const body = parseEnvelope<T>(text);
+
+  if (!body) {
+    logApiFailure(path, response.status, text);
+    throw new ApiResponseError(
+      `Unreadable response from ${path} (HTTP ${response.status})`,
+      response.status,
+      response.status === 429 ? apiErrorCodes.rateLimited : apiErrorCodes.invalidResponse,
+      undefined,
+      retryAfterSeconds
+    );
   }
 
   if (!response.ok || !body.ok) {
-    const message =
-      body && !body.ok && body.error && body.error.message
-        ? body.error.message
-        : response.statusText || 'Request failed';
-    const code = body && !body.ok && body.error && body.error.code ? body.error.code : null;
-    const details =
-      body && !body.ok && body.error && body.error.details ? body.error.details : undefined;
-    throw new ApiResponseError(message, response.status, code, details);
+    const failure = body.ok
+      ? { message: response.statusText || 'Request failed', code: null, details: undefined }
+      : { message: body.error.message, code: body.error.code, details: body.error.details };
+    logApiFailure(path, response.status, failure.message);
+    throw new ApiResponseError(
+      failure.message,
+      response.status,
+      failure.code,
+      failure.details,
+      retryAfterSeconds
+    );
   }
 
   return body.data;
+}
+
+/** Technical detail goes to the log — never to the passenger's screen. */
+function logApiFailure(path: string, status: number, detail: string) {
+  const summary = detail.length > 300 ? `${detail.slice(0, 300)}…` : detail;
+  console.warn(`[api] ${path} failed with ${status}: ${summary}`);
 }

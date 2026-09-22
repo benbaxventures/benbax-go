@@ -4,6 +4,7 @@ import { Alert, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import type { RootStackParamList } from '../navigation/types';
+import { describeApiError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -32,10 +33,7 @@ export function EditProfileScreen({ navigation }: Props) {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
-      Alert.alert(
-        'Error updating profile',
-        error instanceof Error ? error.message : 'Please try again.'
-      );
+      Alert.alert('Error updating profile', describeApiError(error, 'Please try again.'));
     } finally {
       setLoading(false);
     }

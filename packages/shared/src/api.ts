@@ -49,4 +49,6 @@ export const realtimeEvents = {
   clientOnline: 'client:online',
   clientMoved: 'client:moved',
   clientOffline: 'client:offline',
+  // Admin god-view: one snapshot of everyone online, then live deltas.
+  presenceSnapshot: 'presence:snapshot',
 } as const;

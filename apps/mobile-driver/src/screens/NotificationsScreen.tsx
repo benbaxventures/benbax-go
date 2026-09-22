@@ -4,7 +4,7 @@ import { ArrowLeft, Bell, BellOff, Car, CheckCheck, Package, UserPlus } from 'lu
 import { useCallback } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { apiRequest } from '../services/api';
+import { apiRequest, describeApiError } from '../services/api';
 import { theme } from '../theme/tokens';
 
 type NotificationItem = {
@@ -118,7 +118,7 @@ export function NotificationsScreen() {
             Could not load notifications
           </Text>
           <Text style={{ color: theme.colors.muted, textAlign: 'center', fontSize: 13 }}>
-            {error instanceof Error ? error.message : 'Please try again.'}
+            {describeApiError(error, 'Please try again.')}
           </Text>
           <Pressable
             onPress={() => refetch()}

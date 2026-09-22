@@ -49,10 +49,34 @@ The app reads `EXPO_PUBLIC_*` variables at build/start time. Create a `.env` in 
 | -------------------------------------- | ------------------------------------- | --------------------------------------- |
 | `EXPO_PUBLIC_API_BASE_URL`             | REST API base URL                     | `https://benbax-go.onrender.com/api/v1` |
 | `EXPO_PUBLIC_SOCKET_URL`               | Socket.IO origin                      | `https://benbax-go.onrender.com`        |
-| `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`      | Google Maps rendering                 | —                                       |
+| `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`      | Maps, geocoding, place names          | —                                       |
 | `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` | Google Sign-In (Android)              | built-in dev client id                  |
 | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`     | Google Sign-In (web / token exchange) | built-in dev client id                  |
 | `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`     | Google Sign-In (iOS)                  | —                                       |
+
+### Location names
+
+[`src/services/placeName.ts`](src/services/placeName.ts) is the single place that turns coordinates
+into text a passenger reads. Coordinates stay the source of truth for matching, distance, ETA and
+navigation; only the display name comes from here.
+
+It resolves in order — establishment/POI → nearby landmark → street → neighbourhood → city →
+on-device geocoder → last good name → Plus Code → coordinates — so a passenger sees
+"Church of Pentecost, Golf Estate" rather than `Q2X5+W2R`. Results are cached per ~55 m for
+10 minutes and only re-resolved after ~120 m of real movement, and the Places landmark lookup only
+runs when the cheaper Geocoding call found nothing recognisable.
+
+The same `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` covers it, but the key needs these APIs enabled in
+Google Cloud:
+
+- **Geocoding API** — required for readable names (without it the app falls back to the coarser
+  on-device geocoder, which is what produces Plus Codes on Android).
+- **Places API** — optional; used only for the landmark fallback and for pickup/drop-off
+  autocomplete.
+- **Directions API** — used by the driver app's in-app navigation.
+
+With no key at all the app still works: booking runs on latitude/longitude, and the pickup field
+shows the best name the device can give.
 
 ### How the API URL is resolved
 

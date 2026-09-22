@@ -32,7 +32,9 @@ export async function recordDeliveryStatusEvent(
 
   // Fan the milestone out to the customer (all channels) and the ops feed.
   // Best-effort and self-contained, so it can never break the order flow.
-  void notifyDeliveryStatusChanged(deliveryId, input.toStatus);
+  void notifyDeliveryStatusChanged(deliveryId, input.toStatus).catch((error) =>
+    console.error('[api] delivery status notification failed', { deliveryId, error })
+  );
 }
 
 export async function recordTripStatusEvent(
@@ -54,5 +56,7 @@ export async function recordTripStatusEvent(
   }
 
   // Fan the milestone out to the passenger (all channels) and the ops feed.
-  void notifyRideStatusChanged(tripId, input.toStatus);
+  void notifyRideStatusChanged(tripId, input.toStatus).catch((error) =>
+    console.error('[api] ride status notification failed', { tripId, error })
+  );
 }

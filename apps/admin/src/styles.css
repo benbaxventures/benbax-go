@@ -140,6 +140,16 @@ input {
   font-weight: 700;
 }
 
+/* Secondary line under an error: what to do about it, in a quieter voice. */
+.form-error-hint {
+  display: block;
+  margin-top: 4px;
+  color: #7a271a;
+  font-weight: 500;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
 .form-notice {
   color: #0e7c66;
   font-weight: 700;
@@ -273,6 +283,12 @@ nav a.active {
   background: #e8f5f1;
   font-size: 12px;
   font-weight: 900;
+}
+
+/* The live feed is down: positions on screen are the last ones received. */
+.live-dot-offline {
+  color: #b54708;
+  background: #fef0c7;
 }
 
 .metrics-grid {

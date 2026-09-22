@@ -59,7 +59,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#0E7C66"
         }
-      ]
+      ],
+      "./plugins/withContactQueries"
     ],
     "extra": {
       "apiBaseUrl": "${EXPO_PUBLIC_API_BASE_URL}",

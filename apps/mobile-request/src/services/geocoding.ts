@@ -1,6 +1,12 @@
 // Forward geocoding: turn a place name the customer types or taps ("Ashaiman")
 // into real map coordinates so the map can move there. Best-effort and never
 // throws — callers treat `null` as "couldn't resolve".
+//
+// Reverse geocoding (coordinate → readable name) lives in ./placeName, which is
+// the app's single source of location names; `reverseGeocodePoint` below is a
+// thin adapter kept for the existing callers.
+
+import { describePlace, formatPlaceLabel, stripPlusCode } from './placeName';
 
 export type GeoPoint = { latitude: number; longitude: number };
 export type GeoResult = GeoPoint & { label: string; formattedAddress?: string };
@@ -60,11 +66,14 @@ async function geocodeViaGoogle(query: string, apiKey: string): Promise<GeoResul
     const location = first?.geometry?.location;
     if (!location) return null;
 
+    // Google sometimes leads a Ghanaian address with its Plus Code; that is not
+    // a name a passenger recognises, so drop it before showing the result.
+    const readable = stripPlusCode(first?.formatted_address);
     return {
       latitude: location.lat,
       longitude: location.lng,
-      label: first?.formatted_address ?? query,
-      ...(first?.formatted_address ? { formattedAddress: first.formatted_address } : {}),
+      label: readable ?? query,
+      ...(readable ? { formattedAddress: readable } : {}),
     };
   } catch {
     return null;
@@ -97,96 +106,28 @@ export async function geocodePlace(query: string): Promise<GeoResult | null> {
   return null;
 }
 
-type GoogleReverseResponse = {
-  status: string;
-  results: Array<{
-    formatted_address?: string;
-    address_components?: Array<{ long_name: string; short_name: string; types: string[] }>;
-  }>;
-};
-
-// Prefer a landmark/street-level name over the city so map labels stay readable.
-function buildReadableLabel(
-  components: Array<{ long_name: string; short_name: string; types: string[] }>
-): string | null {
-  const pick = (...types: string[]) => {
-    const match = components.find((comp) => comp.types.some((type) => types.includes(type)));
-    return match?.long_name ?? null;
-  };
-  return (
-    pick('establishment', 'point_of_interest', 'route', 'neighborhood', 'sublocality_level_1') ??
-    pick('locality')
-  );
-}
-
-async function reverseGeocodeViaGoogle(
-  lat: number,
-  lng: number,
-  apiKey: string
-): Promise<ReverseGeoResult | null> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GOOGLE_TIMEOUT_MS);
-  try {
-    const url =
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}` +
-      `&result_type=route|neighborhood|sublocality_level_1|establishment|point_of_interest|locality` +
-      `&region=gh&key=${apiKey}`;
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) return null;
-
-    const body = (await response.json()) as GoogleReverseResponse;
-    const first = body.status === 'OK' ? body.results?.[0] : undefined;
-    if (!first) return null;
-
-    const label =
-      buildReadableLabel(first.address_components ?? []) ??
-      first.formatted_address?.split(',')[0]?.trim() ??
-      'Selected location';
-    return {
-      latitude: lat,
-      longitude: lng,
-      label,
-      formattedAddress: first.formatted_address ?? label,
-    };
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 /**
  * Reverse-geocode a map coordinate into a readable place name ("Tetteh Quashie
- * Interchange", "Haatso Road") plus the full formatted address. Best-effort —
- * returns null when neither Google nor the on-device geocoder resolves.
+ * Interchange", "Golf Estate") plus the full formatted address.
+ *
+ * Delegates to the shared place service so a map tap gets exactly the same
+ * naming ladder as the pickup field — establishment → landmark → street →
+ * neighbourhood → city — and shares its cache. Returns null when nothing better
+ * than a Plus Code could be found, which is what existing callers already treat
+ * as "couldn't resolve".
  */
 export async function reverseGeocodePoint(
   lat: number,
   lng: number
 ): Promise<ReverseGeoResult | null> {
-  const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-  if (apiKey) {
-    const viaGoogle = await reverseGeocodeViaGoogle(lat, lng, apiKey);
-    if (viaGoogle) return viaGoogle;
-  }
-
-  try {
-    const Location = await import('expo-location');
-    const [place] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-    if (place) {
-      const label =
-        place.name || place.street || place.district || place.city || 'Selected location';
-      const formattedAddress =
-        [place.name, place.street, place.district, place.city, place.region, place.country]
-          .filter(Boolean)
-          .join(', ') || label;
-      return { latitude: lat, longitude: lng, label, formattedAddress };
-    }
-  } catch {
-    // fall through to null
-  }
-
-  return null;
+  const place = await describePlace(lat, lng);
+  if (place.isFallback) return null;
+  return {
+    latitude: lat,
+    longitude: lng,
+    label: formatPlaceLabel(place) ?? place.placeName,
+    formattedAddress: place.formattedAddress || place.placeName,
+  };
 }
 
 // ---- Place autocomplete -----------------------------------------------
@@ -280,7 +221,7 @@ export async function resolvePlaceId(placeId: string): Promise<GeoResult | null>
     const location = body.result?.geometry?.location;
     if (body.status !== 'OK' || !location) return null;
 
-    const formattedAddress = body.result?.formatted_address;
+    const formattedAddress = stripPlusCode(body.result?.formatted_address);
     return {
       latitude: location.lat,
       longitude: location.lng,

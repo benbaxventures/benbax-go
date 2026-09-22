@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { Socket } from 'socket.io-client';
-import { createRealtimeClient } from '../services/realtime';
+import { acquireSharedSocket, onEveryConnect, releaseSharedSocket } from '../services/realtime';
 
 type PresenceArgs = {
   /** Only broadcast while the passenger is authenticated and has a location. */
@@ -51,12 +51,12 @@ export function useClientPresence({ enabled, latitude, longitude, name }: Presen
 
   const hasLocation = latitude != null && longitude != null;
 
-  // Open / close the socket with the enabled+location lifecycle.
+  // Subscribe / unsubscribe with the enabled+location lifecycle. This rides the
+  // app's shared socket rather than opening a second connection alongside the
+  // nearby-driver stream.
   useEffect(() => {
     if (!enabled || !hasLocation) return;
 
-    let cancelled = false;
-    let heartbeat: ReturnType<typeof setInterval> | null = null;
     let inForeground = AppState.currentState === 'active';
 
     const report = (socket: Socket) => {
@@ -71,51 +71,55 @@ export function useClientPresence({ enabled, latitude, longitude, name }: Presen
       else socket.emit('client:leave');
     });
 
-    createRealtimeClient((socket) => {
-      report(socket);
-    }).then((socket) => {
-      if (cancelled) {
-        socket.disconnect();
-        return;
-      }
-      socketRef.current = socket;
+    const socket = acquireSharedSocket();
+    socketRef.current = socket;
 
-      socket.on('navigation:started', (payload: { driverId?: string }) => {
-        if (!payload?.driverId) return;
-        setApproachingDriver({
-          driverId: payload.driverId,
-          latitude: null,
-          longitude: null,
-          etaSeconds: null,
-          updatedAt: Date.now(),
-        });
+    const handleNavigationStarted = (payload: { driverId?: string }) => {
+      if (!payload?.driverId) return;
+      setApproachingDriver({
+        driverId: payload.driverId,
+        latitude: null,
+        longitude: null,
+        etaSeconds: null,
+        updatedAt: Date.now(),
       });
-      socket.on(
-        'driver:location',
-        (payload: { driverId?: string; latitude?: number; longitude?: number; eta?: number }) => {
-          if (!payload?.driverId) return;
-          const lat = Number(payload.latitude);
-          const lng = Number(payload.longitude);
-          setApproachingDriver({
-            driverId: payload.driverId,
-            latitude: Number.isFinite(lat) ? lat : null,
-            longitude: Number.isFinite(lng) ? lng : null,
-            etaSeconds: Number.isFinite(Number(payload.eta)) ? Number(payload.eta) : null,
-            updatedAt: Date.now(),
-          });
-        }
-      );
+    };
 
-      heartbeat = setInterval(() => report(socket), HEARTBEAT_MS);
-    });
+    const handleDriverLocation = (payload: {
+      driverId?: string;
+      latitude?: number;
+      longitude?: number;
+      eta?: number;
+    }) => {
+      if (!payload?.driverId) return;
+      const lat = Number(payload.latitude);
+      const lng = Number(payload.longitude);
+      setApproachingDriver({
+        driverId: payload.driverId,
+        latitude: Number.isFinite(lat) ? lat : null,
+        longitude: Number.isFinite(lng) ? lng : null,
+        etaSeconds: Number.isFinite(Number(payload.eta)) ? Number(payload.eta) : null,
+        updatedAt: Date.now(),
+      });
+    };
+
+    socket.on('navigation:started', handleNavigationStarted);
+    socket.on('driver:location', handleDriverLocation);
+    // Re-report on every reconnect: the server forgets presence when the
+    // connection drops, so a silent reconnect would leave this passenger
+    // invisible to drivers until the next heartbeat.
+    const stopReporting = onEveryConnect(socket, () => report(socket));
+    const heartbeat = setInterval(() => report(socket), HEARTBEAT_MS);
 
     return () => {
-      cancelled = true;
       appState.remove();
-      if (heartbeat) clearInterval(heartbeat);
-      socketRef.current?.emit('client:leave');
-      socketRef.current?.disconnect();
+      clearInterval(heartbeat);
+      stopReporting();
+      socket.emit('client:leave');
+      socket.off('navigation:started', handleNavigationStarted);
+      socket.off('driver:location', handleDriverLocation);
       socketRef.current = null;
+      releaseSharedSocket();
     };
   }, [enabled, hasLocation]);
 

@@ -27,6 +27,11 @@ npm.cmd run dev:admin
 
 All app scripts are intended to run from the repository root. You do not need to `cd` into an app folder.
 
+Commands are written as `npm.cmd` / `npx.cmd` because PowerShell's default execution policy
+(`Restricted`) refuses to load `npm.ps1` and fails with "running scripts is disabled on this
+system". The `.cmd` shims skip the PowerShell wrapper and need no policy change. On macOS,
+Linux, or Git Bash, drop the `.cmd`.
+
 ## Partner App
 
 Run the unified Benbax Partner app from the repo root:
@@ -92,11 +97,39 @@ against whatever database `DATABASE_URL` points at — you'll be prompted for th
 phone and a password of at least 12 characters (not echoed), then asked to confirm:
 
 ```bash
-npm run admin:set --workspace apps/api
+npm.cmd run admin:set --workspace apps/api
 ```
 
 Then sign in to the admin dashboard with that email (or phone) and password. The seed
 script also creates `admin@benbax.com` using `SEED_ADMIN_PASSWORD` from the API env.
+
+To provision the whole staff list in one pass — the `TEAM` array in
+`apps/api/prisma/set-staff.ts`, where each entry is located by phone, email, or both:
+
+```bash
+npm.cmd run staff:set --workspace apps/api -- --dry-run
+```
+
+Always dry-run first: it prints the exact plan per account and writes nothing. Drop
+`--dry-run` to apply. It prompts for one password (min 12 characters, not echoed), applies
+it to every listed account, repairs any number stored in a non-E.164 shape, and signs out
+existing sessions.
+
+Two guards matter. Converting an existing customer or driver account into staff requires
+`--promote`, and an entry matching more than one account aborts the whole run rather than
+guessing which row to reset — a number with duplicate accounts must be resolved by hand, or
+that entry keyed on something unique.
+
+Sign-in accepts a phone in any spelling (`059 417 2522`, `0594172522`, `+233594172522`) or
+the account email. Where duplicate accounts share a number, typing an identifier exactly as
+stored always wins; the email is the unambiguous way in.
+
+Stored numbers converge on E.164 with:
+
+```bash
+npm.cmd run phones:check --workspace apps/api      # report only
+npm.cmd run phones:normalize --workspace apps/api  # apply
+```
 
 ## Documentation
 

@@ -2,6 +2,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { Screen } from '../components/Screen';
 import { StatusPill } from '../components/StatusPill';
 import { useDeliveries } from '../hooks/useDeliveries';
+import { displayPlaceLabel } from '../services/placeName';
 import { theme } from '../theme/tokens';
 
 export function OrdersScreen() {
@@ -26,7 +27,13 @@ export function OrdersScreen() {
         >
           <StatusPill label={delivery.status} />
           <Text style={{ color: theme.colors.ink, fontWeight: '900' }}>
-            {delivery.pickup?.label ?? 'Pickup'} to {delivery.dropoff?.label ?? 'Destination'}
+            {displayPlaceLabel(delivery.pickup?.label, delivery.pickup?.formattedAddress, 'Pickup')}{' '}
+            to{' '}
+            {displayPlaceLabel(
+              delivery.dropoff?.label,
+              delivery.dropoff?.formattedAddress,
+              'Destination'
+            )}
           </Text>
           <Text style={{ color: theme.colors.muted }}>
             GHS {delivery.quote?.total ?? '--'} · {delivery.category}

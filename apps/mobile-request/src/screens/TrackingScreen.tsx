@@ -305,17 +305,17 @@ export function TrackingScreen({ route, navigation }: Props) {
             <Button
               label="Call"
               icon={<Phone size={18} color="#fff" />}
-              onPress={() => callPhone(riderPhone)}
-              disabled={!riderPhone}
+              onPress={() => callPhone(riderPhone, 'rider')}
             />
           </View>
           <View style={{ flex: 1 }}>
             <Button
               label="WhatsApp"
               icon={<MessageSquareText size={18} color={theme.colors.ink} />}
-              onPress={() => openWhatsApp(riderPhone)}
+              onPress={() =>
+                openWhatsApp(riderPhone, 'Hello, this is your Benbax customer.', 'rider')
+              }
               variant="secondary"
-              disabled={!riderPhone}
             />
           </View>
           <Pressable

@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
-import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../services/api';
+import {
+  ApiResponseError,
+  describeApiError,
+  getApiBaseUrl,
+  isApiConnectionError,
+} from '../services/api';
 import { theme } from '../theme/tokens';
 
 export function ForgotPasswordScreen({ navigation }: any) {
@@ -41,7 +46,7 @@ export function ForgotPasswordScreen({ navigation }: any) {
       } else if (err instanceof ApiResponseError) {
         setError(err.message);
       } else {
-        setError(err instanceof Error ? err.message : 'Something went wrong');
+        setError(describeApiError(err, 'Something went wrong'));
       }
     } finally {
       setLoading(false);

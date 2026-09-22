@@ -34,4 +34,6 @@ export const realtimeEvents = {
   driverOnline: 'driver:online',
   driverMoved: 'driver:moved',
   driverOffline: 'driver:offline',
+  // Admin god-view: one snapshot of everyone online now, then live deltas.
+  presenceSnapshot: 'presence:snapshot',
 } as const;

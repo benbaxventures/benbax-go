@@ -11,7 +11,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
-import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../services/api';
+import {
+  ApiResponseError,
+  describeApiError,
+  getApiBaseUrl,
+  isApiConnectionError,
+} from '../services/api';
 import { theme } from '../theme/tokens';
 
 export function ResetPasswordScreen({ navigation, route }: any) {
@@ -61,7 +66,7 @@ export function ResetPasswordScreen({ navigation, route }: any) {
       } else if (err instanceof ApiResponseError) {
         setError(err.message);
       } else {
-        setError(err instanceof Error ? err.message : 'Something went wrong');
+        setError(describeApiError(err, 'Something went wrong'));
       }
     } finally {
       setLoading(false);

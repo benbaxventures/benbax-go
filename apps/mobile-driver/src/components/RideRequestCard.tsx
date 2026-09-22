@@ -1,5 +1,6 @@
 import { CalendarClock, CheckCircle2, Clock, MapPin, Navigation } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
+import { displayPlaceLabel } from '../services/placeName';
 import type { OpenRideRequest } from '../store/driverStore';
 import { theme } from '../theme/tokens';
 import { Button } from './Button';
@@ -15,9 +16,17 @@ type Props = {
   onPress?: (request: OpenRideRequest) => void;
 };
 
+/**
+ * A measured distance, never floored to look tidy. Below 20 m the phone's own
+ * GPS accuracy is the limiting factor, so we say that instead of printing a
+ * precise-looking number we cannot stand behind.
+ */
 export function formatKm(km: number | null | undefined) {
   if (km == null || !Number.isFinite(km)) return '—';
-  if (km < 1) return `${Math.max(10, Math.round(km * 1000))} m`;
+  if (km < 1) {
+    const meters = Math.round(km * 1000);
+    return meters < 20 ? 'under 20 m' : `${Math.round(meters / 10) * 10} m`;
+  }
   return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`;
 }
 
@@ -49,7 +58,7 @@ export function RideRequestCard({
     <Pressable
       onPress={() => onPress?.(request)}
       accessibilityRole="button"
-      accessibilityLabel={`Ride request from ${name}, pickup ${request.pickup.label}`}
+      accessibilityLabel={`Ride request from ${name}, pickup ${displayPlaceLabel(request.pickup.label, request.pickup.address, 'Pickup')}`}
       style={{
         borderRadius: 14,
         borderWidth: highlighted ? 2 : 1,
@@ -108,13 +117,13 @@ export function RideRequestCard({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <MapPin size={14} color={theme.colors.primary} />
           <Text style={{ flex: 1, color: theme.colors.ink, fontSize: 13 }} numberOfLines={1}>
-            {request.pickup.label}
+            {displayPlaceLabel(request.pickup.label, request.pickup.address, 'Pickup')}
           </Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <MapPin size={14} color="#EF4444" />
           <Text style={{ flex: 1, color: theme.colors.muted, fontSize: 13 }} numberOfLines={1}>
-            {request.dropoff.label}
+            {displayPlaceLabel(request.dropoff.label, request.dropoff.address, 'Drop-off')}
           </Text>
         </View>
       </View>

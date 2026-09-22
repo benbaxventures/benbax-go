@@ -7,7 +7,7 @@ import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import { useWallet, useWalletTopup } from '../hooks/usePayments';
 import type { RootStackParamList } from '../navigation/types';
-import { ApiConnectionError, ApiResponseError } from '../services/api';
+import { ApiConnectionError, ApiResponseError, describeApiError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -70,10 +70,7 @@ export function WalletScreen() {
         return;
       }
 
-      Alert.alert(
-        'Could not start top-up',
-        error instanceof Error ? error.message : 'Please try again.'
-      );
+      Alert.alert('Could not start top-up', describeApiError(error, 'Please try again.'));
     }
   }
 

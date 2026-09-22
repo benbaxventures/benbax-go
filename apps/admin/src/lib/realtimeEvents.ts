@@ -29,4 +29,9 @@ export const realtimeEvents = {
   clientOnline: 'client:online',
   clientMoved: 'client:moved',
   clientOffline: 'client:offline',
+  driversNearby: 'drivers:nearby',
+  driverOnline: 'driver:online',
+  driverMoved: 'driver:moved',
+  driverOffline: 'driver:offline',
+  presenceSnapshot: 'presence:snapshot',
 } as const;

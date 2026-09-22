@@ -21,7 +21,7 @@ import { SkeletonBlock } from '../components/SkeletonBlock';
 import { useRiderLocation } from '../hooks/useRiderLocation';
 import { useVoiceNavigation } from '../hooks/useVoiceNavigation';
 import type { RootStackParamList } from '../navigation/types';
-import { apiRequest } from '../services/api';
+import { apiRequest, describeApiError } from '../services/api';
 import { createRealtimeClient } from '../services/realtime';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
@@ -220,7 +220,7 @@ export function ActiveDeliveryScreen({ route, navigation }: Props) {
         await logout();
         return;
       }
-      Alert.alert('Error', err instanceof Error ? err.message : 'Could not complete delivery.');
+      Alert.alert('Error', describeApiError(err, 'Could not complete delivery.'));
     } finally {
       setActionLoading(null);
     }

@@ -39,3 +39,48 @@ export function normalizePhoneNumber(value: string | null | undefined): string |
 
   return null;
 }
+
+/**
+ * Every stored representation a typed phone number could plausibly match.
+ *
+ * Numbers reached the database through several routes over time — the mobile
+ * apps write normalized E.164, older seeds wrote `+233` glued onto the trunk
+ * zero (`+2330594172522`), and hand-entered rows are sometimes plain local
+ * form (`0594172522`). Sign-in must find the account whichever way it was
+ * stored, so lookups match on all of them rather than one canonical spelling.
+ *
+ * Returns de-duplicated candidates, most canonical first. Empty for values
+ * that are not phone-shaped at all (e.g. an email address).
+ */
+export function phoneLookupVariants(value: string | null | undefined): string[] {
+  if (typeof value !== 'string') return [];
+  const raw = value.trim();
+  if (!raw || raw.includes('@')) return [];
+
+  const candidates: string[] = [];
+  const push = (candidate: string | null) => {
+    if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+  };
+
+  const e164 = normalizePhoneNumber(raw);
+  push(e164);
+  push(raw);
+
+  if (e164) {
+    const digits = e164.slice(1);
+    // `+233594172522` -> `594172522`, the national number without the trunk zero.
+    const national = digits.startsWith(GHANA_COUNTRY_CODE)
+      ? digits.slice(GHANA_COUNTRY_CODE.length)
+      : null;
+    push(digits);
+    if (national) {
+      push(`0${national}`);
+      push(national);
+      // The malformed shape written by older seeds: country code + trunk zero.
+      push(`+${GHANA_COUNTRY_CODE}0${national}`);
+      push(`${GHANA_COUNTRY_CODE}0${national}`);
+    }
+  }
+
+  return candidates;
+}

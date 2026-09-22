@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorState } from '../components/ErrorState';
 import { OfflineBanner } from '../components/OfflineBanner';
 import { SkeletonBlock } from '../components/SkeletonBlock';
-import { apiRequest } from '../services/api';
+import { apiRequest, describeApiError } from '../services/api';
 import { theme } from '../theme/tokens';
 
 type NewsItem = {
@@ -75,7 +75,7 @@ export function NewsScreen() {
         <OfflineBanner />
         <ErrorState
           title="Could not load news"
-          message={error instanceof Error ? error.message : 'Please try again.'}
+          message={describeApiError(error, 'Please try again.')}
           onRetry={() => refetch()}
         />
       </View>

@@ -12,6 +12,8 @@ import {
   getOnlineClient,
   getOnlineDriver,
   haversineKm,
+  listOnlineClients,
+  listOnlineDrivers,
   removeOnlineClient,
   removeOnlineDriver,
   setDriverOnlineFlag,
@@ -19,6 +21,7 @@ import {
   upsertOnlineClient,
   upsertOnlineDriver,
   type OnlineClient,
+  type OnlineDriver,
 } from './presence';
 
 /** Presence entries with no report/heartbeat for this long are dropped. */
@@ -45,6 +48,23 @@ type DriverWatch = {
 
 const DEFAULT_WATCH_RADIUS_KM = 200;
 
+/** Shared room every signed-in staff socket joins (the admin god-view). */
+const ADMIN_ROOM = 'admins';
+const STAFF_ROLES = ['ADMIN', 'OPERATIONS', 'SUPPORT'];
+
+function isStaff(role: string) {
+  return STAFF_ROLES.includes(role);
+}
+
+/** Everyone online right now, as the admin dashboard's map wants it. */
+function presenceSnapshot() {
+  return {
+    drivers: listOnlineDrivers(),
+    clients: listOnlineClients(),
+    at: new Date().toISOString(),
+  };
+}
+
 /** Live driver sockets watching for nearby passengers, keyed by socket id. */
 const watchingDrivers = new Map<string, { socket: Socket; watch: DriverWatch }>();
 
@@ -55,26 +75,39 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-/** Emits a passenger event to every watching driver regardless of distance. */
-function broadcastClientToDrivers(client: OnlineClient, event: string) {
+/**
+ * Emits a passenger event to every watching driver regardless of distance, and
+ * to the admin god-view. Admins get the raw record: distance is meaningful
+ * relative to a driver, not to an operator at a desk.
+ */
+function broadcastClientToDrivers(io: Server, client: OnlineClient, event: string) {
   for (const { socket, watch } of watchingDrivers.values()) {
     const distanceKm = haversineKm(watch, client);
     socket.emit(event, { ...client, distanceKm: Math.round(distanceKm * 10) / 10 });
   }
+  io.to(ADMIN_ROOM).emit(event, client);
 }
 
-/** Tells every watching driver that a passenger is no longer available. */
-function broadcastClientOffline(clientId: string) {
+/** Pushes a driver's position to watching customers and to the admin god-view. */
+function broadcastDriverToWatchers(io: Server, driver: OnlineDriver, event: string) {
+  io.to('customer-watchers').emit(event, driver);
+  io.to(ADMIN_ROOM).emit(event, driver);
+}
+
+/** Tells every watching driver — and the admin god-view — that a passenger is gone. */
+function broadcastClientOffline(io: Server, clientId: string) {
   for (const { socket } of watchingDrivers.values()) {
     socket.emit(realtimeEvents.clientOffline, { id: clientId });
   }
+  io.to(ADMIN_ROOM).emit(realtimeEvents.clientOffline, { id: clientId });
 }
 
-/** Tells every watching customer that a driver is no longer available. */
-function broadcastDriverOffline(driverId: string) {
+/** Tells every watching customer — and the admin god-view — that a driver is gone. */
+function broadcastDriverOffline(io: Server, driverId: string) {
   for (const { socket } of watchingCustomers.values()) {
     socket.emit(realtimeEvents.driverOffline, { id: driverId });
   }
+  io.to(ADMIN_ROOM).emit(realtimeEvents.driverOffline, { id: driverId });
 }
 
 /**
@@ -114,8 +147,8 @@ export function registerRealtimeHandlers(io: Server) {
   // half-open socket the server never saw close) so counts stay honest.
   setInterval(() => {
     const { clientIds, driverIds } = sweepStalePresence(PRESENCE_TTL_MS);
-    clientIds.forEach(broadcastClientOffline);
-    driverIds.forEach(broadcastDriverOffline);
+    clientIds.forEach((id) => broadcastClientOffline(io, id));
+    driverIds.forEach((id) => broadcastDriverOffline(io, id));
   }, PRESENCE_SWEEP_INTERVAL_MS).unref?.();
 
   io.use((socket, next) => {
@@ -142,7 +175,12 @@ export function registerRealtimeHandlers(io: Server) {
       // (e.g. when a new passenger registers).
       socket.join('drivers');
     }
-    if (['ADMIN', 'OPERATIONS', 'SUPPORT'].includes(user.role)) socket.join('admins');
+    if (isStaff(user.role)) {
+      socket.join(ADMIN_ROOM);
+      // Seed the dashboard map immediately; every change after this arrives as
+      // a live delta on the same socket.
+      socket.emit(realtimeEvents.presenceSnapshot, presenceSnapshot());
+    }
 
     // Every handler below must be registered synchronously. The apps emit
     // `client:watch` / `driver:report` / `ride:join` the instant they connect;
@@ -171,6 +209,15 @@ export function registerRealtimeHandlers(io: Server) {
 
     socket.on('ride:leave', (tripId: string) => {
       socket.leave(`ride:${tripId}`);
+    });
+
+    // ---- Admin god-view ----
+    // Re-sync the dashboard after a reconnect or a tab that slept: the deltas
+    // it missed while disconnected are gone, so it asks for a fresh snapshot.
+    socket.on('admin:watch', () => {
+      if (!isStaff(user.role)) return;
+      socket.join(ADMIN_ROOM);
+      socket.emit(realtimeEvents.presenceSnapshot, presenceSnapshot());
     });
 
     // ---- Passenger presence (request app reports where it is) ----
@@ -204,6 +251,7 @@ export function registerRealtimeHandlers(io: Server) {
       const moved = !previous || haversineKm(previous, client) >= MOVE_THRESHOLD_KM;
       if (isNew || moved) {
         broadcastClientToDrivers(
+          io,
           client,
           isNew ? realtimeEvents.clientOnline : realtimeEvents.clientMoved
         );
@@ -213,7 +261,7 @@ export function registerRealtimeHandlers(io: Server) {
     // Passenger closed the booking screen / backgrounded the app.
     socket.on('client:leave', () => {
       socket.data.reportedClient = false;
-      if (removeOnlineClient(user.id)) broadcastClientOffline(user.id);
+      if (removeOnlineClient(user.id)) broadcastClientOffline(io, user.id);
     });
 
     // ---- Driver presence (driver app heartbeats its live position) ----
@@ -244,9 +292,10 @@ export function registerRealtimeHandlers(io: Server) {
 
         const moved = !previous || haversineKm(previous, driver) >= MOVE_THRESHOLD_KM;
         if (isNew || moved) {
-          io.to('customer-watchers').emit(
-            isNew ? realtimeEvents.driverOnline : realtimeEvents.driverMoved,
-            driver
+          broadcastDriverToWatchers(
+            io,
+            driver,
+            isNew ? realtimeEvents.driverOnline : realtimeEvents.driverMoved
           );
         }
 
@@ -374,12 +423,12 @@ export function registerRealtimeHandlers(io: Server) {
       const otherDriverReporter = stillConnected.some((s) => s.data.reportedDriver);
       if ((socket.data.reportedClient || noneLeft) && !otherClientReporter) {
         if (removeOnlineClient(user.id)) {
-          broadcastClientOffline(user.id);
+          broadcastClientOffline(io, user.id);
         }
       }
       if ((socket.data.reportedDriver || noneLeft) && !otherDriverReporter) {
         if (removeOnlineDriver(user.id)) {
-          broadcastDriverOffline(user.id);
+          broadcastDriverOffline(io, user.id);
         }
       }
 

@@ -1,18 +1,21 @@
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import { corsOriginHandler } from './config/env';
+import { corsOriginHandler, env } from './config/env';
 import { prisma } from './config/prisma';
-import { errorHandler } from './middleware/error';
+import { errorHandler, notFoundHandler } from './middleware/error';
+import { apiLimiter, authLimiter } from './middleware/rateLimit';
 import { apiRouter } from './routes';
 
 export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  // Resolve `req.ip` from X-Forwarded-For so rate limiting, logging and abuse
+  // controls see the real caller instead of the hosting proxy.
+  app.set('trust proxy', env.TRUST_PROXY_HOPS);
   app.use(helmet());
   app.use(
     cors({
@@ -32,28 +35,8 @@ export function createApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(morgan('tiny'));
 
-  const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 200,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      ok: false,
-      error: { code: 'TOO_MANY_REQUESTS', message: 'Too many requests, please try again later' },
-    },
-  });
-  app.use('/api/', limiter);
+  app.use('/api/', apiLimiter);
 
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      ok: false,
-      error: { code: 'TOO_MANY_REQUESTS', message: 'Too many attempts, please try again later' },
-    },
-  });
   app.use('/api/v1/auth/login', authLimiter);
   app.use('/api/v1/auth/register', authLimiter);
   app.use('/api/v1/auth/forgot-password', authLimiter);
@@ -77,6 +60,9 @@ export function createApp() {
   });
 
   app.use('/api/v1', apiRouter);
+  // Unmatched API paths must still answer with the JSON envelope; Express's
+  // built-in fallback would send HTML that no client of this API can read.
+  app.use('/api', notFoundHandler);
   app.use(errorHandler);
 
   return app;

@@ -1,13 +1,12 @@
-import type { Prisma } from '@prisma/client';
-import { UserRole } from '@prisma/client';
+import { Prisma, UserRole, UserStatus } from '@prisma/client';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { createHash, randomInt } from 'node:crypto';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
-import { badRequest, notFound, unauthorized } from '../../utils/http';
-import { normalizePhoneNumber } from '../../utils/phone';
+import { badRequest, forbidden, notFound, unauthorized } from '../../utils/http';
+import { normalizePhoneNumber, phoneLookupVariants } from '../../utils/phone';
 import { notify } from '../notifications/notify';
 
 type RegisterInput = {
@@ -86,20 +85,55 @@ function hashToken(token: string) {
 }
 
 // Sign-in and password recovery both accept a single identifier that may be
-// either the account phone or email. Both columns are unique, so an OR lookup
-// resolves to at most one user.
-function findUserByIdentifier(identifier: string) {
+// either the account phone or email.
+//
+// Phones are matched against every spelling the number could have been stored
+// as (see phoneLookupVariants) rather than one canonical form, so an account
+// written by an older seed as `+2330594172522` still resolves when its owner
+// types `059 4172522`. Email is matched case-insensitively because accounts
+// are created with a lower-cased address but people type it however they like.
+//
+// Several candidates really do hit different rows — this database holds both
+// `+2330594172522` and `+233594172522` as separate accounts — so the winner is
+// ranked in code rather than left to whatever order the database returns.
+// Typing an identifier exactly as it is stored always wins: someone entering
+// their own number in full must reach their own account, not a differently
+// spelled duplicate that happens to normalize to the same digits.
+async function findUserByIdentifier(identifier: string) {
   const value = identifier.trim();
-  const normalizedPhone = normalizePhoneNumber(value);
-  return prisma.user.findFirst({
+  if (!value) return null;
+
+  const phones = phoneLookupVariants(value);
+  const matches = await prisma.user.findMany({
     where: {
       OR: [
-        { phone: value },
-        ...(normalizedPhone && normalizedPhone !== value ? [{ phone: normalizedPhone }] : []),
-        { email: value },
+        ...phones.map((phone) => ({ phone })),
+        { email: { equals: value, mode: Prisma.QueryMode.insensitive } },
       ],
     },
+    take: 5,
   });
+  if (matches.length <= 1) return matches[0] ?? null;
+
+  const rank = (user: (typeof matches)[number]) => {
+    if (user.email?.toLowerCase() === value.toLowerCase()) return -2;
+    if (user.phone === value) return -1;
+    const index = phones.indexOf(user.phone);
+    return index === -1 ? phones.length : index;
+  };
+  return [...matches].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+}
+
+/**
+ * Refuses sign-in for accounts that must not hold a session. Blocked users get
+ * a message that tells them what happened; deleted ones are indistinguishable
+ * from a wrong password so the endpoint can't be used to probe for accounts.
+ */
+function assertSignInAllowed(user: { status: UserStatus }) {
+  if (user.status === UserStatus.BLOCKED) {
+    throw forbidden('This account has been blocked. Contact Benbax support.');
+  }
+  if (user.status === UserStatus.DELETED) throw unauthorized('Invalid credentials');
 }
 
 const FALLBACK_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -253,6 +287,9 @@ export async function refresh(refreshToken: string, ctx?: SessionContext) {
 
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user) throw unauthorized('Invalid or expired refresh token');
+  // A block landing mid-session must end it at the next refresh, not 15
+  // minutes' worth of access token later.
+  assertSignInAllowed(user);
 
   await touchLastSeen(user.id);
 
@@ -269,6 +306,8 @@ export async function login(identifier: string, password: string, ctx?: SessionC
 
   const valid = await bcrypt.compare(password, user.passwordHash);
   if (!valid) throw unauthorized('Invalid credentials');
+
+  assertSignInAllowed(user);
 
   await recordAuthEvent(user.id, 'USER_LOGIN', { method: 'password' });
 
@@ -301,6 +340,7 @@ export async function googleLogin(input: GoogleLoginInput, ctx?: SessionContext)
 
   const existing = await prisma.user.findUnique({ where: { email: profile.email } });
   if (existing) {
+    assertSignInAllowed(existing);
     const user = await prisma.user.update({
       where: { id: existing.id },
       data: {

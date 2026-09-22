@@ -94,10 +94,14 @@ ridesRouter.post(
     // Scheduled rides are picked up by the dispatch sweeper once pickup nears.
     const scheduledTime = trip.scheduledFor?.getTime();
     if (!scheduledTime || scheduledTime - Date.now() <= SCHEDULED_BROADCAST_AHEAD_MS) {
-      void broadcastOpenRideRequest(io, trip.id);
+      void broadcastOpenRideRequest(io, trip.id).catch((error) =>
+        console.error('[api] broadcast of new ride request failed', { tripId: trip.id, error })
+      );
     }
     if (!scheduledTime || scheduledTime <= Date.now()) {
-      void dispatchRide(trip.id, io);
+      void dispatchRide(trip.id, io).catch((error) =>
+        console.error('[api] dispatch of new ride failed', { tripId: trip.id, error })
+      );
     }
     return created(res, trip);
   })

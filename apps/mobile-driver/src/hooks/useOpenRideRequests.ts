@@ -6,7 +6,13 @@ import { haversineMeters } from '../services/directions';
 import { acquireSharedSocket, releaseSharedSocket } from '../services/realtime';
 import type { OpenRideRequest } from '../store/driverStore';
 
-const REFRESH_MS = 15_000;
+/**
+ * REST safety net only. The socket feed ('ride:open' / 'ride:closed') is the
+ * live channel and a reconnect resyncs immediately, so this poll exists purely
+ * to heal a missed event. At the old 15s it was four requests a minute
+ * re-fetching data the app already had.
+ */
+const REFRESH_MS = 60_000;
 
 function isOpenRideRequest(value: unknown): value is OpenRideRequest {
   if (!value || typeof value !== 'object') return false;
@@ -30,7 +36,9 @@ export function useOpenRideRequests(
 
   const refresh = useCallback(async () => {
     try {
-      const list = await apiRequest<unknown[]>('/ride-dispatch/open-requests');
+      const list = await apiRequest<unknown[]>('/ride-dispatch/open-requests', {
+        background: true,
+      });
       if (cancelledRef.current || !Array.isArray(list)) return;
       setRequests(list.filter(isOpenRideRequest));
     } catch (err) {
@@ -71,7 +79,13 @@ export function useOpenRideRequests(
     socket.on('connect', handleConnect);
 
     void refresh();
-    const timer = setInterval(() => void refresh(), REFRESH_MS);
+    // Skip the poll while the app is backgrounded: the socket keeps the list
+    // current when it can, and a request that lands while nobody is looking
+    // only spends the driver's rate-limit budget. Coming back to the
+    // foreground resyncs once.
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void refresh();
+    }, REFRESH_MS);
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') void refresh();
     });

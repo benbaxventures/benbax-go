@@ -1,8 +1,8 @@
-import { ApiConnectionError, apiRequest, ApiResponseError } from './api';
+import { ApiConnectionError, apiRequest, ApiResponseError, describeApiError } from './api';
 
 /** Why an accept attempt failed, in terms the dispatch screen can act on. */
 export class AcceptRideError extends Error {
-  kind: 'taken' | 'busy' | 'network' | 'other';
+  kind: 'taken' | 'busy' | 'network' | 'rate-limited' | 'other';
   /** For `busy`: the trip the driver still has to finish. */
   activeTripId?: string;
 
@@ -30,7 +30,7 @@ export async function acceptRide(input: { tripId: string; assignmentId?: string 
     return { tripId: input.tripId };
   } catch (err) {
     if (err instanceof ApiConnectionError) {
-      throw new AcceptRideError('Cannot reach the server. Check your connection.', 'network');
+      throw new AcceptRideError(describeApiError(err), 'network');
     }
     if (err instanceof ApiResponseError) {
       if (err.code === 'DRIVER_BUSY') {
@@ -40,11 +40,11 @@ export async function acceptRide(input: { tripId: string; assignmentId?: string 
       if (err.status === 409 || err.code === 'RIDE_UNAVAILABLE') {
         throw new AcceptRideError(err.message, 'taken');
       }
-      throw new AcceptRideError(err.message, 'other');
+      if (err.status === 429) {
+        throw new AcceptRideError(describeApiError(err), 'rate-limited');
+      }
+      throw new AcceptRideError(describeApiError(err, 'Could not accept this ride.'), 'other');
     }
-    throw new AcceptRideError(
-      err instanceof Error ? err.message : 'Could not accept this ride.',
-      'other'
-    );
+    throw new AcceptRideError(describeApiError(err, 'Could not accept this ride.'), 'other');
   }
 }

@@ -28,6 +28,7 @@ import { WalletScreen } from '../screens/WalletScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { apiRequest } from '../services/api';
 import { presentLocalOffer } from '../services/notifications';
+import { stripPlusCode } from '../services/placeName';
 import { acquireSharedSocket, releaseSharedSocket } from '../services/realtime';
 import { setSentryUser } from '../services/sentry';
 import { useAuthStore } from '../store/authStore';
@@ -166,7 +167,10 @@ function DriverRealtimeBridge({ enabled }: { enabled: boolean }) {
     on(realtimeEvents.driverOffer, (offer: RawRideOffer) => {
       const next = toDriverOffer(offer);
       setCurrentRideOffer(next);
-      const where = next.pickup?.label ? ` at ${next.pickup.label}` : '';
+      // A Plus Code in a push notification tells the driver nothing — leave
+      // the location out entirely rather than showing "at Q2X5+W2R".
+      const pickupName = stripPlusCode(next.pickup?.label);
+      const where = pickupName ? ` at ${pickupName}` : '';
       const fare = next.fare != null ? ` · GHS ${next.fare.toFixed(2)}` : '';
       void presentLocalOffer({
         title: 'New ride request',

@@ -20,3 +20,12 @@ export type {
 export { realtimeEvents } from './api';
 export type { ApiResponse, PaginatedResponse } from './api';
 export { colors, radius, spacing, typography } from './design';
+
+export {
+  apiErrorCodes,
+  formatRetryAfter,
+  isSafeToDisplay,
+  userFacingApiMessage,
+  userFacingMessages,
+} from './apiErrors';
+export type { ApiErrorCode, ApiFailure } from './apiErrors';

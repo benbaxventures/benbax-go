@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Car,
   ChevronLeft,
+  ChevronRight,
   Clock,
   CreditCard,
   MapPin as MapPinIcon,
@@ -29,12 +30,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
+import { DriversOnlineSheet } from '../components/DriversOnlineSheet';
 import { MapPinLabel } from '../components/MapPinLabel';
 import { MapMarker, MapView } from '../components/MapView';
 import { useClientPresence } from '../hooks/useClientPresence';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useCreateDelivery, useDeliveryQuote } from '../hooks/useDeliveries';
-import { distanceKmBetween, useNearbyDrivers, type NearbyDriver } from '../hooks/useNearbyDrivers';
+import {
+  distanceKmBetween,
+  formatDriverDistance,
+  useNearbyDrivers,
+  type NearbyDriver,
+} from '../hooks/useNearbyDrivers';
 import { useNearbyDriversRealtime } from '../hooks/useNearbyDriversRealtime';
 import { useInitializePayment } from '../hooks/usePayments';
 import { useCreateTrip, useTripQuote } from '../hooks/useTrips';
@@ -47,6 +54,7 @@ import {
   type GeoPoint,
   type PlaceSuggestion,
 } from '../services/geocoding';
+import { RESOLVING_PLACE_LABEL } from '../services/placeName';
 import type { AddressPoint, DeliveryCategory } from '../shared';
 import { useAuthStore } from '../store/authStore';
 import { useDeliveryStore } from '../store/deliveryStore';
@@ -167,11 +175,8 @@ function ServiceCard({
   );
 }
 
-function formatDriverKm(km: number) {
-  if (!Number.isFinite(km)) return '';
-  if (km < 1) return `${Math.max(10, Math.round(km * 1000))} m`;
-  return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`;
-}
+/** Distance shown next to a driver. Measured, never floored to look tidy. */
+const formatDriverKm = formatDriverDistance;
 
 const NearbyDriverMarker = memo(function NearbyDriverMarker({ driver }: { driver: NearbyDriver }) {
   return (
@@ -252,6 +257,9 @@ export function HomeScreen() {
     label: detectedLocationLabel,
     address: detectedAddress,
     nearbyName,
+    resolvingPlace,
+    permissionDenied: locationPermissionDenied,
+    errorType: locationErrorType,
     requestLocation,
   } = useCurrentLocation();
 
@@ -267,22 +275,61 @@ export function HomeScreen() {
   // Real-time driver stream via Socket.IO (primary), REST polling as fallback.
   // Both come from the server's live presence registry, so only drivers whose
   // app is actually connected are counted — never stale "online" DB rows.
-  const { drivers: realtimeDrivers, live: realtimeLive } = useNearbyDriversRealtime(true, {
+  //
+  // Gated on focus: this screen stays mounted behind the other tabs, and there
+  // is no reason to stream every driver's movement while the passenger is in
+  // their wallet. Presence above is deliberately *not* gated — drivers should
+  // keep seeing this passenger wherever they are in the app — and both share
+  // one socket, so the connection survives the tab switch either way.
+  const { drivers: realtimeDrivers, live: realtimeLive } = useNearbyDriversRealtime(isFocused, {
     latitude,
     longitude,
   });
   const { data: polledDrivers = [], isLoading: polledLoading } = useNearbyDrivers(
     latitude,
     longitude,
-    isFocused
+    isFocused,
+    realtimeLive
   );
 
   // Once the live snapshot has arrived it is the truth, even when empty; the
-  // poll only fills in while the socket is (re)connecting.
-  const onlineDrivers = realtimeLive ? realtimeDrivers : polledDrivers;
+  // poll only fills in while the socket is (re)connecting. The REST records
+  // also carry the detail the position stream doesn't (vehicle, rating,
+  // availability), so they're merged onto the live positions rather than
+  // discarded — one source of drivers, two levels of detail.
+  const onlineDrivers = useMemo(() => {
+    if (!realtimeLive) return polledDrivers;
+    if (polledDrivers.length === 0) return realtimeDrivers;
+    const detailById = new Map(polledDrivers.map((driver) => [driver.id, driver]));
+    return realtimeDrivers.map((driver) => {
+      const detail = detailById.get(driver.id);
+      if (!detail) return driver;
+      // Live position wins. Everything else comes from the REST record unless
+      // the stream actually carries it — a plain spread would let the stream's
+      // `vehicleType: null` erase the vehicle the REST call just told us about.
+      return {
+        ...detail,
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        distanceKm: driver.distanceKm,
+        ...(driver.vehicleType ? { vehicleType: driver.vehicleType } : {}),
+        ...(driver.name ? { name: driver.name } : {}),
+        ...(driver.since ? { since: driver.since } : {}),
+        ...(driver.heading != null ? { heading: driver.heading } : {}),
+      };
+    });
+  }, [realtimeLive, realtimeDrivers, polledDrivers]);
   const driversLoading = !realtimeLive && polledLoading;
 
   const [pickupText, setPickupText] = useState('Current location');
+  /**
+   * True while the pickup is "wherever the passenger is" rather than a place
+   * they typed or picked. Tracked explicitly instead of comparing the pickup
+   * text to the detected label — that label legitimately changes as the name
+   * resolves and as they move.
+   */
+  const [pickupIsDetected, setPickupIsDetected] = useState(true);
+  const [driversSheetOpen, setDriversSheetOpen] = useState(false);
   const [dropoffText, setDropoffText] = useState('');
   const [pickupLandmark, setPickupLandmark] = useState('');
   const [pickupFormatted, setPickupFormatted] = useState<string | null>(null);
@@ -307,9 +354,13 @@ export function HomeScreen() {
 
   const hasLocation = latitude !== null && longitude !== null;
   const detectedCoord: GeoPoint | null = hasLocation ? { latitude, longitude } : null;
-  const usingDetectedPickup =
-    !pickupCoord && (pickupText === 'Current location' || pickupText === detectedLocationLabel);
+  const usingDetectedPickup = !pickupCoord && pickupIsDetected;
   const activePickupCoord = pickupCoord ?? detectedCoord ?? FALLBACK_COORD;
+  /** The pickup name, or null while it is still being looked up. */
+  const pickupDisplayName =
+    pickupText && pickupText !== 'Current location' && pickupText !== RESOLVING_PLACE_LABEL
+      ? pickupText
+      : null;
 
   // Distances from the pickup, nearest first. Deduplicated by id so one
   // driver can never be counted twice.
@@ -326,7 +377,7 @@ export function HomeScreen() {
   }, [onlineDrivers, activePickupCoord.latitude, activePickupCoord.longitude]);
   const nearestDriverKm = nearbyDrivers[0]?.distanceKm;
 
-  // Fit map to show all nearby driver markers when the indicator is tapped.
+  // Fit map to show all nearby driver markers.
   const fitMapToDrivers = useCallback(() => {
     const map = mapRef.current;
     if (!map || nearbyDrivers.length === 0) return;
@@ -339,6 +390,21 @@ export function HomeScreen() {
     });
   }, [nearbyDrivers, activePickupCoord]);
 
+  // Centre the map on one driver picked from the list.
+  const focusDriver = useCallback((driver: NearbyDriver) => {
+    const map = mapRef.current;
+    if (!map || typeof map.animateToRegion !== 'function') return;
+    map.animateToRegion(
+      {
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      },
+      600
+    );
+  }, []);
+
   const currentLat = activePickupCoord.latitude;
   const currentLng = activePickupCoord.longitude;
 
@@ -346,6 +412,7 @@ export function HomeScreen() {
     setPickupCoord(null);
     setPickupFormatted(null);
     setPickupText('Current location');
+    setPickupIsDetected(true);
     requestLocation();
   }, [requestLocation]);
 
@@ -368,6 +435,7 @@ export function HomeScreen() {
       setPickupText(result.label || query);
       setPickupFormatted(result.formattedAddress ?? null);
       setPickupCoord(coord);
+      setPickupIsDetected(false);
     } else {
       setDropoffText(result.label || query);
       setDropoffFormatted(result.formattedAddress ?? null);
@@ -449,6 +517,7 @@ export function HomeScreen() {
         setPickupText(suggestion.description);
         setPickupFormatted(result.formattedAddress ?? null);
         setPickupCoord(coord);
+        setPickupIsDetected(false);
       } else {
         setDropoffText(suggestion.description);
         setDropoffFormatted(result.formattedAddress ?? null);
@@ -488,32 +557,34 @@ export function HomeScreen() {
     ]
   );
 
+  // Keep the pickup field showing the resolved name of where the passenger
+  // actually is — "Finding your location…" first, then e.g. "Church of
+  // Pentecost, Golf Estate", and updated again if they move somewhere new.
+  // Stops the moment they type their own pickup.
   useEffect(() => {
-    if (!hasLocation || !detectedLocationLabel) return;
-    if (pickupText === 'Current location') {
-      setPickupText(detectedLocationLabel);
-    }
-    if (nearbyName && !pickupLandmark) {
-      setPickupLandmark(`Near ${nearbyName}`);
-    }
-  }, [hasLocation, detectedLocationLabel, nearbyName, pickupLandmark, pickupText]);
+    if (!hasLocation || !pickupIsDetected || !detectedLocationLabel) return;
+    setPickupText((prev) => (prev === detectedLocationLabel ? prev : detectedLocationLabel));
+    setPickupLandmark(nearbyName ? `Near ${nearbyName}` : '');
+  }, [hasLocation, detectedLocationLabel, nearbyName, pickupIsDetected]);
 
-  // Sync location to stores
+  // Sync location to stores. Only the coordinates are load-bearing here — the
+  // label is what the passenger and their driver read.
   useEffect(() => {
-    if (
-      hasLocation &&
-      (pickupText === 'Current location' || pickupText === detectedLocationLabel)
-    ) {
-      const point: AddressPoint = {
-        label: detectedLocationLabel ?? 'Current location',
-        ...(detectedAddress ? { formattedAddress: detectedAddress } : {}),
-        latitude,
-        longitude,
-        landmark: (nearbyName ?? pickupLandmark) || 'Near you',
-      };
-      setDeliveryPickup(point);
-      setTripPickup(point);
-    }
+    if (!hasLocation || !pickupIsDetected) return;
+    const point: AddressPoint = {
+      // Never persist the "Finding your location…" placeholder onto a trip —
+      // the driver would read it as the pickup name.
+      label:
+        detectedLocationLabel && detectedLocationLabel !== RESOLVING_PLACE_LABEL
+          ? detectedLocationLabel
+          : (detectedAddress ?? 'Current location'),
+      ...(detectedAddress ? { formattedAddress: detectedAddress } : {}),
+      latitude,
+      longitude,
+      landmark: (nearbyName ?? pickupLandmark) || 'Near you',
+    };
+    setDeliveryPickup(point);
+    setTripPickup(point);
   }, [
     detectedAddress,
     detectedLocationLabel,
@@ -522,7 +593,7 @@ export function HomeScreen() {
     longitude,
     nearbyName,
     pickupLandmark,
-    pickupText,
+    pickupIsDetected,
     setTripPickup,
     hasLocation,
   ]);
@@ -530,7 +601,10 @@ export function HomeScreen() {
   const pickup = useMemo((): AddressPoint => {
     const formattedAddress = pickupFormatted ?? (usingDetectedPickup ? detectedAddress : undefined);
     return {
-      label: pickupText,
+      // The booking itself runs on the coordinates below; this label is only
+      // what the passenger and their driver read, so it must never be the
+      // in-progress placeholder.
+      label: pickupDisplayName ?? formattedAddress ?? 'Current location',
       ...(formattedAddress ? { formattedAddress } : {}),
       latitude: currentLat,
       longitude: currentLng,
@@ -543,7 +617,7 @@ export function HomeScreen() {
     detectedAddress,
     pickupFormatted,
     pickupLandmark,
-    pickupText,
+    pickupDisplayName,
     usingDetectedPickup,
     nearbyName,
   ]);
@@ -818,16 +892,12 @@ export function HomeScreen() {
         >
           <MapMarker
             coordinate={activePickupCoord}
-            title={pickupText !== 'Current location' ? pickupText : 'Pickup'}
-            description={pickupFormatted ?? pickupText ?? 'Pickup'}
+            title={pickupDisplayName ?? 'Pickup'}
+            description={pickupFormatted ?? pickupDisplayName ?? 'Pickup'}
             pinColor={theme.colors.primary}
             anchor={{ x: 0.5, y: 1 }}
           >
-            <MapPinLabel
-              color={theme.colors.primary}
-              title="Pickup"
-              subtitle={pickupText !== 'Current location' ? pickupText : null}
-            />
+            <MapPinLabel color={theme.colors.primary} title="Pickup" subtitle={pickupDisplayName} />
           </MapMarker>
           {nearbyDrivers.map((driver) => (
             <NearbyDriverMarker key={driver.id} driver={driver} />
@@ -932,55 +1002,126 @@ export function HomeScreen() {
         </View>
       ) : nearbyDrivers.length > 0 ? (
         <Pressable
-          onPress={fitMapToDrivers}
+          onPress={() => setDriversSheetOpen(true)}
           accessibilityRole="button"
-          accessibilityLabel={`${nearbyDrivers.length} ${nearbyDrivers.length === 1 ? 'driver' : 'drivers'} online. Tap to view on map.`}
-          style={{
+          accessibilityHint="Opens the list of every driver online right now"
+          accessibilityLabel={`${nearbyDrivers.length} ${nearbyDrivers.length === 1 ? 'driver' : 'drivers'} online${
+            nearestDriverKm != null ? `, nearest ${formatDriverKm(nearestDriverKm)} away` : ''
+          }. Tap to see them all.`}
+          hitSlop={8}
+          style={({ pressed }) => ({
             position: 'absolute',
             top: insets.top + 116,
             alignSelf: 'center',
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: 'rgba(255,255,255,0.94)',
+            backgroundColor: pressed ? '#F1F5F9' : 'rgba(255,255,255,0.94)',
             borderRadius: 18,
-            paddingHorizontal: 12,
+            paddingLeft: 12,
+            paddingRight: 8,
             paddingVertical: 7,
             shadowColor: '#000',
             shadowOpacity: 0.15,
             shadowRadius: 6,
             shadowOffset: { width: 0, height: 2 },
             elevation: 4,
-          }}
+          })}
         >
           <Car size={15} color="#2563EB" />
           <Text style={{ color: theme.colors.ink, fontSize: 12, fontWeight: '800' }}>
             {nearbyDrivers.length} {nearbyDrivers.length === 1 ? 'driver' : 'drivers'} online
-            {nearestDriverKm != null ? ` · nearest ${formatDriverKm(nearestDriverKm)}` : ''}
+            {nearestDriverKm != null && Number.isFinite(nearestDriverKm)
+              ? ` · nearest ${formatDriverKm(nearestDriverKm)}`
+              : ''}
           </Text>
+          <ChevronRight size={15} color={theme.colors.muted} />
         </Pressable>
       ) : (
-        <View
-          accessibilityLabel="No drivers online right now"
-          style={{
+        <Pressable
+          onPress={() => setDriversSheetOpen(true)}
+          accessibilityRole="button"
+          accessibilityHint="Opens the driver list, which updates as drivers come online"
+          accessibilityLabel="No drivers available nearby. Tap for details."
+          hitSlop={8}
+          style={({ pressed }) => ({
             position: 'absolute',
             top: insets.top + 116,
             alignSelf: 'center',
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: 'rgba(255,255,255,0.85)',
+            backgroundColor: pressed ? '#F1F5F9' : 'rgba(255,255,255,0.88)',
             borderRadius: 18,
-            paddingHorizontal: 12,
+            paddingLeft: 12,
+            paddingRight: 8,
             paddingVertical: 7,
-          }}
+            elevation: 2,
+          })}
         >
           <Car size={15} color={theme.colors.muted} />
-          <Text style={{ color: theme.colors.muted, fontSize: 12, fontWeight: '600' }}>
-            No drivers online right now — you can still book
+          <Text style={{ color: theme.colors.muted, fontSize: 12, fontWeight: '700' }}>
+            No drivers available nearby
           </Text>
-        </View>
+          <ChevronRight size={15} color={theme.colors.muted} />
+        </Pressable>
       )}
+
+      {/* === ALL ONLINE DRIVERS === */}
+      <DriversOnlineSheet
+        visible={driversSheetOpen}
+        onClose={() => setDriversSheetOpen(false)}
+        drivers={nearbyDrivers}
+        live={realtimeLive}
+        onShowOnMap={fitMapToDrivers}
+        onFocusDriver={focusDriver}
+      />
+
+      {/* === LOCATION PERMISSION / GPS === */}
+      {/* Never fake a position: say what's wrong and offer the one tap that
+          fixes it. Booking still works by typing a pickup. */}
+      {locationPermissionDenied || locationErrorType === 'services_disabled' ? (
+        <Pressable
+          onPress={requestLocation}
+          accessibilityRole="button"
+          accessibilityLabel={
+            locationPermissionDenied
+              ? 'Location permission is off. Tap to allow location access.'
+              : 'Device location is turned off. Tap to try again.'
+          }
+          style={{
+            position: 'absolute',
+            // Stack below the "driver heading to you" banner when both show.
+            top: insets.top + (approachingDriver ? 216 : 156),
+            left: 16,
+            right: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            backgroundColor: '#FEF3C7',
+            borderRadius: 14,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            zIndex: 20,
+            elevation: 6,
+          }}
+        >
+          <MapPinIcon size={18} color="#B45309" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#7C2D12', fontWeight: '800', fontSize: 13 }}>
+              {locationPermissionDenied
+                ? 'Location access is off'
+                : 'Device location is turned off'}
+            </Text>
+            <Text style={{ color: '#92400E', fontSize: 12 }}>
+              {locationPermissionDenied
+                ? 'Allow location so we can set your pickup — or type it below.'
+                : 'Turn on location services, then tap here to retry.'}
+            </Text>
+          </View>
+          <ChevronRight size={16} color="#B45309" />
+        </Pressable>
+      ) : null}
 
       {/* === TOP FLOATING HEADER (logo + where-to bar) === */}
       <Animated.View
@@ -1066,7 +1207,7 @@ export function HomeScreen() {
             }}
           />
           <Text style={{ flex: 1, fontSize: 16, color: theme.colors.muted, fontWeight: '500' }}>
-            {pickupText !== 'Current location' ? pickupText : 'Where to?'}
+            {pickupDisplayName ?? 'Where to?'}
           </Text>
           <View
             style={{
@@ -1313,16 +1454,25 @@ export function HomeScreen() {
                           setPickupText(text);
                           setPickupCoord(null);
                           setPickupFormatted(null);
+                          // They're choosing their own pickup now — stop
+                          // overwriting the field with the detected place.
+                          setPickupIsDetected(false);
                         }}
                         onFocus={() => setSuggestionField('pickup')}
                         onSubmitEditing={() => resolvePlace('pickup', pickupText)}
                         returnKeyType="search"
                       />
                     </View>
-                    {resolvingField === 'pickup' ? (
+                    {resolvingField === 'pickup' || (pickupIsDetected && resolvingPlace) ? (
                       <ActivityIndicator size="small" color={theme.colors.primary} />
                     ) : null}
-                    <Pressable onPress={handleUseLocation} style={{ padding: 4 }}>
+                    <Pressable
+                      onPress={handleUseLocation}
+                      accessibilityRole="button"
+                      accessibilityLabel="Use my current location as the pickup"
+                      hitSlop={8}
+                      style={{ padding: 4 }}
+                    >
                       <Navigation size={18} color={theme.colors.primary} />
                     </Pressable>
                   </View>

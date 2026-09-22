@@ -9,8 +9,9 @@ import { MapPinLabel } from '../components/MapPinLabel';
 import { MapMarker, MapPolyline, MapView } from '../components/MapView';
 import { StatusPill } from '../components/StatusPill';
 import type { RootStackParamList } from '../navigation/types';
-import { apiRequest } from '../services/api';
+import { apiRequest, describeApiError } from '../services/api';
 import { callPhone, normalizePhoneNumber, openWhatsApp } from '../services/contact';
+import { displayPlaceLabel } from '../services/placeName';
 import { createRealtimeClient } from '../services/realtime';
 import { realtimeEvents } from '../shared';
 import { theme } from '../theme/tokens';
@@ -189,10 +190,7 @@ export function TripTrackingScreen({ route, navigation }: Props) {
             setLiveStatus('CANCELLED');
             navigation.goBack();
           } catch (error) {
-            Alert.alert(
-              'Could not cancel',
-              error instanceof Error ? error.message : 'Please try again.'
-            );
+            Alert.alert('Could not cancel', describeApiError(error, 'Please try again.'));
           } finally {
             setCancelling(false);
           }
@@ -337,7 +335,11 @@ export function TripTrackingScreen({ route, navigation }: Props) {
           pinColor={theme.colors.primary}
           anchor={{ x: 0.5, y: 1 }}
         >
-          <MapPinLabel color={theme.colors.primary} title="Pickup" subtitle={trip?.pickupLabel} />
+          <MapPinLabel
+            color={theme.colors.primary}
+            title="Pickup"
+            subtitle={displayPlaceLabel(trip?.pickupLabel, 'Pickup')}
+          />
         </MapMarker>
         <MapMarker
           coordinate={dropoff}
@@ -345,7 +347,11 @@ export function TripTrackingScreen({ route, navigation }: Props) {
           pinColor="#EF4444"
           anchor={{ x: 0.5, y: 1 }}
         >
-          <MapPinLabel color="#EF4444" title="Dropoff" subtitle={trip?.dropoffLabel} />
+          <MapPinLabel
+            color="#EF4444"
+            title="Dropoff"
+            subtitle={displayPlaceLabel(trip?.dropoffLabel, 'Dropoff')}
+          />
         </MapMarker>
         {latestPoint ? (
           <MapMarker
@@ -517,14 +523,14 @@ export function TripTrackingScreen({ route, navigation }: Props) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <MapPin size={14} color={theme.colors.primary} />
             <Text style={{ fontSize: 13, color: theme.colors.ink, flex: 1 }} numberOfLines={1}>
-              {trip?.pickupLabel ?? 'Pickup'}
+              {displayPlaceLabel(trip?.pickupLabel, 'Pickup')}
             </Text>
           </View>
           <View style={{ height: 1, backgroundColor: theme.colors.border, marginLeft: 7 }} />
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <MapPin size={14} color="#EF4444" />
             <Text style={{ fontSize: 13, color: theme.colors.ink, flex: 1 }} numberOfLines={1}>
-              {trip?.dropoffLabel ?? 'Destination'}
+              {displayPlaceLabel(trip?.dropoffLabel, 'Destination')}
             </Text>
           </View>
         </View>
@@ -535,17 +541,17 @@ export function TripTrackingScreen({ route, navigation }: Props) {
             <Button
               label="Call"
               icon={<Phone size={18} color="#fff" />}
-              onPress={() => callPhone(driverPhone)}
-              disabled={!driverPhone}
+              onPress={() => callPhone(driverPhone, 'driver')}
             />
           </View>
           <View style={{ flex: 1 }}>
             <Button
               label="WhatsApp"
               icon={<MessageSquareText size={18} color={theme.colors.ink} />}
-              onPress={() => openWhatsApp(driverPhone)}
+              onPress={() =>
+                openWhatsApp(driverPhone, 'Hello, this is your Benbax passenger.', 'driver')
+              }
               variant="secondary"
-              disabled={!driverPhone}
             />
           </View>
           <Pressable

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Button } from '../components/Button';
 import type { RootStackParamList } from '../navigation/types';
-import { ApiResponseError, getApiBaseUrl, isApiConnectionError } from '../services/api';
+import { ApiResponseError, describeApiError } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
 
@@ -73,19 +73,12 @@ export function SignInScreen() {
       if (mode === 'login') await login(phone, password, rememberMe);
       else await register({ name, phone, email, password, role: partnerRole });
     } catch (err) {
-      if (isApiConnectionError(err)) {
-        setError(
-          `Cannot reach the API at ${getApiBaseUrl()}. Start the backend and make sure this phone is on the same network.`
-        );
-      } else if (err instanceof ApiResponseError && err.status === 401) {
+      // A 401 here means the credentials were wrong, not that a session
+      // lapsed — so it keeps its own wording rather than the shared one.
+      if (err instanceof ApiResponseError && err.status === 401) {
         setError('Invalid phone or password.');
-      } else if (
-        err instanceof ApiResponseError &&
-        (err.status === 503 || err.code === 'DATABASE_UNAVAILABLE')
-      ) {
-        setError('The backend database is offline. Start Postgres, then retry sign in.');
       } else {
-        setError(err instanceof Error ? err.message : 'Authentication failed');
+        setError(describeApiError(err, 'Authentication failed'));
       }
     } finally {
       setLoading(false);

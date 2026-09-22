@@ -1,5 +1,7 @@
 import { CheckCircle2, Flag, MapPin, Navigation, User, X } from 'lucide-react-native';
 import { Pressable, Text, View } from 'react-native';
+import { useReadablePlace } from '../hooks/useReadablePlace';
+import { displayPlaceLabel } from '../services/placeName';
 import type { NearbyClient, OpenRideRequest } from '../store/driverStore';
 import { theme } from '../theme/tokens';
 import { Button } from './Button';
@@ -37,6 +39,14 @@ export function ClientDetailCard({
 }: Props) {
   const name = client.name || request?.passengerName || 'Passenger';
 
+  // Where this passenger actually is, in words. Resolved only for the card the
+  // driver opened — never for every passenger in the list — so one tap costs at
+  // most one lookup, and re-opening the same passenger costs none.
+  const { label: clientPlace, resolving: resolvingPlace } = useReadablePlace(
+    client.latitude,
+    client.longitude
+  );
+
   return (
     <View
       style={{
@@ -70,6 +80,22 @@ export function ClientDetailCard({
               {client.serviceClass ? ` · ${SERVICE_LABELS[client.serviceClass]}` : ''}
             </Text>
           </View>
+          {clientPlace ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+              <MapPin size={11} color={theme.colors.muted} />
+              <Text
+                style={{
+                  flex: 1,
+                  color: theme.colors.muted,
+                  fontSize: 11,
+                  fontStyle: resolvingPlace ? 'italic' : 'normal',
+                }}
+                numberOfLines={1}
+              >
+                {clientPlace}
+              </Text>
+            </View>
+          ) : null}
         </View>
         <Pressable
           onPress={onClose}
@@ -102,14 +128,14 @@ export function ClientDetailCard({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <MapPin size={14} color={theme.colors.primary} />
             <Text style={{ flex: 1, color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
-              {request.pickup.label}
+              {displayPlaceLabel(request.pickup.label, request.pickup.address, 'Pickup')}
               {request.pickup.landmark ? ` (${request.pickup.landmark})` : ''}
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Flag size={14} color="#EF4444" />
             <Text style={{ flex: 1, color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
-              {request.dropoff.label}
+              {displayPlaceLabel(request.dropoff.label, request.dropoff.address, 'Drop-off')}
             </Text>
           </View>
           <Text style={{ color: theme.colors.muted, fontSize: 12 }}>

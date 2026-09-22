@@ -10,7 +10,7 @@ import { OfflineBanner } from '../components/OfflineBanner';
 import { Screen } from '../components/Screen';
 import { SkeletonBlock } from '../components/SkeletonBlock';
 import type { RootStackParamList } from '../navigation/types';
-import { apiRequest } from '../services/api';
+import { apiRequest, describeApiError } from '../services/api';
 import { theme } from '../theme/tokens';
 
 type EarningsData = {
@@ -80,9 +80,7 @@ export function EarningsScreen() {
         <OfflineBanner />
         <ErrorState
           title="Could not load earnings"
-          message={
-            error instanceof Error ? error.message : 'Please check your connection and try again.'
-          }
+          message={describeApiError(error, 'Please check your connection and try again.')}
           onRetry={() => refetch()}
         />
       </Screen>

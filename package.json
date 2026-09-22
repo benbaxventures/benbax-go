@@ -38,6 +38,7 @@
     "driver:update:preview": "npm run eas:update:preview --workspace apps/mobile-driver",
     "driver:update:production": "npm run eas:update:production --workspace apps/mobile-driver",
     "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"**/*.{ts,tsx,json,md,yml,yaml}\"",

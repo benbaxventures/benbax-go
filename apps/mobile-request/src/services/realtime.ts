@@ -6,7 +6,7 @@ import { resolveSocketUrl } from './network';
 type SocketHandler = (socket: Socket) => void;
 
 /**
- * Opens a realtime socket that survives expired access tokens and server
+ * Builds a realtime socket that survives expired access tokens and server
  * restarts.
  *
  * - `auth` is a callback, so every (re)connect sends the *current* token
@@ -16,7 +16,7 @@ type SocketHandler = (socket: Socket) => void;
  *   refresh the token and reconnect instead.
  * - Unlimited reconnection attempts: Render cold starts can take ~1 minute.
  */
-export async function createRealtimeClient(onReady?: SocketHandler) {
+function buildSocket(onReady?: SocketHandler): Socket {
   const socket = io(resolveSocketUrl(), {
     transports: ['websocket', 'polling'],
     auth: (cb) => {
@@ -59,4 +59,51 @@ export async function createRealtimeClient(onReady?: SocketHandler) {
   });
 
   return socket;
+}
+
+/** A dedicated socket owned by the caller, who must disconnect it. */
+export async function createRealtimeClient(onReady?: SocketHandler) {
+  return buildSocket(onReady);
+}
+
+let shared: { socket: Socket; refs: number } | null = null;
+
+/**
+ * One socket shared by every always-on live feature of the customer app
+ * (passenger presence, the nearby-driver stream, the driver list sheet).
+ *
+ * Opening a second connection per feature cost a whole extra handshake,
+ * heartbeat and auth cycle for the same data. Callers must remove the listeners
+ * they added with `socket.off(event, handler)` and call `releaseSharedSocket()`
+ * on unmount; the connection closes once the last holder lets go.
+ *
+ * Mirrors the driver app's `services/realtime.ts`.
+ */
+export function acquireSharedSocket(): Socket {
+  if (!shared) shared = { socket: buildSocket(), refs: 0 };
+  shared.refs += 1;
+  return shared.socket;
+}
+
+export function releaseSharedSocket() {
+  if (!shared) return;
+  shared.refs -= 1;
+  if (shared.refs <= 0) {
+    shared.socket.disconnect();
+    shared = null;
+  }
+}
+
+/**
+ * Runs `handler` now if connected and again after every reconnect, returning a
+ * cleanup. Use it for emits the server must hear on each new connection (watch
+ * subscriptions, presence reports, room joins) — otherwise a reconnect leaves
+ * the app silently unsubscribed.
+ */
+export function onEveryConnect(socket: Socket, handler: () => void) {
+  socket.on('connect', handler);
+  if (socket.connected) handler();
+  return () => {
+    socket.off('connect', handler);
+  };
 }

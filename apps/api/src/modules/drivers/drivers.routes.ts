@@ -88,14 +88,46 @@ driversRouter.get(
     // the REST fallback and the realtime feed always agree: only drivers with
     // a connected, heart-beating app are counted (never stale DB `isOnline`
     // rows), ids are user ids on both paths, and there is no distance cut-off.
-    const nearby = driversNear({ latitude, longitude }).map((driver) => ({
-      id: driver.id,
-      latitude: driver.latitude,
-      longitude: driver.longitude,
-      distanceKm: driver.distanceKm,
-      vehicleType: driver.vehicleType ?? null,
-      ...(driver.name ? { name: driver.name } : {}),
-    }));
+    const live = driversNear({ latitude, longitude });
+    if (live.length === 0) return ok(res, []);
+
+    // One query for the whole live set, so the customer's driver list can show
+    // vehicle, rating and whether the driver is free — without a DB read per
+    // position heartbeat. Deliberately excludes plate number, phone and any
+    // other detail a passenger has no business seeing before they book.
+    const profiles = await prisma.driverProfile.findMany({
+      where: { userId: { in: live.map((driver) => driver.id) } },
+      select: {
+        userId: true,
+        status: true,
+        rating: true,
+        totalTrips: true,
+        vehicle: { select: { type: true, make: true, model: true, color: true } },
+      },
+    });
+    const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
+
+    const nearby = live.map((driver) => {
+      const profile = profileByUserId.get(driver.id);
+      const vehicle = profile?.vehicle;
+      return {
+        id: driver.id,
+        latitude: driver.latitude,
+        longitude: driver.longitude,
+        distanceKm: driver.distanceKm,
+        vehicleType: vehicle?.type ?? driver.vehicleType ?? null,
+        vehicleDescription:
+          [vehicle?.color, vehicle?.make, vehicle?.model].filter(Boolean).join(' ') || null,
+        // Present in the registry means the app is connected and heart-beating;
+        // ON_TRIP means they are connected but already carrying a passenger.
+        available: profile ? profile.status !== 'ON_TRIP' : true,
+        rating: profile?.rating != null ? Number(profile.rating) : null,
+        totalTrips: profile?.totalTrips ?? null,
+        since: driver.since,
+        ...(driver.heading != null ? { heading: driver.heading } : {}),
+        ...(driver.name ? { name: driver.name } : {}),
+      };
+    });
 
     return ok(res, nearby);
   })
@@ -173,14 +205,16 @@ driversRouter.patch(
         ...(vehicleType ? { vehicleType } : {}),
         ...(driverUser.name ? { name: driverUser.name } : {}),
       });
-      // Broadcast to all watching customers via the shared room.
-      io?.to('customer-watchers').emit(
-        isNew ? realtimeEvents.driverOnline : realtimeEvents.driverMoved,
-        onlineDriver
-      );
+      // Broadcast to all watching customers and to the admin god-view, so a
+      // driver tapping "Go online" lands on the ops map in the same beat.
+      io?.to('customer-watchers')
+        .to('admins')
+        .emit(isNew ? realtimeEvents.driverOnline : realtimeEvents.driverMoved, onlineDriver);
     } else if (!req.body.isOnline) {
       if (removeOnlineDriver(driver.userId)) {
-        io?.to('customer-watchers').emit(realtimeEvents.driverOffline, { id: driver.userId });
+        io?.to('customer-watchers')
+          .to('admins')
+          .emit(realtimeEvents.driverOffline, { id: driver.userId });
       }
 
       // Hand any offer this driver was holding to the next driver right away
@@ -194,7 +228,14 @@ driversRouter.patch(
           where: { id: { in: pending.map((p) => p.id) }, status: 'OFFERED' },
           data: { status: 'EXPIRED', respondedAt: new Date() },
         });
-        for (const offer of pending) void dispatchRide(offer.tripId, io);
+        for (const offer of pending) {
+          void dispatchRide(offer.tripId, io).catch((error) =>
+            console.error('[api] re-dispatch after driver went offline failed', {
+              tripId: offer.tripId,
+              error,
+            })
+          );
+        }
       }
     }
 

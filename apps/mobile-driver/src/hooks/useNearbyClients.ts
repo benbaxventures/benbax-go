@@ -19,7 +19,7 @@ const CLIENT_EVENTS = {
 /** How often the driver re-announces itself so the server knows it's alive. */
 const HEARTBEAT_MS = 20_000;
 /** REST safety net in case a socket event was missed. */
-const SNAPSHOT_REFRESH_MS = 15_000;
+const SNAPSHOT_REFRESH_MS = 60_000;
 
 type DriverPosition = {
   latitude: number;
@@ -105,7 +105,7 @@ export function useNearbyClients(enabled: boolean, driver: DriverPosition) {
     };
 
     const refreshSnapshot = () => {
-      apiRequest<unknown[]>('/drivers/me/nearby-clients')
+      apiRequest<unknown[]>('/drivers/me/nearby-clients', { background: true })
         .then((clients) => {
           if (cancelled || !Array.isArray(clients)) return;
           const normalized = clients

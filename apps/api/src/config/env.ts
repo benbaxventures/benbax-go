@@ -12,6 +12,27 @@ const envSchema = z.object({
   JWT_ACCESS_TTL: z.string().default('15m'),
   JWT_REFRESH_TTL: z.string().default('30d'),
   CORS_ORIGINS: z.string().default('http://localhost:5173,http://localhost:19006'),
+  // Number of reverse proxies in front of the API, passed to Express's
+  // `trust proxy`. Render, Vercel and most PaaS front ends add exactly one.
+  // Without this every client shares one rate-limit bucket, because `req.ip`
+  // resolves to the proxy rather than the caller. Set to 0 only when the API
+  // is exposed directly, or clients could spoof X-Forwarded-For.
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(1),
+  // Ceiling for ordinary API traffic, per authenticated user (per IP when
+  // signed out). See middleware/rateLimit.ts for how the default is derived.
+  RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(600),
+  // Sign-in / registration / password reset, per IP.
+  AUTH_RATE_LIMIT_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(15 * 60 * 1000),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   // Optional Expo access token for authenticated push sends (recommended in prod).
   EXPO_ACCESS_TOKEN: z.string().optional(),

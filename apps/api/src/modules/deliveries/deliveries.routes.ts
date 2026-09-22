@@ -83,12 +83,19 @@ deliveriesRouter.post(
     if (scheduledTime && scheduledTime > Date.now()) {
       setTimeout(
         () => {
-          void dispatchDelivery(delivery.id, req.app.get('io'));
+          void dispatchDelivery(delivery.id, req.app.get('io')).catch((error) =>
+            console.error('[api] scheduled delivery dispatch failed', {
+              deliveryId: delivery.id,
+              error,
+            })
+          );
         },
         Math.min(scheduledTime - Date.now(), 2_147_483_647)
       );
     } else {
-      void dispatchDelivery(delivery.id, req.app.get('io'));
+      void dispatchDelivery(delivery.id, req.app.get('io')).catch((error) =>
+        console.error('[api] delivery dispatch failed', { deliveryId: delivery.id, error })
+      );
     }
     return created(res, delivery);
   })

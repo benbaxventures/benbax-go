@@ -4,6 +4,8 @@ const GHANA_COUNTRY_CODE = '233';
 const MIN_E164_DIGITS = 8;
 const MAX_E164_DIGITS = 15;
 
+export const BENBAX_PHONE = '+233598204414';
+
 export function normalizePhoneNumber(phone: string | null | undefined): string | null {
   if (typeof phone !== 'string') return null;
 
@@ -35,39 +37,61 @@ export function normalizePhoneNumber(phone: string | null | undefined): string |
   return null;
 }
 
-export function callPhone(phone: string | null | undefined) {
-  const normalizedPhone = normalizePhoneNumber(phone);
-  if (!normalizedPhone) {
-    Alert.alert('Contact unavailable', 'A valid phone number is not available yet.');
-    return;
-  }
-
-  const url = `tel:${normalizedPhone}`;
-  Linking.canOpenURL(url)
-    .then((supported) => {
-      if (supported) return Linking.openURL(url);
-      Alert.alert(
-        'Unable to call',
-        `Phone calls are not supported on this device. Number: ${normalizedPhone}`
-      );
-    })
-    .catch(() => Alert.alert('Error', 'Could not initiate the call.'));
+/**
+ * Explain a missing number instead of leaving a dead button, and offer the
+ * support line so the passenger is never stranded with no way to reach anyone.
+ */
+function alertNumberMissing(contactLabel: string) {
+  Alert.alert(
+    'Contact unavailable',
+    `Your ${contactLabel} has not shared a phone number yet. Benbax support can reach them for you.`,
+    [
+      { text: 'Close', style: 'cancel' },
+      { text: 'Call support', onPress: () => callPhone(BENBAX_PHONE, 'support line') },
+    ]
+  );
 }
 
-export function openWhatsApp(phone: string | null | undefined, message?: string) {
+export function callPhone(phone: string | null | undefined, contactLabel = 'contact') {
   const normalizedPhone = normalizePhoneNumber(phone);
   if (!normalizedPhone) {
-    Alert.alert('Contact unavailable', 'A valid phone number is not available yet.');
+    alertNumberMissing(contactLabel);
     return;
   }
 
-  const text = message ? `?text=${encodeURIComponent(message)}` : '';
+  // `Linking.canOpenURL` is deliberately not used as a gate. From Android 11
+  // (API 30) package visibility hides the dialer from apps that have not
+  // declared a `tel` intent under <queries>, so it answers "no" even on a
+  // phone that can obviously place calls — which is what silently blocked
+  // this button. `openURL` rejects only when nothing can really handle the
+  // intent, so failure here is a true failure.
+  Linking.openURL(`tel:${normalizedPhone}`).catch(() =>
+    Alert.alert('Unable to call', `Dial ${normalizedPhone} from your phone app instead.`)
+  );
+}
+
+export function openWhatsApp(
+  phone: string | null | undefined,
+  message?: string,
+  contactLabel = 'contact'
+) {
+  const normalizedPhone = normalizePhoneNumber(phone);
+  if (!normalizedPhone) {
+    alertNumberMissing(contactLabel);
+    return;
+  }
+
   const cleanPhone = normalizedPhone.slice(1);
-  const waUrl = `https://wa.me/${cleanPhone}${text}`;
+  const encoded = message ? encodeURIComponent(message) : null;
 
-  Linking.openURL(waUrl).catch(() => {
-    Alert.alert('WhatsApp not found', 'WhatsApp is not installed on this device.');
-  });
+  // Prefer the installed app, then fall back to the wa.me web hand-off, which
+  // also works when WhatsApp Business is the installed variant.
+  Linking.openURL(`whatsapp://send?phone=${cleanPhone}${encoded ? `&text=${encoded}` : ''}`)
+    .catch(() => Linking.openURL(`https://wa.me/${cleanPhone}${encoded ? `?text=${encoded}` : ''}`))
+    .catch(() =>
+      Alert.alert(
+        'WhatsApp unavailable',
+        `WhatsApp could not be opened. You can message ${normalizedPhone} directly.`
+      )
+    );
 }
-
-export const BENBAX_PHONE = '+233598204414';

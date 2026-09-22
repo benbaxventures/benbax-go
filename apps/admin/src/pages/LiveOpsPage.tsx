@@ -3,7 +3,9 @@ import { Car, Clock, MapPin, Send, UserRound, Users, XCircle } from 'lucide-reac
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LiveMap } from '../components/LiveMap';
 import { MetricCard } from '../components/MetricCard';
+import { useLivePresence } from '../hooks/useLivePresence';
 import { formatDateTime, formatRelativeTime } from '../lib/format';
+import { mergeLiveDrivers, mergeLivePassengers } from '../lib/mergePresence';
 import {
   distanceKm,
   formatKm,
@@ -14,9 +16,7 @@ import {
   type OpsRide,
   type OpsRides,
 } from '../lib/opsTypes';
-import { realtimeEvents } from '../lib/realtimeEvents';
 import { apiRequest } from '../services/api';
-import { createRealtimeClient } from '../services/realtime';
 
 function secondsLeft(iso: string, now: number) {
   return Math.max(0, Math.round((new Date(iso).getTime() - now) / 1000));
@@ -165,18 +165,17 @@ export function LiveOpsPage() {
     void queryClient.invalidateQueries({ queryKey: ['ops-presence'] });
   }, [queryClient]);
 
-  // Ride lifecycle events arrive instantly on the admins socket room.
-  useEffect(() => {
-    const socket = createRealtimeClient();
-    const onRideEvent = () => refreshAll();
-    socket.on(realtimeEvents.rideRequested, onRideEvent);
-    socket.on(realtimeEvents.rideAssigned, onRideEvent);
-    socket.on(realtimeEvents.rideUpdated, onRideEvent);
-    socket.on(realtimeEvents.driverAvailability, onRideEvent);
-    return () => {
-      socket.disconnect();
-    };
-  }, [refreshAll]);
+  const refreshPresence = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['ops-presence'] });
+    void queryClient.invalidateQueries({ queryKey: ['ops-overview'] });
+  }, [queryClient]);
+
+  // Every driver and passenger position, live off the socket. Ride lifecycle
+  // events arrive on the same connection and refresh the queries below.
+  const livePresence = useLivePresence({
+    onPeopleChanged: refreshPresence,
+    onRideEvent: refreshAll,
+  });
 
   // Tick for offer countdowns.
   useEffect(() => {
@@ -184,8 +183,16 @@ export function LiveOpsPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const drivers = useMemo(() => presence?.drivers ?? [], [presence]);
-  const passengers = useMemo(() => presence?.passengers ?? [], [presence]);
+  // Socket positions win over the poll; the poll supplies name/vehicle/status.
+  const drivers = useMemo(
+    () => mergeLiveDrivers(presence?.drivers ?? [], livePresence.drivers, livePresence.streaming),
+    [presence, livePresence.drivers, livePresence.streaming]
+  );
+  const passengers = useMemo(
+    () =>
+      mergeLivePassengers(presence?.passengers ?? [], livePresence.clients, livePresence.streaming),
+    [presence, livePresence.clients, livePresence.streaming]
+  );
   const idleDrivers = useMemo(() => drivers.filter((d) => !d.busy), [drivers]);
   const openRides = useMemo(() => rides?.open ?? [], [rides]);
   const activeRides = useMemo(() => rides?.active ?? [], [rides]);
@@ -239,19 +246,23 @@ export function LiveOpsPage() {
             progress — nationwide, updating live.
           </p>
         </div>
-        <span className="live-dot">Live</span>
+        <span className={`live-dot${livePresence.connected ? '' : ' live-dot-offline'}`}>
+          {livePresence.connected ? 'Live' : 'Reconnecting…'}
+        </span>
       </div>
 
       <div className="metrics-grid metrics-grid-5">
         <MetricCard
           label="Drivers online"
-          value={`${overview?.drivers.live ?? drivers.length}`}
-          delta={`${overview?.drivers.idle ?? idleDrivers.length} available · ${overview?.drivers.busy ?? 0} on trip`}
+          // While the socket is up these counts come from the same stream that
+          // draws the map, so the number and the pins can never disagree.
+          value={`${livePresence.streaming ? drivers.length : (overview?.drivers.live ?? drivers.length)}`}
+          delta={`${livePresence.streaming ? idleDrivers.length : (overview?.drivers.idle ?? idleDrivers.length)} available · ${drivers.length - idleDrivers.length} on trip`}
           icon={<Car size={20} />}
         />
         <MetricCard
           label="Passengers online"
-          value={`${overview?.passengersOnline ?? passengers.length}`}
+          value={`${livePresence.streaming ? passengers.length : (overview?.passengersOnline ?? passengers.length)}`}
           delta="App open with location"
           icon={<Users size={20} />}
         />

@@ -10,11 +10,11 @@ async function main() {
   const passwordHash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!', 12);
 
   await prisma.user.upsert({
-    where: { phone: '+2330594172522' },
+    where: { phone: '+233594172522' },
     update: {},
     create: {
       name: 'Benbax Admin',
-      phone: '+2330594172522',
+      phone: '+233594172522',
       email: 'admin@benbax.com',
       role: UserRole.ADMIN,
       passwordHash,

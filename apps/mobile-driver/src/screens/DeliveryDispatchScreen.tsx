@@ -12,7 +12,8 @@ import { OfflineBanner } from '../components/OfflineBanner';
 import { Screen } from '../components/Screen';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import type { RootStackParamList } from '../navigation/types';
-import { ApiConnectionError, apiRequest } from '../services/api';
+import { ApiConnectionError, apiRequest, describeApiError } from '../services/api';
+import { displayPlaceLabel } from '../services/placeName';
 import { useDriverStore } from '../store/driverStore';
 import { useRiderStore } from '../store/riderStore';
 import { theme } from '../theme/tokens';
@@ -122,7 +123,7 @@ export function DeliveryDispatchScreen() {
       if (err instanceof ApiConnectionError) {
         setError('Cannot reach the server. Check your internet connection and try again.');
       } else {
-        setError(err instanceof Error ? err.message : 'Could not update delivery availability.');
+        setError(describeApiError(err, 'Could not update delivery availability.'));
       }
     } finally {
       setLoading(false);
@@ -140,7 +141,7 @@ export function DeliveryDispatchScreen() {
       if (err instanceof ApiConnectionError) {
         setError('Cannot reach the server. Check your connection.');
       } else {
-        setError(err instanceof Error ? err.message : 'Could not accept this delivery offer.');
+        setError(describeApiError(err, 'Could not accept this delivery offer.'));
       }
     }
   }, [currentOffer, navigation, setCurrentOffer]);
@@ -155,7 +156,7 @@ export function DeliveryDispatchScreen() {
       if (err instanceof ApiConnectionError) {
         setError('Cannot reach the server. Check your connection.');
       } else {
-        setError(err instanceof Error ? err.message : 'Could not reject this delivery offer.');
+        setError(describeApiError(err, 'Could not reject this delivery offer.'));
       }
     }
   }, [currentOffer, setCurrentOffer]);
@@ -393,12 +394,12 @@ export function DeliveryDispatchScreen() {
               </View>
               {currentOffer.pickup?.label ? (
                 <Text style={{ color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
-                  Pickup: {currentOffer.pickup.label}
+                  Pickup: {displayPlaceLabel(currentOffer.pickup.label, 'Pickup')}
                 </Text>
               ) : null}
               {currentOffer.dropoff?.label ? (
                 <Text style={{ color: theme.colors.muted, fontSize: 13 }} numberOfLines={2}>
-                  Destination: {currentOffer.dropoff.label}
+                  Destination: {displayPlaceLabel(currentOffer.dropoff.label, 'Destination')}
                 </Text>
               ) : null}
               <Text style={{ color: theme.colors.muted }}>Dispatch score {currentOffer.score}</Text>

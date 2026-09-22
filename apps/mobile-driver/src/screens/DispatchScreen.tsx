@@ -35,14 +35,16 @@ import { formatKm, RideRequestCard, timeAgo } from '../components/RideRequestCar
 import { useLiveLocation } from '../hooks/useLiveLocation';
 import { useNearbyClients } from '../hooks/useNearbyClients';
 import { useOpenRideRequests } from '../hooks/useOpenRideRequests';
+import { useReadablePlace } from '../hooks/useReadablePlace';
 import type { RootStackParamList } from '../navigation/types';
-import { ApiConnectionError, apiRequest } from '../services/api';
+import { apiRequest, describeApiError } from '../services/api';
 import {
   fetchDrivingRoute,
   haversineMeters,
   openExternalNavigation,
   type RouteCoordinate,
 } from '../services/directions';
+import { displayPlaceLabel } from '../services/placeName';
 import { acquireSharedSocket, emitDriverLocation, releaseSharedSocket } from '../services/realtime';
 import { acceptRide, AcceptRideError } from '../services/rides';
 import { useAuthStore } from '../store/authStore';
@@ -94,6 +96,22 @@ const REQUESTS_PREVIEW_COUNT = 3;
 const CLIENTS_PREVIEW_COUNT = 5;
 /** Re-fetch the driving route at most this often while navigating. */
 const ROUTE_REFRESH_MS = 30_000;
+
+/**
+ * Availability (REST) backstop for the socket position heartbeat.
+ * Never more often than MIN, and at least once every IDLE while standing still.
+ */
+const AVAILABILITY_MIN_INTERVAL_MS = 20_000;
+const AVAILABILITY_IDLE_INTERVAL_MS = 120_000;
+/** ~55 m — far enough that normal GPS jitter does not count as movement. */
+const AVAILABILITY_MOVE_DEGREES = 0.0005;
+
+/**
+ * Priority score and hot zones change over hours, not seconds. Polling them
+ * every 30/60s was pure overhead against the request budget.
+ */
+const PRIORITY_REFRESH_MS = 5 * 60_000;
+const HOT_ZONE_REFRESH_MS = 10 * 60_000;
 
 /** Where in-app navigation is currently heading. */
 type NavTarget = {
@@ -156,6 +174,13 @@ export function DispatchScreen() {
     permissionDenied,
     requestLocation,
   } = useLiveLocation(true);
+  // Where the driver is, in words. Resolved from the same live fix the map and
+  // dispatch use, and only re-looked-up after a real move, so a parked driver
+  // costs nothing.
+  const { label: currentPlaceLabel } = useReadablePlace(
+    hasFix ? latitude : null,
+    hasFix ? longitude : null
+  );
   const [mapsModule, setMapsModule] = useState<MapsModule | null>(null);
   const mapRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const sheetRef = useRef<BottomSheet>(null);
@@ -212,21 +237,31 @@ export function DispatchScreen() {
   const selectedClient = nearbyClients.find((c) => c.id === selectedClientId) ?? null;
 
   // Keep the customer-facing nearby-driver map current while an online driver
-  // moves, without sending an availability request for every GPS callback.
+  // moves.
+  //
+  // This is a backstop, not the live channel: the socket heartbeat in
+  // useNearbyClients already reports the driver's position continuously. The
+  // GPS watcher fires roughly every four seconds, and the old rule (any move
+  // of ~22 m, or ten seconds standing still) meant almost every fix became its
+  // own HTTP request — on its own more than a whole rate-limit window's worth
+  // of traffic per driver per 15 minutes. A hard floor between requests keeps
+  // the fallback useful without turning GPS into a request loop.
   useEffect(() => {
     if (!isOnline || !latitude || !longitude) return;
 
     const now = Date.now();
     const previous = lastPublishedLocationRef.current;
+    if (now - previous.at < AVAILABILITY_MIN_INTERVAL_MS) return;
     const moved =
-      Math.abs(latitude - previous.latitude) >= 0.0002 ||
-      Math.abs(longitude - previous.longitude) >= 0.0002;
-    if (!moved && now - previous.at < 10_000) return;
+      Math.abs(latitude - previous.latitude) >= AVAILABILITY_MOVE_DEGREES ||
+      Math.abs(longitude - previous.longitude) >= AVAILABILITY_MOVE_DEGREES;
+    if (!moved && now - previous.at < AVAILABILITY_IDLE_INTERVAL_MS) return;
 
     lastPublishedLocationRef.current = { at: now, latitude, longitude };
     void apiRequest('/drivers/me/availability', {
       method: 'PATCH',
       body: JSON.stringify({ isOnline: true, latitude, longitude }),
+      background: true,
     }).catch(() => undefined);
   }, [isOnline, latitude, longitude]);
 
@@ -379,7 +414,11 @@ export function DispatchScreen() {
         kind: leg,
         id: request.tripId,
         clientId: request.passengerId,
-        label: point.label,
+        label: displayPlaceLabel(
+          point.label,
+          point.address,
+          leg === 'pickup' ? 'Pickup' : 'Drop-off'
+        ),
         latitude: point.latitude,
         longitude: point.longitude,
       });
@@ -424,7 +463,7 @@ export function DispatchScreen() {
           if (useDriverStore.getState().currentOffer?.tripId === tripId) setCurrentOffer(null);
           Alert.alert('Ride no longer available', err.message);
         } else {
-          setError(err instanceof Error ? err.message : 'Could not accept this ride.');
+          setError(describeApiError(err, 'Could not accept this ride.'));
         }
         void refreshOpenRequests();
       } finally {
@@ -502,16 +541,20 @@ export function DispatchScreen() {
 
   const { data: priorityData } = useQuery<PriorityData>({
     queryKey: ['driver-priority'],
-    queryFn: () => apiRequest('/drivers/me/priority'),
+    queryFn: () => apiRequest('/drivers/me/priority', { background: true }),
     enabled: isOnline,
-    refetchInterval: 30000,
+    refetchInterval: PRIORITY_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
 
   const { data: zones } = useQuery<HotZone[]>({
     queryKey: ['hot-zones'],
-    queryFn: () => apiRequest('/drivers/me/hot-zones'),
+    queryFn: () => apiRequest('/drivers/me/hot-zones', { background: true }),
     enabled: isOnline,
-    refetchInterval: 60000,
+    refetchInterval: HOT_ZONE_REFRESH_MS,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
 
   useEffect(() => {
@@ -595,11 +638,7 @@ export function DispatchScreen() {
       });
       setOnline(next);
     } catch (err) {
-      if (err instanceof ApiConnectionError) {
-        setError('Cannot reach the server. Check your internet connection and try again.');
-      } else {
-        setError(err instanceof Error ? err.message : 'Could not update availability.');
-      }
+      setError(describeApiError(err, 'Could not update availability.'));
     } finally {
       setLoading(false);
     }
@@ -617,11 +656,7 @@ export function DispatchScreen() {
       await apiRequest(`/ride-dispatch/assignments/${currentOffer.id}/reject`, { method: 'POST' });
       setCurrentOffer(null);
     } catch (err) {
-      if (err instanceof ApiConnectionError) {
-        setError('Cannot reach the server. Check your connection.');
-      } else {
-        setError(err instanceof Error ? err.message : 'Could not reject this offer.');
-      }
+      setError(describeApiError(err, 'Could not reject this offer.'));
     }
   }, [currentOffer, setCurrentOffer]);
 
@@ -1121,12 +1156,12 @@ export function DispatchScreen() {
                   </View>
                   {currentOffer.pickup?.label ? (
                     <Text style={{ color: theme.colors.ink, fontSize: 13 }} numberOfLines={2}>
-                      Pickup: {currentOffer.pickup.label}
+                      Pickup: {displayPlaceLabel(currentOffer.pickup.label, 'Pickup')}
                     </Text>
                   ) : null}
                   {currentOffer.dropoff?.label ? (
                     <Text style={{ color: theme.colors.muted, fontSize: 13 }} numberOfLines={2}>
-                      Dropoff: {currentOffer.dropoff.label}
+                      Dropoff: {displayPlaceLabel(currentOffer.dropoff.label, 'Drop-off')}
                     </Text>
                   ) : null}
                   <Text style={{ color: theme.colors.ink, fontWeight: '700' }}>
@@ -1190,6 +1225,21 @@ export function DispatchScreen() {
                       ? 'Receiving nearby trip requests'
                       : 'Tap to go online and receive trips'}
                 </Text>
+                {currentPlaceLabel ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Locate size={12} color={isOnline ? '#D7FFF5' : theme.colors.muted} />
+                    <Text
+                      style={{
+                        flex: 1,
+                        color: isOnline ? '#D7FFF5' : theme.colors.muted,
+                        fontSize: 12,
+                      }}
+                      numberOfLines={1}
+                    >
+                      You’re at {currentPlaceLabel}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
 
               {/* Selected passenger — live details, request, and navigation */}

@@ -4,7 +4,7 @@ import { Alert, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Screen } from '../components/Screen';
 import type { RootStackParamList } from '../navigation/types';
-import { apiRequest } from '../services/api';
+import { apiRequest, describeApiError } from '../services/api';
 import { updateStoredUser } from '../services/authStorage';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
@@ -30,10 +30,7 @@ export function EditProfileScreen({ navigation }: Props) {
       Alert.alert('Profile updated', 'Your name and email have been updated.');
       navigation.goBack();
     } catch (error) {
-      Alert.alert(
-        'Could not update profile',
-        error instanceof Error ? error.message : 'Please try again.'
-      );
+      Alert.alert('Could not update profile', describeApiError(error, 'Please try again.'));
     } finally {
       setIsSaving(false);
     }

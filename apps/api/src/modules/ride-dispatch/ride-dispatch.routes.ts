@@ -5,19 +5,17 @@ import { requireAuth, requireRoles } from '../../middleware/auth';
 import { realtimeEvents } from '../../realtime/events';
 import { getOnlineDriver } from '../../realtime/presence';
 import { asyncHandler } from '../../utils/asyncHandler';
-import { badRequest, forbidden, notFound } from '../../utils/http';
+import { badRequest, notFound } from '../../utils/http';
 import { ok } from '../../utils/response';
-import { clearRideDispatchState, dispatchRide } from '../dispatch/dispatch.service';
-import { notify } from '../notifications/notify';
-import { recordTripStatusEvent } from '../orders/status-events';
+import { dispatchRide } from '../dispatch/dispatch.service';
 import {
-  broadcastOpenRideRequest,
   claimRide,
   findActiveRideForDriver,
   listOpenRideRequests,
   RIDE_ASSIGNMENT_INCLUDE,
   withDialablePhones,
 } from './ride-marketplace';
+import { releaseRide } from './ride-release.service';
 
 export const rideDispatchRouter = Router();
 
@@ -199,7 +197,11 @@ rideDispatchRouter.post(
         : existing;
 
     // Hand the ride straight to the next driver instead of waiting for expiry.
-    void dispatchRide(existing.tripId, req.app.get('io'));
+    // Fire-and-forget, but never unhandled: an uncaught rejection here would
+    // take the whole API process down with it.
+    void dispatchRide(existing.tripId, req.app.get('io')).catch((error) =>
+      console.error('[api] re-dispatch after reject failed', { tripId: existing.tripId, error })
+    );
     return ok(res, assignment);
   })
 );
@@ -207,6 +209,8 @@ rideDispatchRouter.post(
 /**
  * The assigned driver can't make it. Rather than cancelling on the passenger,
  * put the ride back in the open pool and find them another driver.
+ *
+ * Safe to retry: see releaseRide for how repeats and races are handled.
  */
 rideDispatchRouter.post(
   '/trips/:id/release',
@@ -214,63 +218,20 @@ rideDispatchRouter.post(
   asyncHandler(async (req, res) => {
     const tripId = req.params.id;
     if (!tripId) throw badRequest('Trip id is required');
-    const driver = await requireDriverProfile(req.user!.id);
 
-    const assignment = await prisma.rideAssignment.findFirst({
-      where: { tripId, driverProfileId: driver.id, status: 'ACCEPTED' },
-      select: { id: true, trip: { select: { status: true, passengerId: true } } },
-    });
-    if (!assignment) throw forbidden('You are not assigned to this ride');
-
-    const releasable: RideTripStatus[] = [
-      RideTripStatus.ASSIGNED,
-      RideTripStatus.DRIVER_ARRIVING,
-      RideTripStatus.ARRIVED,
-    ];
-    const released = await prisma.$transaction(async (tx) => {
-      const reopened = await tx.rideTrip.updateMany({
-        where: { id: tripId, status: { in: releasable } },
-        data: { status: RideTripStatus.REQUESTED },
-      });
-      if (reopened.count === 0) return false;
-      await tx.rideAssignment.update({
-        where: { id: assignment.id },
-        data: { status: 'REJECTED', respondedAt: new Date() },
-      });
-      await tx.driverProfile.update({ where: { id: driver.id }, data: { status: 'ACTIVE' } });
-      return true;
-    });
-    if (!released) {
-      throw badRequest('This ride has already started or ended and can no longer be released');
-    }
-
-    await recordTripStatusEvent(tripId, {
-      fromStatus: assignment.trip.status,
-      toStatus: RideTripStatus.REQUESTED,
-      actorId: req.user!.id,
-      note: 'Driver released the ride; finding another driver',
+    const result = await releaseRide({
+      tripId,
+      driverUserId: req.user!.id,
+      io: req.app.get('io'),
     });
 
-    const io = req.app.get('io');
-    const trip = await prisma.rideTrip.findUnique({ where: { id: tripId } });
-    io?.to(`user:${assignment.trip.passengerId}`).emit(realtimeEvents.rideUpdated, trip);
-    io?.to(`ride:${tripId}`).emit(realtimeEvents.rideUpdated, trip);
-    io?.to('admins').emit(realtimeEvents.rideUpdated, trip);
-    void notify(
-      { userIds: [assignment.trip.passengerId], channels: ['inapp', 'push'] },
-      {
-        title: 'Finding you another driver',
-        body: 'Your driver could not make it. We are matching you with another driver now.',
-        data: { type: 'ride-released', tripId },
-      }
-    );
-
-    clearRideDispatchState(tripId);
-    await broadcastOpenRideRequest(io, tripId);
-    // Drivers whose offers were voided when this driver accepted are fair
-    // game again right away.
-    void dispatchRide(tripId, io, { skipReofferCooldown: true });
-
-    return ok(res, trip);
+    // `released` vs `alreadyReleased` is what lets the app tell "this call did
+    // the work" from "a retry found it already done" — both are successes, and
+    // both mean the driver is free.
+    return ok(res, {
+      trip: result.trip,
+      released: result.released,
+      alreadyReleased: result.alreadyReleased,
+    });
   })
 );
