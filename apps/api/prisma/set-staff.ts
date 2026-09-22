@@ -17,29 +17,34 @@
  * database the API itself points at. Prompts for the password (not echoed) and
  * asks for confirmation before writing anything.
  *
+ * Staff access is *granted*, never swapped in: this sets `staffRole` and leaves
+ * `role` alone, so a driver who runs operations keeps driving and earning while
+ * gaining the dashboard. A brand-new account is created as a CUSTOMER with
+ * staff access, which is the least surprising default.
+ *
  * Environment overrides for non-interactive use:
  *   STAFF_PASSWORD   the password to set on every listed account
  *   STAFF_ROLE       ADMIN (default) | OPERATIONS | SUPPORT
  * Flags:
  *   --yes            skip the confirmation prompt
- *   --promote        allow converting an existing customer/driver account
+ *   --promote        allow granting staff access to an account that isn't staff
  *   --dry-run        report what would change and write nothing
  */
-import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
+import { PrismaClient, StaffRole, UserRole, UserStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import 'dotenv/config';
 import readline from 'node:readline';
 import { normalizePhoneNumber, phoneLookupVariants } from '../src/utils/phone';
 
 const MIN_PASSWORD_LENGTH = 12;
-const STAFF_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.OPERATIONS, UserRole.SUPPORT];
+const STAFF_ROLES: StaffRole[] = [StaffRole.ADMIN, StaffRole.OPERATIONS, StaffRole.SUPPORT];
 
 /**
  * The Benbax staff sign-ins, each located by `phone`, `email`, or both.
  *
  * Verified against the live database on 2026-09-20 (`npm run phones:check` plus
  * a staff listing) — the notes below say what each entry actually resolves to,
- * because two of the three are existing accounts being converted, not new ones.
+ * because two of the three are existing accounts gaining access, not new ones.
  *
  * Deliberately absent: `059 417 2522`. That number carries two accounts — the
  * owner's ADMIN on the malformed `+2330594172522` and an unrelated DRIVER on
@@ -48,13 +53,14 @@ const STAFF_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.OPERATIONS, UserRole.S
  * one of the two to overwrite.
  */
 const TEAM: { phone?: string; email?: string; name: string }[] = [
-  // Existing Google sign-in DRIVER ("BENBAX VENTURES") with no password.
-  // Needs --promote; gains a password so the address can sign in normally.
+  // Existing Google sign-in DRIVER ("BENBAX VENTURES") with no password. Needs
+  // --promote; gains a password and the dashboard while staying a real driver,
+  // so this one address now works in all three apps.
   { email: 'benbaxventures@gmail.com', name: 'Benbax Ventures' },
-  // No account on this number yet — created fresh.
+  // No account on this number yet — created as a CUSTOMER with staff access.
   { phone: '059 820 4414', name: 'Benbax Operations' },
   // Existing CUSTOMER ("Ruben Agbaxode"), confirmed as a Benbax number.
-  // Needs --promote; ride history is preserved.
+  // Needs --promote; stays a customer, ride history untouched.
   { phone: '054 601 3031', name: 'Benbax Support' },
 ];
 
@@ -115,10 +121,10 @@ async function main() {
   const args = new Set(process.argv.slice(2));
   const dryRun = args.has('--dry-run');
   const roleInput = (process.env.STAFF_ROLE ?? 'ADMIN').toUpperCase();
-  if (!STAFF_ROLES.includes(roleInput as UserRole)) {
+  if (!STAFF_ROLES.includes(roleInput as StaffRole)) {
     throw new Error(`STAFF_ROLE must be one of ${STAFF_ROLES.join(', ')}`);
   }
-  const role = roleInput as UserRole;
+  const staffRole = roleInput as StaffRole;
 
   const prisma = new PrismaClient();
   try {
@@ -160,10 +166,10 @@ async function main() {
       }
       const existing = matches[0] ?? null;
 
-      if (existing && !STAFF_ROLES.includes(existing.role) && !args.has('--promote')) {
+      if (existing && !existing.staffRole && !args.has('--promote')) {
         throw new Error(
-          `${label} belongs to a ${existing.role} account (${existing.name.trim()}). ` +
-            'Re-run with --promote to make it a staff account.'
+          `${label} belongs to a ${existing.role} account (${existing.name.trim()}) with no ` +
+            'staff access. Re-run with --promote to grant it — their existing role is kept.'
         );
       }
 
@@ -176,13 +182,20 @@ async function main() {
       }
 
       const changes: string[] = [];
-      if (!existing) changes.push(`create ${role}`);
+      if (!existing) changes.push(`create CUSTOMER with ${staffRole} access`);
       else {
         changes.push('reset password');
         if (phone && existing.phone !== phone) {
           changes.push(`repair phone ${existing.phone} → ${phone}`);
         }
-        if (!STAFF_ROLES.includes(existing.role)) changes.push(`${existing.role} → ${role}`);
+        if (existing.staffRole !== staffRole) {
+          // `role` is never touched — the grant is purely additive.
+          changes.push(
+            existing.staffRole
+              ? `staff ${existing.staffRole} → ${staffRole}`
+              : `grant ${staffRole} access (stays ${existing.role})`
+          );
+        }
         if (existing.status !== UserStatus.ACTIVE) changes.push(`${existing.status} → ACTIVE`);
         if (email && existing.email !== email) changes.push(`set email ${email}`);
       }
@@ -241,7 +254,9 @@ async function main() {
               ...(plan.phone ? { phone: plan.phone } : {}),
               passwordHash,
               status: UserStatus.ACTIVE,
-              role,
+              // `role` is deliberately absent: staff access is added alongside
+              // whatever the account already is, so a driver keeps driving.
+              staffRole,
               ...(plan.email ? { email: plan.email } : {}),
             },
           }),
@@ -260,7 +275,10 @@ async function main() {
             // account is rejected while planning.
             phone: plan.phone!,
             email: plan.email ?? null,
-            role,
+            // A new staff member is an ordinary customer who also holds the
+            // dashboard, so they can book like anyone else.
+            role: UserRole.CUSTOMER,
+            staffRole,
             status: UserStatus.ACTIVE,
             passwordHash,
             wallet: { create: {} },
@@ -272,6 +290,8 @@ async function main() {
 
     console.log('');
     console.log('Sign in to the admin dashboard with any of those identifiers.');
+    console.log('Their operational role is unchanged — the same login still works in');
+    console.log('the customer and partner apps.');
     console.log('Existing sessions on these accounts were signed out.');
   } finally {
     await prisma.$disconnect();

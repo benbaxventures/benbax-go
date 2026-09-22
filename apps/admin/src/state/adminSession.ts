@@ -4,9 +4,12 @@ import { apiRequest } from '../services/api';
 type AdminUser = {
   id: string;
   name: string;
-  phone: string;
+  /** Null for accounts created by Google sign-in, which hold no real number. */
+  phone: string | null;
   email?: string | null;
   role: string;
+  /** Back-office access, held independently of `role`. Null for non-staff. */
+  staffRole?: string | null;
 };
 
 type AdminSession = {
@@ -28,8 +31,20 @@ const STORAGE_KEYS = {
  */
 export const STAFF_ROLES = ['ADMIN', 'OPERATIONS', 'SUPPORT'];
 
-export function isStaffRole(role: string | undefined | null): boolean {
+function isStaffRole(role: string | undefined | null): boolean {
   return typeof role === 'string' && STAFF_ROLES.includes(role);
+}
+
+/**
+ * Whether an account may use this dashboard.
+ *
+ * Staff access lives in `staffRole`, separate from the operational `role`, so
+ * one account can be a working driver in the partner app and an admin here.
+ * Either field granting access is enough — `role` alone still covers the
+ * staff-only accounts that predate the split.
+ */
+export function canUseDashboard(user: Pick<AdminUser, 'role' | 'staffRole'>): boolean {
+  return isStaffRole(user.staffRole) || isStaffRole(user.role);
 }
 
 /** Reads the stored session, ignoring anything corrupt or no longer staff. */
@@ -38,7 +53,7 @@ function restoreUser(): AdminUser | null {
     const raw = localStorage.getItem(STORAGE_KEYS.user);
     if (!raw) return null;
     const user = JSON.parse(raw) as AdminUser;
-    return isStaffRole(user?.role) ? user : null;
+    return user && canUseDashboard(user) ? user : null;
   } catch {
     return null;
   }
@@ -60,10 +75,11 @@ export const useAdminSession = create<AdminSession>((set) => ({
       body: JSON.stringify({ identifier: identifier.trim(), password }),
     });
 
-    if (!isStaffRole(data.user.role)) {
+    if (!canUseDashboard(data.user)) {
       clearStoredSession();
       throw new Error(
-        `This is a ${data.user.role.toLowerCase()} account, not an admin one. Sign in with a Benbax staff account.`
+        `This ${data.user.role.toLowerCase()} account does not have Benbax staff access. ` +
+          'Ask an admin to grant it, or sign in with a staff account.'
       );
     }
 

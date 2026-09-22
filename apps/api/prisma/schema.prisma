@@ -16,6 +16,19 @@ enum UserRole {
   OPERATIONS
 }
 
+/// Back-office privilege, held *in addition to* a user's operational role.
+///
+/// `User.role` says which app a person works in — it owns their profile and
+/// their earnings. Staff access is a separate axis: the operations lead who
+/// also drives needs one account that is a real DRIVER in the partner app and
+/// an admin in the dashboard. Squeezing both into `role` forced a choice
+/// between them, so this holds the second hat.
+enum StaffRole {
+  ADMIN
+  SUPPORT
+  OPERATIONS
+}
+
 enum UserStatus {
   ACTIVE
   BLOCKED
@@ -129,6 +142,9 @@ enum SupportStatus {
 model User {
   id            String             @id @default(cuid())
   role          UserRole           @default(CUSTOMER)
+  /// Optional back-office access, independent of `role`. Null for everyone
+  /// except staff. See the StaffRole enum for why this is a separate column.
+  staffRole     StaffRole?
   status        UserStatus         @default(ACTIVE)
   name          String
   email         String?            @unique

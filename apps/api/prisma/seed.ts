@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole } from '@prisma/client';
+import { PrismaClient, StaffRole, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -16,7 +16,8 @@ async function main() {
       name: 'Benbax Admin',
       phone: '+233594172522',
       email: 'admin@benbax.com',
-      role: UserRole.ADMIN,
+      role: UserRole.CUSTOMER,
+      staffRole: StaffRole.ADMIN,
       passwordHash,
       wallet: { create: {} },
     },

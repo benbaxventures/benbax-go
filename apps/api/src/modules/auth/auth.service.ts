@@ -1,3 +1,4 @@
+import type { StaffRole } from '@prisma/client';
 import { Prisma, UserRole, UserStatus } from '@prisma/client';
 import axios from 'axios';
 import bcrypt from 'bcryptjs';
@@ -36,24 +37,31 @@ type GoogleProfile = {
   picture?: string;
 };
 
-function signAccessToken(user: { id: string; role: UserRole }) {
+/** Identity claims carried by every token. `staffRole` is absent for non-staff. */
+type TokenSubject = { id: string; role: UserRole; staffRole?: StaffRole | null };
+
+function claims(user: TokenSubject) {
+  return user.staffRole ? { role: user.role, staffRole: user.staffRole } : { role: user.role };
+}
+
+function signAccessToken(user: TokenSubject) {
   const options: SignOptions = {
     subject: user.id,
     expiresIn: env.JWT_ACCESS_TTL as NonNullable<SignOptions['expiresIn']>,
   };
 
-  return jwt.sign({ role: user.role }, env.JWT_ACCESS_SECRET, {
+  return jwt.sign(claims(user), env.JWT_ACCESS_SECRET, {
     ...options,
   });
 }
 
-function signRefreshToken(user: { id: string; role: UserRole }) {
+function signRefreshToken(user: TokenSubject) {
   const options: SignOptions = {
     subject: user.id,
     expiresIn: env.JWT_REFRESH_TTL as NonNullable<SignOptions['expiresIn']>,
   };
 
-  return jwt.sign({ role: user.role }, env.JWT_REFRESH_SECRET, {
+  return jwt.sign(claims(user), env.JWT_REFRESH_SECRET, {
     ...options,
   });
 }
@@ -64,6 +72,7 @@ function authPayload(user: {
   phone: string;
   email: string | null;
   role: UserRole;
+  staffRole?: StaffRole | null;
 }) {
   return {
     user: publicUser(user),
@@ -89,6 +98,7 @@ function publicUser(user: {
   phone: string;
   email: string | null;
   role: UserRole;
+  staffRole?: StaffRole | null;
 }) {
   // Fields are picked, never spread: callers pass whole database rows, which
   // carry the password hash.
@@ -99,6 +109,8 @@ function publicUser(user: {
     phone,
     email: user.email,
     role: user.role,
+    /** Back-office access, independent of `role`. Null for everyone else. */
+    staffRole: user.staffRole ?? null,
     /** No reachable number: the app must collect one before the user can ride. */
     needsPhone: phone === null,
   };
@@ -462,6 +474,7 @@ export async function me(userId: string) {
       phone: true,
       email: true,
       role: true,
+      staffRole: true,
       avatarUrl: true,
       wallet: true,
       riderProfile: true,

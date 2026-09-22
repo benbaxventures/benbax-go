@@ -16,6 +16,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "admin:set": "tsx prisma/set-admin.ts",
     "staff:set": "tsx prisma/set-staff.ts",
+    "staff:grant": "tsx prisma/grant-staff.ts",
     "phones:check": "tsx prisma/normalize-phones.ts",
     "phones:normalize": "tsx prisma/normalize-phones.ts --apply"
   },

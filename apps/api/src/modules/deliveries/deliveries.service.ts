@@ -1,12 +1,16 @@
-import type { Delivery, DeliveryCategory, UserRole } from '@prisma/client';
+import type { Delivery, DeliveryCategory } from '@prisma/client';
 import { CancelActor, DeliveryStatus, Prisma } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
+import { isStaff, type AuthUser } from '../../middleware/auth';
 import { badRequest, forbidden, notFound } from '../../utils/http';
 import { estimateDelivery } from '../dispatch/dispatch.engine';
 import { notifyDeliveryRequested } from '../notifications/triggers';
 import { recordDeliveryStatusEvent } from '../orders/status-events';
 import { buildExpectedRoute } from '../tracking/routeSafety';
+
+/** Who is asking to cancel, including any back-office hat they wear. */
+type CancelRequester = Pick<AuthUser, 'id' | 'role' | 'staffRole'>;
 
 const CANCELLABLE_STATUSES: DeliveryStatus[] = [
   DeliveryStatus.DRAFT,
@@ -215,28 +219,27 @@ export async function updateDeliveryStatus(id: string, status: DeliveryStatus, a
   return updated;
 }
 
+/**
+ * Which hat the canceller was wearing, for the cancellation record.
+ *
+ * Order matters now that one account can be both a rider and staff: someone
+ * dropping a job they are actually assigned to is abandoning it as the rider,
+ * whatever back-office access they also hold, so that outranks the staff check.
+ */
 function resolveCancelActor(
-  requester: { id: string; role: UserRole },
-  ownerId: string
+  requester: CancelRequester,
+  ownerId: string,
+  isAssignedRider = false
 ): CancelActor {
   if (requester.id === ownerId) return CancelActor.CUSTOMER;
-  if (
-    requester.role === 'ADMIN' ||
-    requester.role === 'OPERATIONS' ||
-    requester.role === 'SUPPORT'
-  ) {
-    return CancelActor.ADMIN;
-  }
+  if (isAssignedRider) return CancelActor.RIDER;
+  if (isStaff(requester)) return CancelActor.ADMIN;
   if (requester.role === 'RIDER') return CancelActor.RIDER;
   if (requester.role === 'DRIVER') return CancelActor.DRIVER;
   return CancelActor.SYSTEM;
 }
 
-export async function cancelDelivery(
-  id: string,
-  requester: { id: string; role: UserRole },
-  reason?: string
-) {
+export async function cancelDelivery(id: string, requester: CancelRequester, reason?: string) {
   const delivery = await prisma.delivery.findUnique({
     where: { id },
     include: {
@@ -249,12 +252,10 @@ export async function cancelDelivery(
   if (!delivery) throw notFound('Delivery not found');
 
   const isOwner = delivery.customerId === requester.id;
-  const isStaff =
-    requester.role === 'ADMIN' || requester.role === 'OPERATIONS' || requester.role === 'SUPPORT';
   const isAssignedRider = delivery.assignments.some(
     (assignment) => assignment.riderProfile.userId === requester.id
   );
-  if (!isOwner && !isStaff && !isAssignedRider) {
+  if (!isOwner && !isStaff(requester) && !isAssignedRider) {
     throw forbidden('You cannot cancel this delivery');
   }
 
@@ -263,7 +264,7 @@ export async function cancelDelivery(
     throw badRequest(`Delivery can no longer be cancelled (status: ${delivery.status})`);
   }
 
-  const cancelledBy = resolveCancelActor(requester, delivery.customerId);
+  const cancelledBy = resolveCancelActor(requester, delivery.customerId, isAssignedRider);
 
   const updated = await prisma.$transaction(async (tx) => {
     // Release the rider and expire any open offers so they can take new jobs.

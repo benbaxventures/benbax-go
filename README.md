@@ -92,6 +92,12 @@ npm.cmd run db:migrate --workspace apps/api
 
 Admin login:
 
+Staff access is a _second_ hat, not a different account. `User.role` says which app a
+person works in — it owns their profile and their earnings — while `User.staffRole` grants
+the dashboard on top of it. So one login can be a working driver in the partner app, a
+passenger in the customer app, and an admin here, all at once. Granting staff access never
+changes someone's operational role, and `requireRoles` accepts either hat.
+
 No admin credentials are committed. Create an admin (or reset an admin's password)
 against whatever database `DATABASE_URL` points at — you'll be prompted for the email,
 phone and a password of at least 12 characters (not echoed), then asked to confirm:
@@ -115,10 +121,28 @@ Always dry-run first: it prints the exact plan per account and writes nothing. D
 it to every listed account, repairs any number stored in a non-E.164 shape, and signs out
 existing sessions.
 
-Two guards matter. Converting an existing customer or driver account into staff requires
-`--promote`, and an entry matching more than one account aborts the whole run rather than
-guessing which row to reset — a number with duplicate accounts must be resolved by hand, or
-that entry keyed on something unique.
+Two guards matter. Granting staff access to an account that does not already have it
+requires `--promote`, and an entry matching more than one account aborts the whole run
+rather than guessing which row to reset — a number with duplicate accounts must be resolved
+by hand, or that entry keyed on something unique.
+
+Order matters on a fresh deploy: the `staffRole` column arrives with a migration, which the
+container applies on boot (`prisma migrate deploy` in the Dockerfile CMD). Deploy the API
+before running `staff:set`, or apply it yourself with `npm.cmd run db:deploy --workspace
+apps/api`. The migration backfills every existing staff account, so nobody loses access.
+
+To give (or take away) dashboard access on its own, without resetting anyone's password:
+
+```bash
+npm.cmd run staff:grant --workspace apps/api -- someone@example.com
+npm.cmd run staff:grant --workspace apps/api -- "059 820 4414" --role SUPPORT
+npm.cmd run staff:grant --workspace apps/api -- someone@example.com --revoke
+```
+
+It writes `staffRole` and nothing else, so the account's role, password and profile survive
+untouched — the same login keeps working in the customer and partner apps. A grant needs no
+sign-out (a token refresh re-reads the account within ~15 minutes); a revoke ends every
+session immediately.
 
 Sign-in accepts a phone in any spelling (`059 417 2522`, `0594172522`, `+233594172522`) or
 the account email. Where duplicate accounts share a number, typing an identifier exactly as

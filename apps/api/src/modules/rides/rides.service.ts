@@ -1,7 +1,8 @@
-import type { PaymentMethod, UserRole } from '@prisma/client';
+import type { PaymentMethod } from '@prisma/client';
 import { CancelActor, Prisma, RideTripStatus } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
+import { isStaff, type AuthUser } from '../../middleware/auth';
 import { badRequest, forbidden, notFound } from '../../utils/http';
 import { normalizePhoneNumber } from '../../utils/phone';
 import { estimateRide } from '../dispatch/dispatch.engine';
@@ -10,6 +11,9 @@ import { recordTripStatusEvent } from '../orders/status-events';
 import { settleRideTrip } from '../payments/settlement';
 import { PUBLIC_DRIVER_PROFILE_SELECT } from '../ride-dispatch/ride-marketplace';
 import { buildExpectedRoute } from '../tracking/routeSafety';
+
+/** Who is asking to cancel, including any back-office hat they wear. */
+type CancelRequester = Pick<AuthUser, 'id' | 'role' | 'staffRole'>;
 
 const CANCELLABLE_STATUSES: RideTripStatus[] = [
   RideTripStatus.REQUESTED,
@@ -253,28 +257,27 @@ export async function updateDriverRideStatus(
   return updated;
 }
 
+/**
+ * Which hat the canceller was wearing, for the cancellation record.
+ *
+ * Order matters now that one account can be both a driver and staff: someone
+ * dropping a trip they are actually assigned to is abandoning it as the driver,
+ * whatever back-office access they also hold, so that outranks the staff check.
+ */
 function resolveCancelActor(
-  requester: { id: string; role: UserRole },
-  ownerId: string
+  requester: CancelRequester,
+  ownerId: string,
+  isAssignedDriver = false
 ): CancelActor {
   if (requester.id === ownerId) return CancelActor.CUSTOMER;
-  if (
-    requester.role === 'ADMIN' ||
-    requester.role === 'OPERATIONS' ||
-    requester.role === 'SUPPORT'
-  ) {
-    return CancelActor.ADMIN;
-  }
+  if (isAssignedDriver) return CancelActor.DRIVER;
+  if (isStaff(requester)) return CancelActor.ADMIN;
   if (requester.role === 'DRIVER') return CancelActor.DRIVER;
   if (requester.role === 'RIDER') return CancelActor.RIDER;
   return CancelActor.SYSTEM;
 }
 
-export async function cancelRide(
-  id: string,
-  requester: { id: string; role: UserRole },
-  reason?: string
-) {
+export async function cancelRide(id: string, requester: CancelRequester, reason?: string) {
   const trip = await prisma.rideTrip.findUnique({
     where: { id },
     include: {
@@ -287,12 +290,10 @@ export async function cancelRide(
   if (!trip) throw notFound('Ride trip not found');
 
   const isOwner = trip.passengerId === requester.id;
-  const isStaff =
-    requester.role === 'ADMIN' || requester.role === 'OPERATIONS' || requester.role === 'SUPPORT';
   const isAssignedDriver = trip.assignments.some(
     (assignment) => assignment.driverProfile.userId === requester.id
   );
-  if (!isOwner && !isStaff && !isAssignedDriver) {
+  if (!isOwner && !isStaff(requester) && !isAssignedDriver) {
     throw forbidden('You cannot cancel this ride');
   }
 
@@ -301,7 +302,7 @@ export async function cancelRide(
     throw badRequest(`Ride can no longer be cancelled (status: ${trip.status})`);
   }
 
-  const cancelledBy = resolveCancelActor(requester, trip.passengerId);
+  const cancelledBy = resolveCancelActor(requester, trip.passengerId, isAssignedDriver);
 
   const updated = await prisma.$transaction(async (tx) => {
     // Release the driver and expire open offers so they can take new trips.

@@ -11,15 +11,18 @@
  *   ADMIN_EMAIL, ADMIN_PHONE, ADMIN_NAME, ADMIN_PASSWORD, ADMIN_ROLE
  * Flags:
  *   --yes      skip the confirmation prompt
- *   --promote  allow turning an existing non-staff account into an admin
+ *   --promote  allow granting staff access to an existing non-staff account
+ *
+ * Staff access is granted, never swapped in: this sets `staffRole` and leaves
+ * `role` alone, so an account that also drives or books rides keeps doing so.
  */
-import { PrismaClient, UserRole, UserStatus } from '@prisma/client';
+import { PrismaClient, StaffRole, UserRole, UserStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import 'dotenv/config';
 import readline from 'node:readline';
 
 const MIN_PASSWORD_LENGTH = 12;
-const STAFF_ROLES: UserRole[] = [UserRole.ADMIN, UserRole.OPERATIONS, UserRole.SUPPORT];
+const STAFF_ROLES: StaffRole[] = [StaffRole.ADMIN, StaffRole.OPERATIONS, StaffRole.SUPPORT];
 
 function ask(question: string, fallback = ''): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -75,10 +78,10 @@ async function main() {
     process.env.ADMIN_NAME ??
     (interactive ? await ask('Display name', 'Benbax Admin') : 'Benbax Admin');
   const roleInput = (process.env.ADMIN_ROLE ?? 'ADMIN').toUpperCase();
-  if (!STAFF_ROLES.includes(roleInput as UserRole)) {
+  if (!STAFF_ROLES.includes(roleInput as StaffRole)) {
     throw new Error(`ADMIN_ROLE must be one of ${STAFF_ROLES.join(', ')}`);
   }
-  const role = roleInput as UserRole;
+  const staffRole = roleInput as StaffRole;
 
   const prisma = new PrismaClient();
   try {
@@ -90,9 +93,10 @@ async function main() {
     }
     if (!existing && !phone) throw new Error('A phone number is required to create an account');
 
-    if (existing && !STAFF_ROLES.includes(existing.role) && !args.has('--promote')) {
+    if (existing && !existing.staffRole && !args.has('--promote')) {
       throw new Error(
-        `${email} belongs to a ${existing.role} account. Re-run with --promote to make it an admin.`
+        `${email} belongs to a ${existing.role} account with no staff access. Re-run with ` +
+          '--promote to grant it — their existing role is kept.'
       );
     }
 
@@ -110,8 +114,8 @@ async function main() {
     console.log(`Database : ${describeDatabase(process.env.DATABASE_URL)}`);
     console.log(
       existing
-        ? `Action   : reset password for ${existing.name} <${email}> (${existing.role} → ${STAFF_ROLES.includes(existing.role) ? existing.role : role})`
-        : `Action   : create ${role} account ${name} <${email}> ${phone}`
+        ? `Action   : reset password for ${existing.name} <${email}> (${existing.role}, staff ${existing.staffRole ?? 'none'} → ${staffRole})`
+        : `Action   : create CUSTOMER account with ${staffRole} access, ${name} <${email}> ${phone}`
     );
     if (!args.has('--yes')) {
       const answer = await ask('Type "yes" to continue');
@@ -130,7 +134,8 @@ async function main() {
           data: {
             passwordHash,
             status: UserStatus.ACTIVE,
-            ...(STAFF_ROLES.includes(existing.role) ? {} : { role }),
+            // `role` untouched — staff access is added alongside it.
+            staffRole,
           },
         }),
         // Sign out every existing session for this account.
@@ -146,13 +151,16 @@ async function main() {
           name,
           email,
           phone: phone!,
-          role,
+          // A new staff member is an ordinary customer who also holds the
+          // dashboard, so the same login works in the customer app too.
+          role: UserRole.CUSTOMER,
+          staffRole,
           status: UserStatus.ACTIVE,
           passwordHash,
           wallet: { create: {} },
         },
       });
-      console.log(`✔ Created ${role} account ${email}.`);
+      console.log(`✔ Created ${staffRole} account ${email}.`);
     }
     console.log('Sign in to the admin dashboard with that email (or phone) and password.');
   } finally {

@@ -37,7 +37,12 @@ const lastDriverDbWrite = new Map<string, number>();
 type SocketAuth = {
   sub: string;
   role: string;
+  /** Back-office privilege held alongside `role`; absent for non-staff. */
+  staffRole?: string | null;
 };
+
+/** The identity a connected socket acts under. */
+type SocketUser = { id: string; role: string; staffRole: string | null };
 
 /** Where a driver socket is currently watching for online passengers. */
 type DriverWatch = {
@@ -52,8 +57,15 @@ const DEFAULT_WATCH_RADIUS_KM = 200;
 const ADMIN_ROOM = 'admins';
 const STAFF_ROLES = ['ADMIN', 'OPERATIONS', 'SUPPORT'];
 
-function isStaff(role: string) {
-  return STAFF_ROLES.includes(role);
+/**
+ * Back-office access, from either hat. A driver who is also an operations lead
+ * connects one socket that belongs in both the `drivers` room and the admin
+ * god-view, so this reads `staffRole` as well as `role`.
+ */
+function isStaff(user: Pick<SocketUser, 'role' | 'staffRole'>) {
+  return (
+    STAFF_ROLES.includes(user.role) || (!!user.staffRole && STAFF_ROLES.includes(user.staffRole))
+  );
 }
 
 /** Everyone online right now, as the admin dashboard's map wants it. */
@@ -157,7 +169,11 @@ export function registerRealtimeHandlers(io: Server) {
 
     try {
       const payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as SocketAuth;
-      socket.data.user = { id: payload.sub, role: payload.role };
+      socket.data.user = {
+        id: payload.sub,
+        role: payload.role,
+        staffRole: payload.staffRole ?? null,
+      } satisfies SocketUser;
       return next();
     } catch {
       return next(new Error('Unauthorized'));
@@ -165,7 +181,7 @@ export function registerRealtimeHandlers(io: Server) {
   });
 
   io.on('connection', (socket) => {
-    const user = socket.data.user as { id: string; role: string };
+    const user = socket.data.user as SocketUser;
 
     socket.join(`user:${user.id}`);
     if (user.role === 'RIDER') socket.join(`rider:${user.id}`);
@@ -175,7 +191,7 @@ export function registerRealtimeHandlers(io: Server) {
       // (e.g. when a new passenger registers).
       socket.join('drivers');
     }
-    if (isStaff(user.role)) {
+    if (isStaff(user)) {
       socket.join(ADMIN_ROOM);
       // Seed the dashboard map immediately; every change after this arrives as
       // a live delta on the same socket.
@@ -215,7 +231,7 @@ export function registerRealtimeHandlers(io: Server) {
     // Re-sync the dashboard after a reconnect or a tab that slept: the deltas
     // it missed while disconnected are gone, so it asks for a fresh snapshot.
     socket.on('admin:watch', () => {
-      if (!isStaff(user.role)) return;
+      if (!isStaff(user)) return;
       socket.join(ADMIN_ROOM);
       socket.emit(realtimeEvents.presenceSnapshot, presenceSnapshot());
     });
