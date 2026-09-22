@@ -42,6 +42,8 @@ type AuthState = {
   hydrate: () => Promise<void>;
   /** Claim a phone number for an account that signed up without one. */
   setPhone: (phone: string) => Promise<void>;
+  /** Skip the phone gate for this session (API too old to accept one). */
+  allowWithoutPhone: () => void;
 };
 
 /**
@@ -122,6 +124,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     );
     const updated = useAuthStore.getState().user;
     if (updated) await updateStoredUser(updated);
+  },
+  /**
+   * Let this session through without a number.
+   *
+   * Used only when the API has no phone endpoint yet — an app updated over
+   * the air ahead of its server. Blocking someone behind a gate the server
+   * cannot satisfy would strand them with no way out but signing out, and
+   * that is worse than the missing number. Deliberately in memory only: the
+   * stored account is untouched, so the gate returns on the next launch and
+   * starts working the moment the API catches up.
+   */
+  allowWithoutPhone() {
+    set((state) => (state.user ? { user: { ...state.user, needsPhone: false } } : state));
   },
 }));
 

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../components/Button';
-import { describeApiError } from '../services/api';
+import { ApiResponseError, describeApiError } from '../services/api';
 import { normalizePhoneNumber } from '../services/contact';
 import { useAuthStore } from '../store/authStore';
 import { theme } from '../theme/tokens';
@@ -22,7 +22,7 @@ import { theme } from '../theme/tokens';
  * out stays available so nobody is ever trapped here.
  */
 export function PhoneRequiredScreen() {
-  const { user, setPhone, logout } = useAuthStore();
+  const { user, setPhone, allowWithoutPhone, logout } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [phone, setPhoneInput] = useState('+233');
   const [saving, setSaving] = useState(false);
@@ -42,6 +42,15 @@ export function PhoneRequiredScreen() {
     try {
       await setPhone(normalized);
     } catch (err) {
+      // The API predates this endpoint — this app was updated over the air
+      // ahead of its server. Blocking here would strand the user behind a
+      // gate the server cannot satisfy, so let them through for now; the
+      // gate returns next launch, and works once the API catches up.
+      if (err instanceof ApiResponseError && err.status === 404) {
+        console.warn('[phone] API has no /users/me/phone endpoint yet; skipping the gate');
+        allowWithoutPhone();
+        return;
+      }
       setError(describeApiError(err, 'Could not save your phone number.'));
     } finally {
       setSaving(false);
