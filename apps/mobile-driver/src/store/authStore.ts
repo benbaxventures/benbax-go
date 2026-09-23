@@ -51,7 +51,12 @@ type AuthState = {
  * sessions on the next launch instead of waiting for a fresh sign-in.
  */
 function resolveNeedsPhone(user: DriverUser): DriverUser {
-  return { ...user, needsPhone: user.needsPhone ?? normalizePhoneNumber(user.phone) === null };
+  // The stored number decides, not a remembered flag. An account signed in
+  // with Google before this existed has `google:<sub>` stored and no flag at
+  // all, and a stale `needsPhone: false` must never let an unreachable
+  // account through — so an undialable number always re-asks.
+  const unreachable = normalizePhoneNumber(user.phone) === null;
+  return { ...user, needsPhone: unreachable || user.needsPhone === true };
 }
 
 const ONBOARDING_KEY = 'benbax.driver.onboardingComplete';
@@ -86,7 +91,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Check if onboarding was already completed for this user
     const storedOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
     const onboardingComplete = storedOnboarding === 'true';
-    set({ user: data.user, onboardingComplete });
+    set({ user: resolveNeedsPhone(data.user), onboardingComplete });
   },
 
   async loginWithGoogle(tokens, rememberMe = true) {
@@ -106,7 +111,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     ]);
     const storedOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
     const onboardingComplete = storedOnboarding === 'true';
-    set({ user: data.user, onboardingComplete });
+    set({ user: resolveNeedsPhone(data.user), onboardingComplete });
   },
 
   async register(input) {
@@ -125,7 +130,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       ['benbax.driver.rememberMe', 'true'],
     ]);
     // New registration → onboarding not yet completed
-    set({ user: data.user, onboardingComplete: false });
+    set({ user: resolveNeedsPhone(data.user), onboardingComplete: false });
   },
 
   async hydrate() {

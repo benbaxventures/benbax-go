@@ -8,6 +8,7 @@ import { Button } from '../components/Button';
 import { MapPinLabel } from '../components/MapPinLabel';
 import { MapMarker, MapPolyline, MapView } from '../components/MapView';
 import { StatusPill } from '../components/StatusPill';
+import { PICKUP_SPEED_KPH } from '../hooks/useNearbyDrivers';
 import type { RootStackParamList } from '../navigation/types';
 import { apiRequest, describeApiError } from '../services/api';
 import { callPhone, normalizePhoneNumber, openWhatsApp } from '../services/contact';
@@ -281,6 +282,20 @@ export function TripTrackingScreen({ route, navigation }: Props) {
       ? distanceKm(latestPoint, pickup)
       : null;
 
+  // How far off the driver is, in the terms a waiting passenger cares about.
+  // Straight-line distance at a conservative city speed: the routed figure
+  // belongs to the driver's own navigation, and promising more precision than
+  // we have would only be wrong more often.
+  const driverApproach =
+    driverKmToPickup == null
+      ? null
+      : [
+          driverKmToPickup < 1
+            ? `${Math.round(driverKmToPickup * 1000)} m away`
+            : `${driverKmToPickup.toFixed(1)} km away`,
+          `about ${Math.max(1, Math.round((driverKmToPickup / PICKUP_SPEED_KPH) * 60))} min`,
+        ].join(' · ');
+
   function openDriverMap() {
     if (!latestPoint) {
       Alert.alert(
@@ -438,9 +453,7 @@ export function TripTrackingScreen({ route, navigation }: Props) {
             />
             <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.success }}>
               {statusLabel}
-              {driverKmToPickup != null
-                ? ` · ${driverKmToPickup < 1 ? `${Math.round(driverKmToPickup * 1000)} m` : `${driverKmToPickup.toFixed(1)} km`} away`
-                : ''}
+              {driverApproach ? ` · ${driverApproach}` : ''}
             </Text>
           </View>
           {trip?.tripCode ? (
@@ -535,41 +548,48 @@ export function TripTrackingScreen({ route, navigation }: Props) {
           </View>
         </View>
 
-        {/* Action buttons */}
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <View style={{ flex: 1 }}>
-            <Button
-              label="Call"
-              icon={<Phone size={18} color="#fff" />}
-              onPress={() => callPhone(driverPhone, 'driver')}
-            />
+        {/* Contacting the driver — only once there is one.
+            These used to render in every state, so tapping Call while still
+            searching produced "your driver has not shared a phone number",
+            which named a driver who did not exist yet. */}
+        {assignedDriver ? (
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="Call"
+                icon={<Phone size={18} color="#fff" />}
+                onPress={() => callPhone(driverPhone, 'driver')}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button
+                label="WhatsApp"
+                icon={<MessageSquareText size={18} color={theme.colors.ink} />}
+                onPress={() =>
+                  openWhatsApp(driverPhone, 'Hello, this is your Benbax passenger.', 'driver')
+                }
+                variant="secondary"
+              />
+            </View>
+            <Pressable
+              onPress={openDriverMap}
+              accessibilityRole="button"
+              accessibilityLabel="Show the driver on the map"
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 12,
+                backgroundColor: theme.colors.surfaceMuted,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: 1,
+                borderColor: theme.colors.border,
+              }}
+            >
+              <Navigation size={20} color={theme.colors.primary} />
+            </Pressable>
           </View>
-          <View style={{ flex: 1 }}>
-            <Button
-              label="WhatsApp"
-              icon={<MessageSquareText size={18} color={theme.colors.ink} />}
-              onPress={() =>
-                openWhatsApp(driverPhone, 'Hello, this is your Benbax passenger.', 'driver')
-              }
-              variant="secondary"
-            />
-          </View>
-          <Pressable
-            onPress={openDriverMap}
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 12,
-              backgroundColor: theme.colors.surfaceMuted,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 1,
-              borderColor: theme.colors.border,
-            }}
-          >
-            <Navigation size={20} color={theme.colors.primary} />
-          </Pressable>
-        </View>
+        ) : null}
 
         {canCancel ? (
           <Pressable

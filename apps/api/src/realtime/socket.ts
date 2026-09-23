@@ -29,6 +29,7 @@ const PRESENCE_TTL_MS = 90_000;
 const PRESENCE_SWEEP_INTERVAL_MS = 30_000;
 /** Movement below this (≈15 m) is treated as a heartbeat, not a move event. */
 const MOVE_THRESHOLD_KM = 0.015;
+
 /** Live driver positions are persisted for dispatch at most this often. */
 const DRIVER_DB_WRITE_INTERVAL_MS = 15_000;
 
@@ -98,6 +99,33 @@ function broadcastClientToDrivers(io: Server, client: OnlineClient, event: strin
     socket.emit(event, { ...client, distanceKm: Math.round(distanceKm * 10) / 10 });
   }
   io.to(ADMIN_ROOM).emit(event, client);
+}
+
+/** Ride rooms this socket has joined, i.e. the trips it is driving. */
+function joinedRideRooms(socket: { rooms: Set<string> }): string[] {
+  return [...socket.rooms].filter((room) => room.startsWith('ride:'));
+}
+
+/**
+ * Pushes a driver's live position to the passengers watching their trips.
+ *
+ * Emitted to the room rather than back to the sender, so the driver's own app
+ * does not echo its GPS to itself. The shape matches the persisted tracking
+ * point the passenger already renders, so nothing on the client changes.
+ */
+function relayDriverPositionToRides(
+  socket: {
+    rooms: Set<string>;
+    broadcast: { to: (room: string) => { emit: (event: string, payload: unknown) => void } };
+  },
+  io: Server,
+  position: { latitude: number; longitude: number; heading?: number }
+) {
+  for (const room of joinedRideRooms(socket)) {
+    const tripId = room.slice('ride:'.length);
+    socket.broadcast.to(room).emit(realtimeEvents.rideTrackingPoint, { ...position, tripId });
+    io.to(ADMIN_ROOM).emit(realtimeEvents.rideTrackingPoint, { ...position, tripId });
+  }
 }
 
 /** Pushes a driver's position to watching customers and to the admin god-view. */
@@ -315,6 +343,19 @@ export function registerRealtimeHandlers(io: Server) {
           );
         }
 
+        // Passengers waiting on this driver get the same position, live.
+        //
+        // The persisted trail still arrives over REST, but only every 15s and
+        // only while the driver has the trip screen open — too coarse and too
+        // fragile to watch a car approach. The driver's app is already in the
+        // room for each trip it joined, so relaying here needs no lookup, no
+        // database write, and no extra request from either side.
+        relayDriverPositionToRides(socket, io, {
+          latitude,
+          longitude,
+          ...(isFiniteNumber(heading) && heading >= 0 ? { heading } : {}),
+        });
+
         // Keep the stored position fresh so dispatch ranks this driver by
         // where they actually are, without a DB write per GPS tick.
         const now = Date.now();
@@ -459,3 +500,6 @@ export function registerRealtimeHandlers(io: Server) {
     });
   });
 }
+
+/** Internals exposed for unit tests; not part of the module's public surface. */
+export const __testing = { joinedRideRooms, relayDriverPositionToRides };

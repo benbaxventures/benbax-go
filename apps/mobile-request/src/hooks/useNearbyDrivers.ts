@@ -43,7 +43,7 @@ export function distanceKmBetween(
  * pickup ETA. Deliberately conservative for Accra/Tema traffic; the exact
  * number comes from the routed quote once a ride is actually requested.
  */
-const PICKUP_SPEED_KPH = 22;
+export const PICKUP_SPEED_KPH = 22;
 
 /** Minutes until this driver could reach the passenger, or null if unknown. */
 export function pickupEtaMinutes(distanceKm: number): number | null {

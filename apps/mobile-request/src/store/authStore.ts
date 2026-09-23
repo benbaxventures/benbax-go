@@ -55,7 +55,12 @@ type AuthState = {
  * sessions on the next launch instead of waiting for a fresh sign-in.
  */
 function resolveNeedsPhone(user: User): User {
-  return { ...user, needsPhone: user.needsPhone ?? normalizePhoneNumber(user.phone) === null };
+  // The stored number decides, not a remembered flag. An account signed in
+  // with Google before this existed has `google:<sub>` stored and no flag at
+  // all, and a stale `needsPhone: false` must never let an unreachable
+  // account through — so an undialable number always re-asks.
+  const unreachable = normalizePhoneNumber(user.phone) === null;
+  return { ...user, needsPhone: unreachable || user.needsPhone === true };
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -78,7 +83,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
     await saveAuthSession({ ...data.tokens, user: data.user }, rememberMe);
     await setHasRegisteredBefore();
-    set({ user: data.user });
+    set({ user: resolveNeedsPhone(data.user) });
   },
   async loginWithGoogle(tokens, rememberMe = true) {
     const data = await apiRequest<{
@@ -91,7 +96,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
     await saveAuthSession({ ...data.tokens, user: data.user }, rememberMe);
     await setHasRegisteredBefore();
-    set({ user: data.user });
+    set({ user: resolveNeedsPhone(data.user) });
   },
   async register(input) {
     const data = await apiRequest<{
@@ -104,7 +109,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
     await saveAuthSession({ ...data.tokens, user: data.user }, true);
     await setHasRegisteredBefore();
-    set({ user: data.user });
+    set({ user: resolveNeedsPhone(data.user) });
   },
   async logout() {
     await clearAuthSession();

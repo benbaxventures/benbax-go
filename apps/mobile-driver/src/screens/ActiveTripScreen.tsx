@@ -46,6 +46,19 @@ const ROUTE_REFRESH_MS = 30_000;
 /** Within this distance of the pickup the "I've arrived" action is highlighted. */
 const NEAR_PICKUP_METERS = 150;
 
+/**
+ * Live position reporting to the passenger, over the socket.
+ *
+ * Cheap enough to be frequent — one socket frame, no HTTP request and no
+ * database write — so the passenger sees the car move smoothly rather than
+ * jumping every 15 seconds. MIN is the floor between frames, METERS the
+ * movement that earns one, and IDLE keeps the marker alive while stopped in
+ * traffic so the passenger does not think tracking has died.
+ */
+const POSITION_REPORT_MIN_MS = 3_000;
+const POSITION_REPORT_METERS = 20;
+const POSITION_REPORT_IDLE_MS = 20_000;
+
 type Props = NativeStackScreenProps<RootStackParamList, 'ActiveTrip'>;
 
 type Coordinate = {
@@ -203,6 +216,30 @@ export function ActiveTripScreen({ route, navigation }: Props) {
       releaseSharedSocket();
     };
   }, [finishTrip, navigation, queryClient, route.params.tripId]);
+
+  // Report this driver's position while the trip is running, so the passenger
+  // watches the car approach in real time rather than waiting on the 15s
+  // persisted trail. The server relays it to the trip's room; reporting from
+  // here means tracking does not depend on the Dispatch screen still being
+  // mounted underneath.
+  const lastReportRef = useRef({ at: 0, latitude: 0, longitude: 0 });
+  useEffect(() => {
+    if (!live.hasFix) return;
+    const now = Date.now();
+    const last = lastReportRef.current;
+    const movedEnough = haversineMeters(last, live) >= POSITION_REPORT_METERS;
+    if (!movedEnough && now - last.at < POSITION_REPORT_IDLE_MS) return;
+    if (now - last.at < POSITION_REPORT_MIN_MS) return;
+
+    lastReportRef.current = { at: now, latitude: live.latitude, longitude: live.longitude };
+    const socket = acquireSharedSocket();
+    socket.emit('driver:report', {
+      latitude: live.latitude,
+      longitude: live.longitude,
+      heading: live.heading,
+    });
+    releaseSharedSocket();
+  }, [live.hasFix, live.latitude, live.longitude, live.heading, live]);
 
   const pickup = useMemo(
     () => ({
