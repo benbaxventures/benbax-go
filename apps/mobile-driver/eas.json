@@ -23,7 +23,11 @@
     },
     "production": {
       "channel": "production",
+      "distribution": "store",
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_NO_METRO_WORKSPACE_ROOT": "1",
         "EXPO_PUBLIC_DRIVER_EAS_PROJECT_ID": "12d0a70a-1626-4e4c-b900-8d844978d653",

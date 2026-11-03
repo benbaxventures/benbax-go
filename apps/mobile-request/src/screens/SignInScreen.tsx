@@ -500,7 +500,9 @@ function GoogleSignInButton({ onError }: { onError: (message: string | null) => 
 
           if (isDevError) {
             onError(
-              'Google sign-in is misconfigured for this APK. Add the APK signing SHA-1/SHA-256 to the Android OAuth client for com.benbax.customer, update google-services.json, then rebuild the APK.'
+              __DEV__
+                ? 'Google sign-in is misconfigured for this build. Add its signing SHA-1 (for Play installs, the App signing key from Play Console > App integrity) to the Android OAuth client for com.benbax.customer.'
+                : 'Google sign-in is temporarily unavailable. Please sign in with your phone number or email.'
             );
             return;
           }

@@ -29,7 +29,12 @@
     },
     "production": {
       "channel": "production",
+      "distribution": "store",
       "autoIncrement": true,
+      "node": "20.19.0",
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_NO_METRO_WORKSPACE_ROOT": "1",
         "EXPO_PUBLIC_API_BASE_URL": "https://benbax-go.onrender.com/api/v1",
