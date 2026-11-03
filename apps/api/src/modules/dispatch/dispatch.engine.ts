@@ -52,17 +52,20 @@ export function estimateDelivery(pickup: Point, dropoff: Point, category: Delive
 export function estimateRide(pickup: Point, dropoff: Point, vehicleType = 'ECONOMY') {
   const distanceKm = Math.max(1, Number(haversineKm(pickup, dropoff).toFixed(2)));
   const estimatedMinutes = Math.ceil(distanceKm * 3.2 + 6);
-  const baseFare = 20;
-  const perKmFare = 4.2;
-  const perMinuteFare = 0.45;
+  // Priced to undercut Bolt and Yango in Accra (Nov 2026 fare check).
+  const baseFare = 4;
+  const perKmFare = 1.45;
+  const perMinuteFare = 0.1;
+  const minimumFare = 9;
   const serviceFee = 0;
   const surgeMultiplier = 1;
   const vehicleMultiplier = vehicleType === 'COMFORT' ? 1.25 : vehicleType === 'SUV' ? 1.45 : 1;
   const total = Number(
-    (
+    Math.max(
+      minimumFare,
       (baseFare + distanceKm * perKmFare + estimatedMinutes * perMinuteFare + serviceFee) *
-      surgeMultiplier *
-      vehicleMultiplier
+        surgeMultiplier *
+        vehicleMultiplier
     ).toFixed(2)
   );
 
