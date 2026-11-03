@@ -252,6 +252,22 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
 
       if (cancelled) return;
 
+      try {
+        const profile = await apiRequest<{
+          status?: string;
+          kycStatus?: string;
+          vehicle?: unknown;
+        }>('/drivers/me');
+        if (profile?.vehicle || profile?.status === 'ACTIVE' || profile?.kycStatus === 'VERIFIED') {
+          await completeOnboarding();
+          await clearPersistedProgress();
+          onComplete();
+          return;
+        }
+      } catch {
+        // Continue with normal onboarding restore
+      }
+
       if (restored) {
         if (STEP_ORDER.includes(restored.step)) setStep(restored.step);
         setSelfieUri(restored.selfieUri ?? null);

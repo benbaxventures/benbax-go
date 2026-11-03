@@ -88,9 +88,24 @@ export const useAuthStore = create<AuthState>((set) => ({
       ['benbax.driver.user', JSON.stringify(data.user)],
       ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false'],
     ]);
-    // Check if onboarding was already completed for this user
+    // Check if onboarding was already completed for this user (locally or on the server)
     const storedOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
-    const onboardingComplete = storedOnboarding === 'true';
+    let onboardingComplete = storedOnboarding === 'true';
+    if (!onboardingComplete) {
+      try {
+        const driver = await apiRequest<{
+          status?: string;
+          kycStatus?: string;
+          vehicle?: unknown;
+        }>('/drivers/me');
+        if (driver?.vehicle || driver?.status === 'ACTIVE' || driver?.kycStatus === 'VERIFIED') {
+          onboardingComplete = true;
+          await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+        }
+      } catch {
+        // Fallback to storedOnboarding
+      }
+    }
     set({ user: resolveNeedsPhone(data.user), onboardingComplete });
   },
 
@@ -110,7 +125,22 @@ export const useAuthStore = create<AuthState>((set) => ({
       ['benbax.driver.rememberMe', rememberMe ? 'true' : 'false'],
     ]);
     const storedOnboarding = await AsyncStorage.getItem(ONBOARDING_KEY);
-    const onboardingComplete = storedOnboarding === 'true';
+    let onboardingComplete = storedOnboarding === 'true';
+    if (!onboardingComplete) {
+      try {
+        const driver = await apiRequest<{
+          status?: string;
+          kycStatus?: string;
+          vehicle?: unknown;
+        }>('/drivers/me');
+        if (driver?.vehicle || driver?.status === 'ACTIVE' || driver?.kycStatus === 'VERIFIED') {
+          onboardingComplete = true;
+          await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+        }
+      } catch {
+        // Fallback to storedOnboarding
+      }
+    }
     set({ user: resolveNeedsPhone(data.user), onboardingComplete });
   },
 
@@ -145,7 +175,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     const storedOnboarding = entries[2]?.[1];
     const storedWelcome = entries[3]?.[1];
     const shouldRestore = rememberMe !== 'false';
-    const onboardingComplete = storedOnboarding === 'true';
+    let onboardingComplete = storedOnboarding === 'true';
+    if (!onboardingComplete && shouldRestore && rawUser) {
+      try {
+        const driver = await apiRequest<{
+          status?: string;
+          kycStatus?: string;
+          vehicle?: unknown;
+        }>('/drivers/me');
+        if (driver?.vehicle || driver?.status === 'ACTIVE' || driver?.kycStatus === 'VERIFIED') {
+          onboardingComplete = true;
+          await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+        }
+      } catch {
+        // Fallback
+      }
+    }
     set({
       user: shouldRestore && rawUser ? resolveNeedsPhone(JSON.parse(rawUser)) : null,
       isHydrating: false,
