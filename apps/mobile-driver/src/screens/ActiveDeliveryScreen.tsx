@@ -44,6 +44,9 @@ type DeliveryDetail = {
   status: string;
   otpCode?: string;
   estimatedFare?: number;
+  /** Decimal column, serialised as a string. */
+  totalFare?: string;
+  payment?: { method: string; status: string } | null;
   estimatedDistance?: number;
   estimatedDuration?: number;
   customerName?: string;
@@ -258,7 +261,17 @@ export function ActiveDeliveryScreen({ route, navigation }: Props) {
     return [pickup, dropoff];
   }, [delivery?.metadata?.expectedRoute?.polyline, pickup, dropoff, latestPoint]);
 
-  const fare = delivery?.estimatedFare;
+  const fare =
+    delivery?.estimatedFare ??
+    (delivery?.totalFare != null ? Number(delivery.totalFare) : undefined);
+  // Cash deliveries (or bookings with no payment record) are collected by the rider.
+  const payment = delivery?.payment;
+  const fareLabel =
+    !payment || payment.method === 'CASH_ON_DELIVERY'
+      ? 'Collect in cash'
+      : payment.status === 'PAID'
+        ? 'Paid in app'
+        : 'Online payment pending';
   const distance = delivery?.estimatedDistance;
   const duration = delivery?.estimatedDuration;
 
@@ -560,7 +573,7 @@ export function ActiveDeliveryScreen({ route, navigation }: Props) {
           }}
         >
           <View style={{ gap: 2 }}>
-            <Text style={{ color: '#D7FFF5', fontSize: 12, fontWeight: '700' }}>Delivery fare</Text>
+            <Text style={{ color: '#D7FFF5', fontSize: 12, fontWeight: '700' }}>{fareLabel}</Text>
             <Text style={{ color: '#fff', fontSize: 28, fontWeight: '900' }}>
               GHS {fare != null ? fare.toFixed(2) : '--'}
             </Text>

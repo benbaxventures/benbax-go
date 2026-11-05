@@ -2,6 +2,7 @@ import type { NavigationProp } from '@react-navigation/native';
 import { useIsFocused, useNavigation } from '@react-navigation/native';
 import {
   ArrowRight,
+  Banknote,
   Bike,
   CalendarClock,
   Car,
@@ -68,6 +69,13 @@ const PANEL_FORM_HEIGHT = 500;
 const FALLBACK_COORD: GeoPoint = { latitude: 5.6508, longitude: -0.1668 };
 
 type Mode = 'delivery' | 'rides';
+
+type DeliveryPaymentChoice = 'CASH_ON_DELIVERY' | 'PAYSTACK_CARD';
+
+const deliveryPaymentOptions: Array<{ key: DeliveryPaymentChoice; label: string; hint: string }> = [
+  { key: 'CASH_ON_DELIVERY', label: 'Cash', hint: 'Pay the rider' },
+  { key: 'PAYSTACK_CARD', label: 'Pay online', hint: 'Card or MoMo now' },
+];
 
 const categories: Array<{ key: DeliveryCategory; label: string; icon: string }> = [
   { key: 'PARCEL', label: 'Parcel', icon: '📦' },
@@ -232,6 +240,8 @@ export function HomeScreen() {
 
   // --- Mode and form state ---
   const [mode, setMode] = useState<Mode>('delivery');
+  // Deliveries are paid either in the app up front or in cash to the rider.
+  const [deliveryPayment, setDeliveryPayment] = useState<DeliveryPaymentChoice>('CASH_ON_DELIVERY');
 
   const deliveryCategory = useDeliveryStore((s) => s.draft.category);
   const deliveryQuote = useDeliveryStore((s) => s.draft.quote);
@@ -767,8 +777,13 @@ export function HomeScreen() {
           category: deliveryCategory,
           pickup,
           dropoff: resolvedDropoff,
-          paymentMethod: 'PAYSTACK_CARD',
+          paymentMethod: deliveryPayment,
         });
+        // Cash is collected by the rider at drop-off, so there is no checkout.
+        if (deliveryPayment === 'CASH_ON_DELIVERY') {
+          navigation.navigate('Tracking', { deliveryId: delivery.id });
+          return;
+        }
         const initialized = await initializePayment.mutateAsync({
           deliveryId: delivery.id,
           method: 'PAYSTACK_CARD',
@@ -812,7 +827,7 @@ export function HomeScreen() {
           category: deliveryCategory,
           pickup,
           dropoff: resolvedDropoff,
-          paymentMethod: 'PAYSTACK_CARD',
+          paymentMethod: deliveryPayment,
           scheduledFor,
         });
         Alert.alert(
@@ -1743,6 +1758,65 @@ export function HomeScreen() {
                         );
                       })}
                     </ScrollView>
+
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: '700',
+                        color: theme.colors.muted,
+                        marginTop: 16,
+                        marginBottom: 10,
+                        textTransform: 'uppercase',
+                        letterSpacing: 0.5,
+                      }}
+                    >
+                      Payment
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {deliveryPaymentOptions.map((option) => {
+                        const selected = option.key === deliveryPayment;
+                        const iconColor = selected ? '#fff' : theme.colors.ink;
+                        return (
+                          <Pressable
+                            key={option.key}
+                            onPress={() => setDeliveryPayment(option.key)}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected }}
+                            style={{
+                              flex: 1,
+                              paddingHorizontal: 14,
+                              paddingVertical: 12,
+                              borderRadius: 10,
+                              backgroundColor: selected
+                                ? theme.colors.primary
+                                : theme.colors.surfaceMuted,
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              gap: 10,
+                            }}
+                          >
+                            {option.key === 'CASH_ON_DELIVERY' ? (
+                              <Banknote size={20} color={iconColor} />
+                            ) : (
+                              <CreditCard size={20} color={iconColor} />
+                            )}
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: iconColor, fontWeight: '700', fontSize: 14 }}>
+                                {option.label}
+                              </Text>
+                              <Text
+                                style={{
+                                  fontSize: 12,
+                                  color: selected ? 'rgba(255,255,255,0.75)' : theme.colors.muted,
+                                }}
+                              >
+                                {option.hint}
+                              </Text>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
                   </View>
                 ) : (
                   <View style={{ marginBottom: 16 }}>

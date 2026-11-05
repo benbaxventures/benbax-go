@@ -1,5 +1,5 @@
 import type { Delivery, DeliveryCategory } from '@prisma/client';
-import { CancelActor, DeliveryStatus, Prisma } from '@prisma/client';
+import { CancelActor, DeliveryStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
 import { nanoid } from 'nanoid';
 import { prisma } from '../../config/prisma';
 import { isStaff, type AuthUser } from '../../middleware/auth';
@@ -213,6 +213,19 @@ export async function updateDeliveryStatus(id: string, status: DeliveryStatus, a
       fromStatus: current.status,
       toStatus: status,
       actorId: actorId ?? null,
+    });
+  }
+
+  // The rider hands over the package and takes the cash in the same moment, so a
+  // cash delivery is paid once it is delivered.
+  if (status === DeliveryStatus.DELIVERED) {
+    await prisma.payment.updateMany({
+      where: {
+        deliveryId: id,
+        method: PaymentMethod.CASH_ON_DELIVERY,
+        status: { not: PaymentStatus.PAID },
+      },
+      data: { status: PaymentStatus.PAID },
     });
   }
 
