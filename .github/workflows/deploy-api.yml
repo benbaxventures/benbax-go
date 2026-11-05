@@ -11,6 +11,9 @@ name: Deploy API
 #   3. In Render, set Settings -> Auto-Deploy to "No" so pushes deploy ONLY
 #      through this gated workflow (otherwise every push deploys twice).
 #
+# Until the secret is added, Render's Auto-Deploy deploys each push itself and
+# this workflow only typechecks (a red run then means a real type error).
+#
 # The Render service runs `prisma migrate deploy` on start (see Dockerfile),
 # so database migrations ship automatically with each deploy.
 
@@ -50,8 +53,8 @@ jobs:
           HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
           if [ -z "$HOOK" ]; then
-            echo "::error::RENDER_DEPLOY_HOOK_URL secret is not set. Add it in repo Settings -> Secrets -> Actions."
-            exit 1
+            echo "::notice::No RENDER_DEPLOY_HOOK_URL secret, so Render's own Auto-Deploy handles this push. Typecheck passed."
+            exit 0
           fi
           echo "Typecheck passed — triggering Render deploy."
           # Render responds with a JSON deploy record on success.
