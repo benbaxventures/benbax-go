@@ -42,4 +42,12 @@ jobs:
         run: eas build --profile preview --platform android --non-interactive --no-wait
 
       - name: Push EAS Update
-        run: eas update --branch preview --message "${{ github.event.head_commit.message }}" --non-interactive
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          # Bundle with the preview profile's settings (API URL, Google keys);
+          # the runner has no .env file.
+          eval "$(node -e "const e=require('./eas.json').build.preview.env; for (const [k, v] of Object.entries(e)) console.log('export ' + k + '=' + JSON.stringify(v))")"
+          # Manual runs have no commit message; use the first line when there is one.
+          MESSAGE="${COMMIT_MESSAGE%%$'\n'*}"
+          eas update --branch preview --environment preview --message "${MESSAGE:-Manual run at ${GITHUB_SHA::7}}" --non-interactive
