@@ -24,7 +24,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.19.0
+          # eas-cli (installed below as "latest") needs Node 22+. The app build
+          # itself runs on EAS with the Node version set in eas.json.
+          node-version: 22
           cache: npm
 
       - run: npm ci
